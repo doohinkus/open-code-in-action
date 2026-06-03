@@ -4,18 +4,16 @@ AI-powered React component generator with live preview.
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 25+
 - npm
 
 ## Setup
 
-1. **Optional** Edit `.env` and replace `your-api-key-here` with your Anthropic API key from [console.anthropic.com](https://console.anthropic.com/settings/keys):
+1. Copy `.example.env` to `.env` and configure your preferred AI provider. The project runs without any API key — it falls back to a mock provider that returns canned components.
 
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-The project runs without an API key — it falls back to a mock provider that returns canned components instead of calling Claude. If you leave the placeholder unchanged, you'll get the mock.
+   ```bash
+   cp .example.env .env
+   ```
 
 2. Install dependencies and initialize the database:
 
@@ -51,7 +49,7 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## Features
 
-- AI-powered component generation using Claude
+- AI-powered component generation (OpenCode Zen, Google Gemini, Anthropic Claude, or mock)
 - Live preview with hot reload
 - Virtual file system (no files written to disk)
 - Syntax highlighting and code editor
@@ -65,5 +63,5 @@ Open [http://localhost:3000](http://localhost:3000)
 - TypeScript
 - Tailwind CSS v4
 - Prisma with SQLite
-- Anthropic Claude AI
 - Vercel AI SDK
+- OpenCode Zen / Google Gemini / Anthropic Claude
