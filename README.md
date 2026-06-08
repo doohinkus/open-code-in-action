@@ -6,6 +6,7 @@ AI-powered React component generator with live preview.
 
 - Node.js 25+
 - npm
+- PostgreSQL (local or [Neon](https://neon.tech))
 
 ## Setup
 
@@ -17,17 +18,17 @@ AI-powered React component generator with live preview.
 
 2. Install dependencies and initialize the database:
 
-```bash
-npm run setup
-```
+   ```bash
+   npm run setup
+   ```
+
+3. Apply Prisma migrations:
+
+   ```bash
+   npx prisma migrate dev --name init
+   ```
 
 > **Don't run `npm audit fix`.** Dependencies are pinned to specific versions that work together. The vulnerability warnings are cosmetic for a local-only project, and `audit fix` can bump packages past compatible versions and break the app.
-
-This command will:
-
-- Install all dependencies
-- Generate Prisma client
-- Run database migrations
 
 ## Running the Application
 
@@ -38,6 +39,87 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
+
+## Testing
+
+| Command | What it runs |
+|---------|-------------|
+| `npm test` | Vitest unit tests (jsdom) |
+| `npm run test:e2e` | Playwright e2e + a11y tests (requires dev server running) |
+| `npm run test:e2e:ui` | Playwright UI mode |
+| `npm run lint` | ESLint |
+
+### E2E tests (`tests/e2e/`)
+
+| File | Tests |
+|------|-------|
+| `smoke.spec.ts` | Homepage loads, chat panel present, preview panel loads (3 tests) |
+| `a11y.spec.ts` | axe-core accessibility audit of homepage |
+| `component-generation.spec.ts` | Send chat message, tab navigation (2 tests) |
+
+Run locally: start `npm run dev` in one terminal, then `npm run test:e2e` in another.
+
+## Database
+
+PostgreSQL via Prisma. Connection string set via `DATABASE_URL` in `.env`.
+
+- **Local**: point to a local PostgreSQL instance
+- **CI**: ephemeral Postgres via Docker service in GitHub Actions
+- **Production**: [Neon](https://neon.tech) serverless PostgreSQL (free tier)
+
+### Schema
+
+```prisma
+model User { ... }
+model Project { ... }
+```
+
+Migrations are in `prisma/migrations/`. After schema changes:
+
+```bash
+npx prisma migrate dev --name <description>
+```
+
+## CI/CD Pipeline
+
+Two GitHub Actions workflows in `.github/workflows/`:
+
+### `ci.yml` — Pull Request Checks
+
+```
+PR opened
+  ├── lint + unit tests + build
+  └── e2e + a11y (against ephemeral Postgres)
+      └── all pass → PR can merge
+```
+
+Runs on every PR to `main`. All tests run on the build artifact — no deploy needed.
+
+### `deploy.yml` — Canary → Production
+
+```
+Push to main
+  ├── lint + unit tests
+  ├── Deploy to Vercel (canary environment)
+  ├── e2e + a11y against canary URL
+  └── Promote to production (requires GitHub approval gate)
+```
+
+### Environments
+
+| Environment | Deploy | Approval Gate |
+|-------------|--------|---------------|
+| `canary` | Auto on merge to `main` | None |
+| `production` | Manual promotion from canary | Required (GitHub Environments) |
+
+### Required GitHub Secrets
+
+| Secret | Purpose |
+|--------|---------|
+| `DATABASE_URL` | Neon production/staging connection string |
+| `VERCEL_TOKEN` | Vercel API token |
+| `VERCEL_ORG_ID` | Vercel team ID |
+| `VERCEL_PROJECT_ID` | Vercel project ID |
 
 ## Usage
 
@@ -62,6 +144,8 @@ Open [http://localhost:3000](http://localhost:3000)
 - React 19
 - TypeScript
 - Tailwind CSS v4
-- Prisma with SQLite
+- Prisma with PostgreSQL
 - Vercel AI SDK
 - OpenCode Zen / Google Gemini / Anthropic Claude
+- Playwright + axe-core (e2e + a11y tests)
+- GitHub Actions (CI/CD)

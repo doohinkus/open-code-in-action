@@ -9,6 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "setup": "npm install && npx prisma generate && npx prisma migrate dev",
     "db:reset": "npx prisma migrate reset --force"
   },
@@ -43,6 +45,8 @@
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.3.0",
