@@ -4,9 +4,6 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/uigen' }}
-
 jobs:
   lint-test-build:
     name: Lint, Unit & Build
@@ -33,20 +30,6 @@ jobs:
     name: E2E & A11y
     needs: lint-test-build
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: uigen
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -60,14 +43,10 @@ jobs:
       - run: npx prisma generate
 
       - run: npx prisma migrate dev --name init
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/uigen
 
       - run: npx playwright install chromium --with-deps
 
       - run: npx playwright test
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/uigen
 
       - uses: actions/upload-artifact@v4
         if: always()

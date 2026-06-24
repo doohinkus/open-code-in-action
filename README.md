@@ -6,26 +6,19 @@ AI-powered React component generator with live preview.
 
 - Node.js 25+
 - npm
-- PostgreSQL (local or [Neon](https://neon.tech))
 
 ## Setup
 
-1. Copy `.example.env` to `.env` and configure your preferred AI provider. The project runs without any API key — it falls back to a mock provider that returns canned components.
-
-   ```bash
-   cp .example.env .env
-   ```
-
-2. Install dependencies and initialize the database:
+1. Install dependencies and initialize the database:
 
    ```bash
    npm run setup
    ```
 
-3. Apply Prisma migrations:
+2. (Optional) Copy `.example.env` to `.env` to configure your preferred AI provider. The project runs without any API key — it falls back to a mock provider that returns canned components.
 
    ```bash
-   npx prisma migrate dev --name init
+   cp .example.env .env
    ```
 
 > **Don't run `npm audit fix`.** Dependencies are pinned to specific versions that work together. The vulnerability warnings are cosmetic for a local-only project, and `audit fix` can bump packages past compatible versions and break the app.
@@ -61,11 +54,7 @@ Run locally: start `npm run dev` in one terminal, then `npm run test:e2e` in ano
 
 ## Database
 
-PostgreSQL via Prisma. Connection string set via `DATABASE_URL` in `.env`.
-
-- **Local**: point to a local PostgreSQL instance
-- **CI**: ephemeral Postgres via Docker service in GitHub Actions
-- **Production**: [Neon](https://neon.tech) serverless PostgreSQL (free tier)
+SQLite via Prisma (stored locally at `prisma/dev.db`). No external database server required.
 
 ### Schema
 
@@ -89,7 +78,7 @@ Two GitHub Actions workflows in `.github/workflows/`:
 ```
 PR opened
   ├── lint + unit tests + build
-  └── e2e + a11y (against ephemeral Postgres)
+  └── e2e + a11y
       └── all pass → PR can merge
 ```
 
@@ -116,7 +105,6 @@ Push to main
 
 | Secret | Purpose |
 |--------|---------|
-| `DATABASE_URL` | Neon production/staging connection string |
 | `VERCEL_TOKEN` | Vercel API token |
 | `VERCEL_ORG_ID` | Vercel team ID |
 | `VERCEL_PROJECT_ID` | Vercel project ID |
@@ -144,7 +132,7 @@ Push to main
 - React 19
 - TypeScript
 - Tailwind CSS v4
-- Prisma with PostgreSQL
+- Prisma with SQLite
 - Vercel AI SDK
 - OpenCode Zen / Google Gemini / Anthropic Claude
 - Playwright + axe-core (e2e + a11y tests)

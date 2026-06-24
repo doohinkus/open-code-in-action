@@ -4,9 +4,6 @@ on:
   push:
     branches: [main]
 
-env:
-  DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
 jobs:
   test:
     name: Unit & Lint
@@ -93,9 +90,6 @@ jobs:
     name: Promote to Production
     needs: test-canary
     runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: ${{ vars.PRODUCTION_URL || 'https://uigen.vercel.app' }}
     steps:
       - name: Promote Vercel deployment
         uses: amondnet/vercel-action@v25

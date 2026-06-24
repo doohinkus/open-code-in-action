@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -29,13 +29,17 @@ export function AuthDialog({
     setMode(defaultMode);
   }, [defaultMode]);
 
-  const handleSuccess = () => {
+  const handleSuccess = useCallback(() => {
     onOpenChange(false);
-  };
+  }, [onOpenChange]);
+
+  const switchMode = useCallback(() => {
+    setMode((prev) => (prev === "signin" ? "signup" : "signin"));
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px]" aria-label={mode === "signin" ? "Sign in" : "Sign up"}>
         <DialogHeader>
           <DialogTitle>
             {mode === "signin" ? "Welcome back" : "Create an account"}
@@ -49,9 +53,9 @@ export function AuthDialog({
 
         <div className="mt-4">
           {mode === "signin" ? (
-            <SignInForm onSuccess={handleSuccess} />
+            <SignInForm key="signin" onSuccess={handleSuccess} />
           ) : (
-            <SignUpForm onSuccess={handleSuccess} />
+            <SignUpForm key="signup" onSuccess={handleSuccess} />
           )}
         </div>
 
@@ -62,7 +66,7 @@ export function AuthDialog({
               <Button
                 variant="link"
                 className="p-0 h-auto font-normal"
-                onClick={() => setMode("signup")}
+                onClick={switchMode}
               >
                 Sign up
               </Button>
@@ -73,7 +77,7 @@ export function AuthDialog({
               <Button
                 variant="link"
                 className="p-0 h-auto font-normal"
-                onClick={() => setMode("signin")}
+                onClick={switchMode}
               >
                 Sign in
               </Button>
