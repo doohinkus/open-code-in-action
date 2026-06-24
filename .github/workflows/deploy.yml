@@ -24,78 +24,78 @@ jobs:
 
       - run: npm test
 
-  deploy-canary:
-    name: Deploy to Canary
-    needs: test
-    runs-on: ubuntu-latest
-    environment: canary
-    steps:
-      - uses: actions/checkout@v4
+  # deploy-canary:
+  #   name: Deploy to Canary
+  #   needs: test
+  #   runs-on: ubuntu-latest
+  #   environment: canary
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "25"
-          cache: "npm"
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "25"
+  #         cache: "npm"
 
-      - run: npm ci
+  #     - run: npm ci
 
-      - run: npx prisma generate
+  #     - run: npx prisma generate
 
-      - run: npm run build
+  #     - run: npm run build
 
-      - name: Deploy to Vercel (canary)
-        uses: amondnet/vercel-action@v25
-        id: vercel-deploy
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: "--prebuilt --prod"
-          github-comment: false
+  #     - name: Deploy to Vercel (canary)
+  #       uses: amondnet/vercel-action@v25
+  #       id: vercel-deploy
+  #       with:
+  #         vercel-token: ${{ secrets.VERCEL_TOKEN }}
+  #         vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+  #         vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+  #         vercel-args: "--prebuilt --prod"
+  #         github-comment: false
 
-    outputs:
-      preview-url: ${{ steps.vercel-deploy.outputs.preview-url }}
+  #   outputs:
+  #     preview-url: ${{ steps.vercel-deploy.outputs.preview-url }}
 
-  test-canary:
-    name: E2E & A11y (Canary)
-    needs: deploy-canary
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  # test-canary:
+  #   name: E2E & A11y (Canary)
+  #   needs: deploy-canary
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "25"
-          cache: "npm"
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "25"
+  #         cache: "npm"
 
-      - run: npm ci
+  #     - run: npm ci
 
-      - run: npx playwright install chromium --with-deps
+  #     - run: npx playwright install chromium --with-deps
 
-      - name: Wait for canary to be ready
-        run: sleep 20
+  #     - name: Wait for canary to be ready
+  #       run: sleep 20
 
-      - name: Run Playwright tests
-        env:
-          E2E_BASE_URL: ${{ needs.deploy-canary.outputs.preview-url }}
-        run: npx playwright test
+  #     - name: Run Playwright tests
+  #       env:
+  #         E2E_BASE_URL: ${{ needs.deploy-canary.outputs.preview-url }}
+  #       run: npx playwright test
 
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report-canary
-          path: playwright-report/
+  #     - uses: actions/upload-artifact@v4
+  #       if: always()
+  #       with:
+  #         name: playwright-report-canary
+  #         path: playwright-report/
 
-  promote-to-prod:
-    name: Promote to Production
-    needs: test-canary
-    runs-on: ubuntu-latest
-    steps:
-      - name: Promote Vercel deployment
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: "--prod"
-          github-comment: false
+  # promote-to-prod:
+  #   name: Promote to Production
+  #   needs: test-canary
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Promote Vercel deployment
+  #       uses: amondnet/vercel-action@v25
+  #       with:
+  #         vercel-token: ${{ secrets.VERCEL_TOKEN }}
+  #         vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+  #         vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+  #         vercel-args: "--prod"
+  #         github-comment: false
