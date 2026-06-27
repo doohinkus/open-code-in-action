@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { verifySession } from "@/lib/auth";
+
+const SESSION_COOKIE = "__Secure-neon-auth.session_token";
 
 export async function middleware(request: NextRequest) {
-  const session = await verifySession(request);
+  const sessionCookie = request.cookies.get(SESSION_COOKIE);
+  const isAuthenticated = !!sessionCookie;
 
-  // Protected routes that require authentication
   const protectedPaths = ["/api/projects", "/api/filesystem"];
   const isProtectedPath = protectedPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );
 
-  if (isProtectedPath && !session) {
+  if (isProtectedPath && !isAuthenticated) {
     return NextResponse.json(
       { error: "Authentication required" },
       { status: 401 }
