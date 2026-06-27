@@ -1,8 +1,8 @@
 "use server";
 
-import bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
-import { createSession, deleteSession, getSession } from "@/lib/auth";
+import { deleteSession, getSession } from "@/lib/auth";
+import { auth } from "@/lib/auth/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -11,46 +11,36 @@ export interface AuthResult {
   error?: string;
 }
 
+async function ensureUser(sessionUserId: string, email: string) {
+  const existing = await prisma.user.findUnique({
+    where: { id: sessionUserId },
+  });
+  if (!existing) {
+    await prisma.user.create({
+      data: { id: sessionUserId, email },
+    });
+  }
+}
+
 export async function signUp(
   email: string,
   password: string
 ): Promise<AuthResult> {
   try {
-    // Validate input
     if (!email || !password) {
       return { success: false, error: "Email and password are required" };
     }
-
     if (password.length < 8) {
-      return {
-        success: false,
-        error: "Password must be at least 8 characters",
-      };
+      return { success: false, error: "Password must be at least 8 characters" };
     }
-
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (existingUser) {
-      return { success: false, error: "Email already registered" };
+    const { data, error } = await auth.signUp.email({ email, name: email, password });
+    if (error) {
+      return { success: false, error: error.message };
     }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-      },
-    });
-
-    // Create session
-    await createSession(user.id, user.email);
-
+    // User data from sign-up response — don't call getSession() in same cycle
+    if (data?.user) {
+      await ensureUser(data.user.id, data.user.email ?? email);
+    }
     revalidatePath("/");
     return { success: true };
   } catch (error) {
@@ -64,30 +54,17 @@ export async function signIn(
   password: string
 ): Promise<AuthResult> {
   try {
-    // Validate input
     if (!email || !password) {
       return { success: false, error: "Email and password are required" };
     }
-
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (!user) {
-      return { success: false, error: "Invalid credentials" };
+    const { data, error } = await auth.signIn.email({ email, password });
+    if (error) {
+      return { success: false, error: error.message };
     }
-
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password);
-
-    if (!isValidPassword) {
-      return { success: false, error: "Invalid credentials" };
+    // User data from sign-in response — don't call getSession() in same cycle
+    if (data?.user) {
+      await ensureUser(data.user.id, data.user.email ?? email);
     }
-
-    // Create session
-    await createSession(user.id, user.email);
-
     revalidatePath("/");
     return { success: true };
   } catch (error) {
@@ -97,28 +74,24 @@ export async function signIn(
 }
 
 export async function signOut() {
-  await deleteSession();
+  try {
+    await deleteSession();
+  } catch {
+    // ignore session delete errors
+  }
   revalidatePath("/");
   redirect("/");
 }
 
 export async function getUser() {
   const session = await getSession();
-
-  if (!session) {
-    return null;
-  }
-
+  if (!session) return null;
   try {
+    await ensureUser(session.userId, session.email);
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
-      select: {
-        id: true,
-        email: true,
-        createdAt: true,
-      },
+      select: { id: true, email: true, createdAt: true },
     });
-
     return user;
   } catch (error) {
     console.error("Get user error:", error);

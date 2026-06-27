@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn as signInAction, signUp as signUpAction } from "@/actions";
+import { authClient } from "@/lib/auth/client";
 import { getAnonWorkData, clearAnonWork } from "@/lib/anon-work-tracker";
 import { getProjects } from "@/actions/get-projects";
 import { createProject } from "@/actions/create-project";
@@ -12,37 +13,27 @@ export function useAuth() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handlePostSignIn = async () => {
-    // Get any anonymous work
     const anonWork = getAnonWorkData();
-
     if (anonWork && anonWork.messages.length > 0) {
-      // Create a project with the anonymous work
       const project = await createProject({
         name: `Design from ${new Date().toLocaleTimeString()}`,
         messages: anonWork.messages,
         data: anonWork.fileSystemData,
       });
-
       clearAnonWork();
       router.push(`/${project.id}`);
       return;
     }
-
-    // Otherwise, find the user's most recent project
     const projects = await getProjects();
-
     if (projects.length > 0) {
       router.push(`/${projects[0].id}`);
       return;
     }
-
-    // If no projects exist, create a new one
     const newProject = await createProject({
       name: `New Design #${~~(Math.random() * 100000)}`,
       messages: [],
       data: {},
     });
-
     router.push(`/${newProject.id}`);
   };
 
@@ -50,11 +41,9 @@ export function useAuth() {
     setIsLoading(true);
     try {
       const result = await signInAction(email, password);
-
       if (result.success) {
         await handlePostSignIn();
       }
-
       return result;
     } finally {
       setIsLoading(false);
@@ -65,12 +54,22 @@ export function useAuth() {
     setIsLoading(true);
     try {
       const result = await signUpAction(email, password);
-
       if (result.success) {
         await handlePostSignIn();
       }
-
       return result;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: window.location.origin,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -79,6 +78,7 @@ export function useAuth() {
   return {
     signIn,
     signUp,
+    signInWithGoogle,
     isLoading,
   };
 }

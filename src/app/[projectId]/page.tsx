@@ -3,6 +3,8 @@ import { getProject } from "@/actions/get-project";
 import { MainContent } from "@/app/main-content";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 interface PageProps {
   params: Promise<{ projectId: string }>;
 }

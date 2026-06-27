@@ -1,24 +1,40 @@
-import { tool } from "ai";
-import { z } from "zod";
+import { tool, jsonSchema } from "ai";
 import { VirtualFileSystem } from "../file-system";
 
 export function buildFileManagerTool(fileSystem: VirtualFileSystem) {
   return tool({
     description:
       'Rename or delete files or folders in the file system. Rename can be used to "move" a file. Rename will recursively create folders as required.',
-    parameters: z.object({
-      command: z
-        .enum(["rename", "delete"])
-        .describe("The operation to perform"),
-      path: z
-        .string()
-        .describe("The path to the file or directory to rename or delete"),
-      new_path: z
-        .string()
-        .optional()
-        .describe("The new path. Only provide when renaming or moving a file."),
+    parameters: jsonSchema({
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          enum: ["rename", "delete"],
+          description: "The operation to perform",
+        },
+        path: {
+          type: "string",
+          description:
+            "The path to the file or directory to rename or delete",
+        },
+        new_path: {
+          type: "string",
+          description:
+            "The new path. Only provide when renaming or moving a file.",
+        },
+      },
+      required: ["command", "path"],
     }),
-    execute: async ({ command, path, new_path }) => {
+    execute: async ({
+      command,
+      path,
+      new_path,
+    }: {
+      command: "rename" | "delete";
+      path: string;
+      new_path?: string;
+    }) => {
       if (command === "rename") {
         if (!new_path) {
           return {
