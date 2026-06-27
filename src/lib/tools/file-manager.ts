@@ -26,15 +26,8 @@ export function buildFileManagerTool(fileSystem: VirtualFileSystem) {
       },
       required: ["command", "path"],
     }),
-    execute: async ({
-      command,
-      path,
-      new_path,
-    }: {
-      command: "rename" | "delete";
-      path: string;
-      new_path?: string;
-    }) => {
+    execute: async (args: unknown) => {
+      const { command, path, new_path } = args as Record<string, unknown>;
       if (command === "rename") {
         if (!new_path) {
           return {
@@ -42,7 +35,7 @@ export function buildFileManagerTool(fileSystem: VirtualFileSystem) {
             error: "new_path is required for rename command",
           };
         }
-        const success = fileSystem.rename(path, new_path);
+        const success = fileSystem.rename(path as string, new_path as string);
         if (success) {
           return {
             success: true,
@@ -55,7 +48,7 @@ export function buildFileManagerTool(fileSystem: VirtualFileSystem) {
           };
         }
       } else if (command === "delete") {
-        const success = fileSystem.deleteFile(path);
+        const success = fileSystem.deleteFile(path as string);
         if (success) {
           return { success: true, message: `Successfully deleted ${path}` };
         } else {

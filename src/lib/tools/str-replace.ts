@@ -46,38 +46,23 @@ export const buildStrReplaceTool = (fileSystem: VirtualFileSystem) => {
       },
       required: ["command", "path"],
     }),
-    execute: async ({
-      command,
-      path,
-      file_text,
-      insert_line,
-      new_str,
-      old_str,
-      view_range,
-    }: {
-      command: "view" | "create" | "str_replace" | "insert" | "undo_edit";
-      path: string;
-      file_text?: string;
-      insert_line?: number;
-      new_str?: string;
-      old_str?: string;
-      view_range?: number[];
-    }) => {
-      switch (command) {
+    execute: async (args: unknown) => {
+      const { command, path, file_text, insert_line, new_str, old_str, view_range } = args as Record<string, unknown>;
+      switch (command as string) {
         case "view":
           return fileSystem.viewFile(
-            path,
+            path as string,
             view_range as [number, number] | undefined
           );
 
         case "create":
-          return fileSystem.createFileWithParents(path, file_text || "");
+          return fileSystem.createFileWithParents(path as string, (file_text as string) || "");
 
         case "str_replace":
-          return fileSystem.replaceInFile(path, old_str || "", new_str || "");
+          return fileSystem.replaceInFile(path as string, (old_str as string) || "", (new_str as string) || "");
 
         case "insert":
-          return fileSystem.insertInFile(path, insert_line || 0, new_str || "");
+          return fileSystem.insertInFile(path as string, (insert_line as number) || 0, (new_str as string) || "");
 
         case "undo_edit":
           return `Error: undo_edit command is not supported in this version. Use str_replace to revert changes.`;
