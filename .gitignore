@@ -6,3 +6,10 @@ node_modules/
 prisma/dev.db
 playwright-report/
 test-results/
+.playwright-mcp/
+console-log.txt
+dialog-signup-snapshot.md
+page-auth-snapshot.md
+page-snapshot.md
+skills-lock.json
+uigen-screenshot.png
