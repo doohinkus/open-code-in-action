@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { deleteSession, getSession } from "@/lib/auth";
-import { auth } from "@/lib/auth/server";
+import { getAuth } from "@/lib/auth/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -33,7 +33,7 @@ export async function signUp(
     if (password.length < 8) {
       return { success: false, error: "Password must be at least 8 characters" };
     }
-    const { data, error } = await auth.signUp.email({ email, name: email, password });
+    const { data, error } = await getAuth().signUp.email({ email, name: email, password });
     if (error) {
       return { success: false, error: error.message };
     }
@@ -57,7 +57,7 @@ export async function signIn(
     if (!email || !password) {
       return { success: false, error: "Email and password are required" };
     }
-    const { data, error } = await auth.signIn.email({ email, password });
+    const { data, error } = await getAuth().signIn.email({ email, password });
     if (error) {
       return { success: false, error: error.message };
     }

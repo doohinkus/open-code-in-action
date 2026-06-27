@@ -1,6 +1,6 @@
 import "server-only";
 import { NextRequest } from "next/server";
-import { auth } from "./auth/server";
+import { getAuth } from "./auth/server";
 
 export interface SessionPayload {
   userId: string;
@@ -13,7 +13,7 @@ export async function createSession(_userId: string, _email: string) {
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
-  const { data: session } = await auth.getSession();
+  const { data: session } = await getAuth().getSession();
   if (!session?.user) return null;
   return {
     userId: session.user.id,
@@ -23,13 +23,13 @@ export async function getSession(): Promise<SessionPayload | null> {
 }
 
 export async function deleteSession() {
-  await auth.signOut();
+  await getAuth().signOut();
 }
 
 export async function verifySession(
   request: NextRequest
 ): Promise<SessionPayload | null> {
-  const { data: session } = await auth.getSession();
+  const { data: session } = await getAuth().getSession();
   if (!session?.user) return null;
   return {
     userId: session.user.id,
