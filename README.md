@@ -2,20 +2,25 @@
 
 AI-powered React component generator with live preview.
 
+## Prod Release (Free Tier)
+
+### https://open-code-in-action.vercel.app
+
 ## Prerequisites
 
 - Node.js 25+
 - npm
+- A Neon Postgres database (free at [neon.tech](https://neon.tech))
 
 ## Setup
 
-1. Install dependencies and initialize the database:
+1. Install dependencies and initialize the database (requires `DATABASE_URL` pointing to a Neon Postgres instance):
 
    ```bash
    npm run setup
    ```
 
-2. (Optional) Copy `.example.env` to `.env` to configure your preferred AI provider. The project runs without any API key — it falls back to a mock provider that returns canned components.
+2. (Optional) Copy `.example.env` to `.env` to configure your preferred AI provider and database. The project runs without any API key — it falls back to a mock provider that returns canned components.
 
    ```bash
    cp .example.env .env
@@ -35,32 +40,48 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## Testing
 
-| Command | What it runs |
-|---------|-------------|
-| `npm test` | Vitest unit tests (jsdom) |
-| `npm run test:e2e` | Playwright e2e + a11y tests (requires dev server running) |
-| `npm run test:e2e:ui` | Playwright UI mode |
-| `npm run lint` | ESLint |
+| Command               | What it runs                                              |
+| --------------------- | --------------------------------------------------------- |
+| `npm test`            | Vitest unit tests (jsdom)                                 |
+| `npm run test:e2e`    | Playwright e2e + a11y tests (requires dev server running) |
+| `npm run test:e2e:ui` | Playwright UI mode                                        |
+| `npm run lint`        | ESLint                                                    |
 
 ### E2E tests (`tests/e2e/`)
 
-| File | Tests |
-|------|-------|
-| `smoke.spec.ts` | Homepage loads, chat panel present, preview panel loads (3 tests) |
-| `a11y.spec.ts` | axe-core accessibility audit of homepage |
-| `component-generation.spec.ts` | Send chat message, tab navigation (2 tests) |
+| File                           | Tests                                                             |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `smoke.spec.ts`                | Homepage loads, chat panel present, preview panel loads (3 tests) |
+| `a11y.spec.ts`                 | axe-core accessibility audit of homepage                          |
+| `component-generation.spec.ts` | Send chat message, tab navigation (2 tests)                       |
 
 Run locally: start `npm run dev` in one terminal, then `npm run test:e2e` in another.
 
 ## Database
 
-SQLite via Prisma (stored locally at `prisma/dev.db`). No external database server required.
+PostgreSQL via [Neon](https://neon.tech). Uses `@prisma/adapter-neon` with `PrismaNeonHttp` for serverless connections. Requires a `DATABASE_URL` environment variable pointing to a Neon Postgres database.
 
 ### Schema
 
 ```prisma
-model User { ... }
-model Project { ... }
+model User {
+  id        String    @id
+  email     String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  projects  Project[]
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String?
+  messages  String   @default("[]")
+  data      String   @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
 ```
 
 Migrations are in `prisma/migrations/`. After schema changes:
@@ -68,6 +89,10 @@ Migrations are in `prisma/migrations/`. After schema changes:
 ```bash
 npx prisma migrate dev --name <description>
 ```
+
+### Neon Auth
+
+Authentication is handled by [Neon Auth](https://neon.tech/docs/guides/neon-auth) (`@neondatabase/auth`). Users sign up/login through Neon's auth gateway — no password column in the local schema. Required env vars: `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET`.
 
 ## CI/CD Pipeline
 
@@ -84,34 +109,22 @@ PR opened
 
 Runs on every PR to `main`. All tests run on the build artifact — no deploy needed.
 
-### `deploy.yml` — Canary → Production
+### `deploy.yml` — Push to Main
 
 ```
 Push to main
-  ├── lint + unit tests
-  ├── Deploy to Vercel (canary environment)
-  ├── e2e + a11y against canary URL
-  └── Promote to production (requires GitHub approval gate)
+  └── lint + unit tests
 ```
 
-### Environments
+> A canary→production Vercel pipeline (`deploy-canary` → `test-canary` → `promote-to-prod`) is scaffolded in the workflow but currently disabled. Re-enable by uncommenting the jobs and configuring GitHub secrets (`VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`).
 
-| Environment | Deploy | Approval Gate |
-|-------------|--------|---------------|
-| `canary` | Auto on merge to `main` | None |
-| `production` | Manual promotion from canary | Required (GitHub Environments) |
+### Additional Workflows
 
-### Required GitHub Secrets
-
-| Secret | Purpose |
-|--------|---------|
-| `VERCEL_TOKEN` | Vercel API token |
-| `VERCEL_ORG_ID` | Vercel team ID |
-| `VERCEL_PROJECT_ID` | Vercel project ID |
+- **`opencode.yml`** — Runs the OpenCode agent on `/oc` or `/opencode` comments in issues and PRs.
 
 ## Usage
 
-1. Sign up or continue as anonymous user
+1. Sign up (via Neon Auth) or continue as anonymous user
 2. Describe the React component you want to create in the chat
 3. View generated components in real-time preview
 4. Switch to Code view to see and edit the generated files
@@ -124,7 +137,6 @@ Push to main
 - Virtual file system (no files written to disk)
 - Syntax highlighting and code editor
 - Component persistence for registered users
-- Export generated code
 
 ## Tech Stack
 
@@ -132,7 +144,7 @@ Push to main
 - React 19
 - TypeScript
 - Tailwind CSS v4
-- Prisma with SQLite
+- Prisma with Neon Postgres
 - Vercel AI SDK
 - OpenCode Zen / Google Gemini / Anthropic Claude
 - Playwright + axe-core (e2e + a11y tests)
