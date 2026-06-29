@@ -53,14 +53,16 @@ function isUsingAnthropic(): boolean {
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "http://localhost:3001",
-  "https://uigen.vercel.app",
+  "https://open-code-in-action.vercel.app",
 ];
 
 function checkOrigin(req: Request): boolean {
-  const origin = req.headers.get("origin");
-  const referer = req.headers.get("referer");
-  if (!origin && !referer) return true;
+  const origin = req.headers.get("origin") || "";
+  const referer = req.headers.get("referer") || "";
   const urlToCheck = origin || referer || "";
+  if (!urlToCheck) return true;
+  // Allow all Vercel preview deployments
+  if (urlToCheck.endsWith(".vercel.app")) return true;
   return ALLOWED_ORIGINS.some((allowed) => urlToCheck.startsWith(allowed));
 }
 
@@ -97,6 +99,17 @@ function validateInput(
   }
 
   return null;
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
 }
 
 export async function POST(req: Request) {
