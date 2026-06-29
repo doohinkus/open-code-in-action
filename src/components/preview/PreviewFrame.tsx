@@ -74,16 +74,18 @@ export function PreviewFrame() {
           return;
         }
 
-        const { importMap, styles, errors } = createImportMap(files);
-        const previewHTML = createPreviewHTML(foundEntryPoint, importMap, styles, errors);
+        const { importMap, styles, errors, bundleCode } = createImportMap(files);
+        const previewHTML = createPreviewHTML(foundEntryPoint, importMap, styles, errors, bundleCode);
 
         if (iframeRef.current) {
           const iframe = iframeRef.current;
 
-          // Need both allow-scripts and allow-same-origin for blob URLs in import map
+          // Sandbox: allow-scripts only — intentionally no allow-same-origin
+          // to prevent AI-generated code from accessing the parent page's
+          // sessionStorage, cookies, or DOM. User code runs in a null origin.
           iframe.setAttribute(
             "sandbox",
-            "allow-scripts allow-same-origin allow-forms"
+            "allow-scripts"
           );
           iframe.srcdoc = previewHTML;
 

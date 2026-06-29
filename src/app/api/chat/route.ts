@@ -8,6 +8,36 @@ import { getSession } from "@/lib/auth";
 import { getLanguageModel } from "@/lib/provider";
 import { generationPrompt } from "@/lib/prompts/generation";
 
+const MAX_MESSAGE_COUNT = 200;
+const MAX_MESSAGE_LENGTH = 50_000;
+const MAX_TOTAL_MESSAGES_LENGTH = 500_000;
+const MAX_FILES_COUNT = 500;
+const MAX_FILE_SIZE = 100_000;
+
+const ipRequestCounts = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 30;
+
+function getClientIp(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.headers.get("x-real-ip") || "unknown";
+}
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = ipRequestCounts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    ipRequestCounts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  entry.count++;
+  if (entry.count > RATE_LIMIT_MAX_REQUESTS) {
+    return false;
+  }
+  return true;
+}
+
 function hasRealProvider(): boolean {
   return !!(process.env.GOOGLE_API_KEY?.trim()) ||
          !!(process.env.ANTHROPIC_API_KEY?.trim() && process.env.ANTHROPIC_API_KEY?.trim() !== "your-api-key-here") ||
@@ -20,13 +50,94 @@ function isUsingAnthropic(): boolean {
          !!(process.env.ANTHROPIC_API_KEY?.trim() && process.env.ANTHROPIC_API_KEY?.trim() !== "your-api-key-here");
 }
 
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "https://uigen.vercel.app",
+];
+
+function checkOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  const referer = req.headers.get("referer");
+  if (!origin && !referer) return true;
+  const urlToCheck = origin || referer || "";
+  return ALLOWED_ORIGINS.some((allowed) => urlToCheck.startsWith(allowed));
+}
+
+function validateInput(
+  messages: any[],
+  files: Record<string, FileNode>
+): string | null {
+  if (!Array.isArray(messages)) return "messages must be an array";
+  if (messages.length > MAX_MESSAGE_COUNT) {
+    return `messages count exceeds limit of ${MAX_MESSAGE_COUNT}`;
+  }
+  let totalLen = 0;
+  for (const msg of messages) {
+    if (msg.role === "system") return "cannot include system messages";
+    const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content || "");
+    if (content.length > MAX_MESSAGE_LENGTH) {
+      return `message exceeds maximum length of ${MAX_MESSAGE_LENGTH}`;
+    }
+    totalLen += content.length;
+    if (totalLen > MAX_TOTAL_MESSAGES_LENGTH) {
+      return `total messages length exceeds limit of ${MAX_TOTAL_MESSAGES_LENGTH}`;
+    }
+  }
+
+  if (typeof files !== "object" || files === null) return "files must be an object";
+  const fileKeys = Object.keys(files);
+  if (fileKeys.length > MAX_FILES_COUNT) {
+    return `files count exceeds limit of ${MAX_FILES_COUNT}`;
+  }
+  for (const [path, node] of Object.entries(files)) {
+    if (node.content && node.content.length > MAX_FILE_SIZE) {
+      return `file ${path} exceeds maximum size of ${MAX_FILE_SIZE}`;
+    }
+  }
+
+  return null;
+}
+
 export async function POST(req: Request) {
+  const ip = getClientIp(req);
+  if (!checkRateLimit(ip)) {
+    return Response.json(
+      { error: "Too many requests. Please try again later." },
+      { status: 429 }
+    );
+  }
+
+  if (!checkOrigin(req)) {
+    return Response.json({ error: "Invalid request origin" }, { status: 403 });
+  }
+
+  const session = await getSession();
+
   const {
     messages,
     files,
     projectId,
   }: { messages: any[]; files: Record<string, FileNode>; projectId?: string } =
     await req.json();
+
+  const validationError = validateInput(messages, files);
+  if (validationError) {
+    return Response.json({ error: validationError }, { status: 400 });
+  }
+
+  let sessionUserId: string | null = null;
+  if (session) {
+    sessionUserId = session.userId;
+  }
+
+  // Require authentication for project saves
+  if (projectId && !session) {
+    return Response.json(
+      { error: "Authentication required to save to a project" },
+      { status: 401 }
+    );
+  }
 
   messages.unshift({
     role: "system",
@@ -54,16 +165,9 @@ export async function POST(req: Request) {
       file_manager: buildFileManagerTool(fileSystem),
     },
     onFinish: async ({ response }) => {
-      // Save to project if projectId is provided and user is authenticated
+      // Save to project if projectId is provided (auth already verified above)
       if (projectId) {
         try {
-          // Check if user is authenticated
-          const session = await getSession();
-          if (!session) {
-            console.error("User not authenticated, cannot save project");
-            return;
-          }
-
           // Get the messages from the response
           const responseMessages = response.messages || [];
           // Combine original messages with response messages
@@ -75,7 +179,7 @@ export async function POST(req: Request) {
           await prisma.project.update({
             where: {
               id: projectId,
-              userId: session.userId,
+              userId: sessionUserId!,
             },
             data: {
               messages: JSON.stringify(allMessages),

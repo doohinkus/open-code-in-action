@@ -31,7 +31,17 @@ export class VirtualFileSystem {
     }
     // Normalize multiple slashes
     path = path.replace(/\/+/g, "/");
-    return path;
+    // Resolve .. segments to prevent path traversal
+    const parts = path.split("/");
+    const resolved: string[] = [];
+    for (const part of parts) {
+      if (part === "..") {
+        if (resolved.length > 1) resolved.pop();
+      } else if (part !== "." && part !== "") {
+        resolved.push(part);
+      }
+    }
+    return "/" + resolved.join("/");
   }
 
   private getParentPath(path: string): string {

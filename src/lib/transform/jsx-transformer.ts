@@ -7,7 +7,6 @@ export interface TransformResult {
   cssImports?: Set<string>;
 }
 
-// Helper to create a placeholder module
 function createPlaceholderModule(componentName: string): string {
   return `
 import React from 'react';
@@ -19,7 +18,6 @@ export { ${componentName} };
 `;
 }
 
-
 export function transformJSX(
   code: string,
   filename: string,
@@ -28,26 +26,22 @@ export function transformJSX(
   try {
     const isTypeScript = filename.endsWith(".ts") || filename.endsWith(".tsx");
 
-    // Pre-process imports to handle missing files
     let processedCode = code;
     const importRegex =
       /import\s+(?:{[^}]+}|[^,\s]+)?\s*(?:,\s*{[^}]+})?\s+from\s+['"]([^'"]+)['"]/g;
     const imports = new Set<string>();
     const cssImports = new Set<string>();
 
-    // Detect CSS imports
     const cssImportRegex = /import\s+['"]([^'"]+\.css)['"]/g;
     let cssMatch;
     while ((cssMatch = cssImportRegex.exec(code)) !== null) {
       cssImports.add(cssMatch[1]);
     }
 
-    // Remove CSS imports from code
     processedCode = processedCode.replace(cssImportRegex, '');
 
     let match;
     while ((match = importRegex.exec(code)) !== null) {
-      // Skip CSS files from regular imports
       if (!match[1].endsWith('.css')) {
         imports.add(match[1]);
       }
@@ -75,21 +69,201 @@ export function transformJSX(
   }
 }
 
-export function createBlobURL(
-  code: string,
-  mimeType: string = "application/javascript"
-): string {
-  const blob = new Blob([code], { type: mimeType });
-  return URL.createObjectURL(blob);
+function resolveRelativePath(fromDir: string, relativePath: string): string {
+  const parts = fromDir.split("/").filter(Boolean);
+  const relParts = relativePath.split("/");
+
+  for (const part of relParts) {
+    if (part === "..") {
+      parts.pop();
+    } else if (part !== ".") {
+      parts.push(part);
+    }
+  }
+
+  return "/" + parts.join("/");
 }
 
-export interface ImportMapResult {
+function normalizeModulePath(imp: string, fromFile: string): string {
+  if (imp.startsWith("@/")) {
+    return imp.replace("@/", "/");
+  }
+  if (imp.startsWith("./") || imp.startsWith("../")) {
+    const fromDir = fromFile.substring(0, fromFile.lastIndexOf("/")) || "/";
+    return resolveRelativePath(fromDir, imp);
+  }
+  if (imp.startsWith("/")) return imp;
+  return imp;
+}
+
+function isLocalImport(imp: string): boolean {
+  return imp.startsWith(".") || imp.startsWith("/") || imp.startsWith("@/");
+}
+
+function isCdnImport(imp: string): boolean {
+  return !isLocalImport(imp);
+}
+
+interface FileExport {
+  hasDefault: boolean;
+  defaultExpr?: string;
+  named: string[];
+}
+
+function analyzeExports(code: string): FileExport {
+  const info: FileExport = { hasDefault: false, named: [] };
+
+  // Check for export default function/class Name
+  const defaultFuncMatch = code.match(/export\s+default\s+(function|class)\s+(\w+)/);
+  if (defaultFuncMatch) {
+    info.hasDefault = true;
+    info.defaultExpr = defaultFuncMatch[2];
+  }
+
+  // Check for export default const Name =
+  const defaultConstMatch = code.match(/export\s+default\s+(const|let|var)\s+(\w+)\s*=/);
+  if (defaultConstMatch) {
+    info.hasDefault = true;
+    info.defaultExpr = defaultConstMatch[2];
+  }
+
+  // Check for export default <expr> (where expr is a reference, not declaration)
+  const defaultRefMatch = code.match(/export\s+default\s+(?!function|class|const|let|var)(\w+)/);
+  if (defaultRefMatch) {
+    info.hasDefault = true;
+    info.defaultExpr = defaultRefMatch[1];
+  }
+
+  // Named exports: export function X, export const X, export class X
+  const namedFuncMatch = code.match(/export\s+(function|const|let|var|class)\s+(\w+)/g);
+  if (namedFuncMatch) {
+    for (const m of namedFuncMatch) {
+      const nameMatch = m.match(/\w+$/);
+      if (nameMatch) info.named.push(nameMatch[0]);
+    }
+  }
+
+  // export { X, Y }
+  const namedListMatch = code.match(/export\s+\{\s*([\s\S]*?)\s*\}/);
+  if (namedListMatch) {
+    const items = namedListMatch[1].split(",").map(s => s.trim().split(/\s+as\s+/)[0].trim());
+    info.named.push(...items.filter(Boolean));
+  }
+
+  return info;
+}
+
+export function createBundleFromFiles(files: Map<string, string>): {
+  code: string;
+  styles: string;
+  errors: Array<{ path: string; error: string }>;
+} {
+  const transformed = new Map<string, string>();
+  const errors: Array<{ path: string; error: string }> = [];
+  let collectedStyles = "";
+  const filePaths = new Set(files.keys());
+
+  // First pass: transform all JS/TS files
+  for (const [path, content] of files) {
+    if (
+      path.endsWith(".js") ||
+      path.endsWith(".jsx") ||
+      path.endsWith(".ts") ||
+      path.endsWith(".tsx")
+    ) {
+      const { code, error, cssImports } = transformJSX(content, path, filePaths);
+
+      if (error) {
+        errors.push({ path, error });
+        continue;
+      }
+
+      transformed.set(path, code);
+
+      if (cssImports) {
+        cssImports.forEach((cssImport) => {
+          const resolved = normalizeModulePath(cssImport, path);
+          if (files.has(resolved)) {
+            collectedStyles += `/* ${resolved} */\n${files.get(resolved)}\n\n`;
+          }
+        });
+      }
+    } else if (path.endsWith(".css")) {
+      collectedStyles += `/* ${path} */\n${content}\n\n`;
+    }
+  }
+
+  // Second pass: analyze and bundle (even if some files had errors)
+  const parts: string[] = [];
+
+  // Remove CSS imports from all transformed code
+  // (Babel keeps them as import declarations, which won't resolve in a module context)
+  const cssImportRemoveRegex = /import\s+['"][^'"]+\.css['"]\s*;?\s*/g;
+
+  for (const [path, code] of transformed) {
+    const pathTag = JSON.stringify(path);
+
+    // Remove .css imports
+    let rewritten = code.replace(cssImportRemoveRegex, "");
+
+    // Remove all import statements for local files (@/, /, ./, ../)
+    rewritten = rewritten.replace(
+      /import\s+(?:{[^}]*}|\w+(?:\s*,\s*{[^}]*})?)?\s*from\s+['"]((\.\.?\/|@\/|\/)[^'"]+)['"]\s*;?\s*/g,
+      ""
+    );
+    rewritten = rewritten.replace(/import\s+['"]((\.\.?\/|@\/|\/)[^'"]+)['"]\s*;?\s*/g, "");
+
+    // Strip all `export` keywords from declarations
+    // export default function X -> function X
+    rewritten = rewritten.replace(/export\s+default\s+(function|class)\s+(\w+)/g, "$1 $2");
+    // export default const/let/var X = -> const/let/var X =
+    rewritten = rewritten.replace(/export\s+default\s+(const|let|var)\s+(\w+)\s*=/g, "$1 $2 =");
+    // export default <expr> (standalone expression/identifier) -> just the expr
+    rewritten = rewritten.replace(/export\s+default\s+(?!function|class|const|let|var)\s*([\s\S]*?);?\s*$/gm, "$1");
+    // export function X -> function X
+    rewritten = rewritten.replace(/export\s+(function|class)\s+(\w+)/g, "$1 $2");
+    // export const/let/var X -> const/let/var X
+    rewritten = rewritten.replace(/export\s+(const|let|var)\s+(\w+)/g, "$1 $2");
+    // export { X, Y } -> remove entirely
+    rewritten = rewritten.replace(/export\s+\{[^}]*\};\s*/g, "");
+
+    parts.push(`// --- ${path} ---\n${rewritten}`);
+  }
+
+  // Find the entry point's default export name
+  const entryCode = transformed.get("/App.jsx") || transformed.get("/App.tsx") || "";
+  const entryExports = analyzeExports(entryCode);
+
+  // At the end of the bundle, re-export the entry point component
+  // for the host module script to import
+  if (entryExports.defaultExpr) {
+    parts.push(`
+const __AppComponent = ${entryExports.defaultExpr};
+export default __AppComponent;
+export { __AppComponent as App };
+`);
+  } else {
+    // Try App or fallback to first default export found
+    parts.push(`
+const __AppComponent = typeof App !== "undefined" ? App : undefined;
+export default __AppComponent;
+export { __AppComponent as App };
+`);
+  }
+
+  return {
+    code: parts.join("\n"),
+    styles: collectedStyles,
+    errors,
+  };
+}
+
+export function createImportMap(files: Map<string, string>): {
   importMap: string;
   styles: string;
   errors: Array<{ path: string; error: string }>;
-}
-
-export function createImportMap(files: Map<string, string>): ImportMapResult {
+  bundleCode: string;
+} {
   const imports: Record<string, string> = {
     react: "https://esm.sh/react@19",
     "react-dom": "https://esm.sh/react-dom@19",
@@ -98,215 +272,50 @@ export function createImportMap(files: Map<string, string>): ImportMapResult {
     "react/jsx-dev-runtime": "https://esm.sh/react@19/jsx-dev-runtime",
   };
 
-  // Transform each file and create blob URLs
-  const transformedFiles = new Map<string, string>();
   const existingFiles = new Set(files.keys());
-  const allImports = new Set<string>();
-  const allCssImports = new Set<{ from: string; cssPath: string }>();
+  const allThirdPartyImports = new Set<string>();
   let collectedStyles = "";
-  const errors: Array<{ path: string; error: string }> = [];
 
-  // First pass: transform all files and collect imports
+  // Scan for third-party imports
   for (const [path, content] of files) {
-    if (
-      path.endsWith(".js") ||
-      path.endsWith(".jsx") ||
-      path.endsWith(".ts") ||
-      path.endsWith(".tsx")
-    ) {
-      const { code, error, missingImports, cssImports } = transformJSX(
-        content,
-        path,
-        existingFiles
-      );
-      
-      if (error) {
-        // Track error for this file
-        errors.push({ path, error });
-        // Skip processing this file entirely
-        continue;
-      }
-      
-      // Normal successful transform
-      const blobUrl = createBlobURL(code);
-      transformedFiles.set(path, blobUrl);
+    if (!path.endsWith(".js") && !path.endsWith(".jsx") && !path.endsWith(".ts") && !path.endsWith(".tsx")) continue;
 
-      // Collect all imports
-      if (missingImports) {
-        missingImports.forEach((imp) => {
-          // Check if this is a third-party package
-          const isPackage = !imp.startsWith(".") && 
-                            !imp.startsWith("/") && 
-                            !imp.startsWith("@/");
-          
-          if (isPackage) {
-            // Add third-party packages directly to import map
-            imports[imp] = `https://esm.sh/${imp}`;
-          } else {
-            // Add local imports to be processed later
-            allImports.add(imp);
-          }
-        });
-      }
-
-      // Collect CSS imports
-      if (cssImports) {
-        cssImports.forEach((cssImport) => {
-          allCssImports.add({ from: path, cssPath: cssImport });
-        });
-      }
-
-      // Add to import map with absolute path
-      imports[path] = blobUrl;
-
-      // Also add without leading slash
-      if (path.startsWith("/")) {
-        imports[path.substring(1)] = blobUrl;
-      }
-
-      // Add @/ alias support - maps @/ to root directory
-      if (path.startsWith("/")) {
-        imports["@" + path] = blobUrl;
-        imports["@/" + path.substring(1)] = blobUrl;
-      }
-
-      // Add entries without file extensions for all variations
-      const pathWithoutExt = path.replace(/\.(jsx?|tsx?)$/, "");
-      imports[pathWithoutExt] = blobUrl;
-
-      if (path.startsWith("/")) {
-        imports[pathWithoutExt.substring(1)] = blobUrl;
-        imports["@" + pathWithoutExt] = blobUrl;
-        imports["@/" + pathWithoutExt.substring(1)] = blobUrl;
-      }
-    } else if (path.endsWith(".css")) {
-      // Collect CSS file content
-      collectedStyles += `/* ${path} */\n${content}\n\n`;
-    }
-  }
-
-  // Process CSS imports
-  for (const { from, cssPath } of allCssImports) {
-    // Resolve CSS path relative to the importing file
-    let resolvedPath = cssPath;
-    
-    if (cssPath.startsWith("@/")) {
-      // @/ alias points to root
-      resolvedPath = cssPath.replace("@/", "/");
-    } else if (cssPath.startsWith("./") || cssPath.startsWith("../")) {
-      // Relative path
-      const fromDir = from.substring(0, from.lastIndexOf("/"));
-      resolvedPath = resolveRelativePath(fromDir, cssPath);
-    }
-
-    // Check if CSS file exists
-    if (files.has(resolvedPath)) {
-      // Already processed in the loop above
-    } else {
-      // CSS file not found
-      collectedStyles += `/* ${cssPath} not found */\n`;
-    }
-  }
-
-  // Second pass: create placeholder modules for missing imports
-  for (const importPath of allImports) {
-    // Skip if it's a known module or already exists
-    if (imports[importPath] || importPath.startsWith("react")) {
-      continue;
-    }
-
-    // Check if this is a third-party package (no relative path indicators)
-    const isPackage = !importPath.startsWith(".") && 
-                      !importPath.startsWith("/") && 
-                      !importPath.startsWith("@/");
-
-    if (isPackage) {
-      // Handle third-party packages from esm.sh
-      const packageUrl = `https://esm.sh/${importPath}`;
-      imports[importPath] = packageUrl;
-      continue;
-    }
-
-    // Check if the import exists in any form (local files)
-    let found = false;
-    const variations = [
-      importPath,
-      importPath + ".jsx",
-      importPath + ".tsx",
-      importPath + ".js",
-      importPath + ".ts",
-      importPath.replace("@/", "/"),
-      importPath.replace("@/", "/") + ".jsx",
-      importPath.replace("@/", "/") + ".tsx",
-    ];
-
-    for (const variant of variations) {
-      if (imports[variant] || files.has(variant)) {
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) {
-      // Extract component name from path
-      const match = importPath.match(/\/([^\/]+)$/);
-      const componentName = match
-        ? match[1]
-        : importPath.replace(/[^a-zA-Z0-9]/g, "");
-
-      // Create placeholder module
-      const placeholderCode = createPlaceholderModule(componentName);
-      const placeholderUrl = createBlobURL(placeholderCode);
-
-      // Add all possible import variations
-      imports[importPath] = placeholderUrl;
-      if (importPath.startsWith("@/")) {
-        imports[importPath.replace("@/", "/")] = placeholderUrl;
-        imports[importPath.replace("@/", "")] = placeholderUrl;
+    const importRegex =
+      /import\s+(?:{[^}]+}|[^,\s]+)?\s*(?:,\s*{[^}]+})?\s+from\s+['"]([^'"]+)['"]/g;
+    let match;
+    while ((match = importRegex.exec(content)) !== null) {
+      const imp = match[1];
+      if (isCdnImport(imp) && !imp.endsWith(".css")) {
+        const baseName = imp.split("/")[0].startsWith("@")
+          ? imp.split("/").slice(0, 2).join("/")
+          : imp.split("/")[0];
+        if (!allThirdPartyImports.has(baseName)) {
+          allThirdPartyImports.add(baseName);
+          imports[imp] = `https://esm.sh/${imp}`;
+        }
       }
     }
   }
+
+  // Get bundled code
+  const { code: bundleCode, styles, errors } = createBundleFromFiles(files);
+  collectedStyles = styles;
 
   return {
     importMap: JSON.stringify({ imports }, null, 2),
     styles: collectedStyles,
-    errors
+    errors,
+    bundleCode,
   };
-}
-
-// Helper function to resolve relative paths
-function resolveRelativePath(fromDir: string, relativePath: string): string {
-  const parts = fromDir.split("/").filter(Boolean);
-  const relParts = relativePath.split("/");
-  
-  for (const part of relParts) {
-    if (part === "..") {
-      parts.pop();
-    } else if (part !== ".") {
-      parts.push(part);
-    }
-  }
-  
-  return "/" + parts.join("/");
 }
 
 export function createPreviewHTML(
   entryPoint: string,
   importMap: string,
   styles: string = "",
-  errors: Array<{ path: string; error: string }> = []
+  errors: Array<{ path: string; error: string }> = [],
+  bundleCode?: string
 ): string {
-  // Parse the import map to get the blob URL for the entry point
-  let entryPointUrl = entryPoint;
-  try {
-    const importMapObj = JSON.parse(importMap);
-    if (importMapObj.imports && importMapObj.imports[entryPoint]) {
-      entryPointUrl = importMapObj.imports[entryPoint];
-    }
-  } catch (e) {
-    console.error("Failed to parse import map:", e);
-  }
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -400,7 +409,7 @@ export function createPreviewHTML(
         const locationMatch = e.error.match(/\((\d+:\d+)\)/);
         const location = locationMatch ? locationMatch[1] : '';
         const cleanError = e.error.replace(/\(\d+:\d+\)/, '').trim();
-        
+
         return `
         <div class="error-item">
           <div class="error-path">
@@ -414,10 +423,16 @@ export function createPreviewHTML(
     </div>
   ` : ''}
   <div id="root"></div>
-  ${errors.length === 0 ? `<script type="module">
+  ${errors.length === 0 && bundleCode ? `
+  <script>
+    const __bundleSrc = ${JSON.stringify(bundleCode)};
+    const __blob = new Blob([__bundleSrc], {type: 'application/javascript'});
+    window.__bundleUrl = URL.createObjectURL(__blob);
+  </script>
+  <script type="module">
     import React from 'react';
     import ReactDOM from 'react-dom/client';
-    
+
     class ErrorBoundary extends React.Component {
       constructor(props) {
         super(props);
@@ -439,30 +454,22 @@ export function createPreviewHTML(
             React.createElement('pre', null, this.state.error?.toString())
           );
         }
-
         return this.props.children;
       }
     }
 
     async function loadApp() {
       try {
-        const module = await import('${entryPointUrl}');
-        const App = module.default || module.App;
-        
+        const mod = await import(window.__bundleUrl);
+        const App = mod.default || mod.App;
         if (!App) {
-          throw new Error('No default export or App export found in ${entryPoint}');
+          throw new Error('No default export or App export found in entry point');
         }
-
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(
-          React.createElement(ErrorBoundary, null,
-            React.createElement(App)
-          )
-        );
+        root.render(React.createElement(ErrorBoundary, null, React.createElement(App)));
       } catch (error) {
         console.error('Failed to load app:', error);
-        console.error('Import map:', ${JSON.stringify(importMap)});
-        document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + error.toString() + '</pre></div>';
+        document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + error.toString().replace(/</g,'&lt;') + '</pre></div>';
       }
     }
 
@@ -470,4 +477,12 @@ export function createPreviewHTML(
   </script>` : ''}
 </body>
 </html>`;
+}
+
+export function createBlobURL(
+  code: string,
+  mimeType: string = "application/javascript"
+): string {
+  const blob = new Blob([code], { type: mimeType });
+  return URL.createObjectURL(blob);
 }
