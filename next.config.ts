@@ -8,10 +8,10 @@ import type { NextConfig } from "next";
 const csp = [
   `default-src 'self'`,
   `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://esm.sh https://cdn.jsdelivr.net blob:`,
-  `style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com`,
+  `style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net`,
   `img-src 'self' data: blob: https:`,
   `connect-src 'self' https://cdn.tailwindcss.com https://esm.sh https://cdn.jsdelivr.net blob:`,
-  `font-src 'self'`,
+  `font-src 'self' https://cdn.jsdelivr.net`,
   `frame-src 'self'`,
   `base-uri 'self'`,
   `form-action 'self'`,
