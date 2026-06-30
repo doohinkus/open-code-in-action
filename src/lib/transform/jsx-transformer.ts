@@ -322,6 +322,7 @@ export function createPreviewHTML(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Preview</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline' 'unsafe-eval' blob: https://cdn.tailwindcss.com https://esm.sh; style-src 'unsafe-inline' https://cdn.tailwindcss.com; connect-src blob: https://esm.sh https://cdn.tailwindcss.com; img-src https: data: blob:; base-uri 'none'; form-action 'none'">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
