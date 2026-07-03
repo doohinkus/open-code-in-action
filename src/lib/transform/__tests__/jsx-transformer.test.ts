@@ -10,10 +10,25 @@ import * as Babel from "@babel/standalone";
 
 vi.mock("@babel/standalone", () => ({
   transform: vi.fn((code, options) => {
-    if (options.filename?.endsWith(".tsx") || options.filename?.endsWith(".ts")) {
-      return { code: code.replace(/const/g, "var") };
+    let transformed = code;
+    // Simulate real Babel behavior: add JSX runtime import when code uses JSX
+    if (code.includes("<") && (code.includes(">") || code.includes("/>"))) {
+      const jsxImport = `import { jsx as _jsx } from 'react/jsx-runtime';\n`;
+      if (!transformed.includes(jsxImport)) {
+        const importEnd = transformed.lastIndexOf("import") >= 0
+          ? transformed.indexOf(";", transformed.lastIndexOf("import")) + 1
+          : 0;
+        if (importEnd > 0) {
+          transformed = transformed.slice(0, importEnd) + "\n" + jsxImport + transformed.slice(importEnd).trim();
+        } else {
+          transformed = jsxImport + transformed;
+        }
+      }
     }
-    return { code };
+    if (options.filename?.endsWith(".tsx") || options.filename?.endsWith(".ts")) {
+      transformed = transformed.replace(/const/g, "var");
+    }
+    return { code: transformed };
   }),
 }));
 
@@ -26,7 +41,8 @@ test("transformJSX transforms TypeScript files with correct presets", () => {
   const result = transformJSX(code, "test.tsx", new Set());
 
   expect(result.error).toBeUndefined();
-  expect(result.code).toBe("var Component = () => <div>Hello</div>;");
+  expect(result.code).toContain("import { jsx as _jsx } from 'react/jsx-runtime'");
+  expect(result.code).toContain("var Component = () =>");
   expect(result.missingImports).toBeDefined();
 });
 
@@ -35,7 +51,8 @@ test("transformJSX handles JavaScript files without TypeScript preset", () => {
   const result = transformJSX(code, "test.jsx", new Set());
 
   expect(result.error).toBeUndefined();
-  expect(result.code).toBe(code);
+  expect(result.code).toContain("import { jsx as _jsx } from 'react/jsx-runtime'");
+  expect(result.code).toContain("const Component = () =>");
   expect(result.missingImports).toBeDefined();
 });
 
@@ -298,6 +315,124 @@ test("createBundleFromFiles produces valid bundle", () => {
   // Should have the App component
   expect(result.code).toContain("AppComponent");
   expect(result.code).toContain("export default");
+});
+
+test("createBundleFromFiles deduplicates CDN imports across files", () => {
+  const files = new Map([
+    ["/App.jsx", `
+      import React from 'react';
+      import { useState } from 'react';
+
+      import Card from './Card';
+
+      export default function App() {
+        const [count, setCount] = useState(0);
+        return <div><Card /></div>;
+      }
+    `],
+    ["/Card.jsx", `
+      import React from 'react';
+
+      export default function Card() {
+        return <div className="card">Card</div>;
+      }
+    `],
+  ]);
+
+  const result = createBundleFromFiles(files);
+
+  expect(result.errors).toHaveLength(0);
+
+  const bundle = result.code;
+
+  // React default + useState from both files should be merged into one import
+  // (File A: import React + { useState }, File B: import React)
+  // → import React, { useState } from 'react'
+  expect(bundle).toContain("import React, { useState } from 'react'");
+  expect(bundle).not.toContain("import React from 'react';\nimport React");
+
+  // Should have exactly one jsx-runtime import (deduplicated)
+  const jsxRuntimeMatches = bundle.match(/import\s+\{[^}]*jsx[^}]*\}\s+from\s+['"]react\/jsx-runtime['"]/g);
+  expect(jsxRuntimeMatches).toHaveLength(1);
+
+  expect(bundle).toContain("/App.jsx");
+  expect(bundle).toContain("/Card.jsx");
+
+  // CDN imports should appear before any file block
+  const firstFileBlockIndex = bundle.indexOf("// ---");
+  const cdnImportsBeforeFirstFile = bundle.slice(0, firstFileBlockIndex);
+  expect(cdnImportsBeforeFirstFile).toContain("import React, { useState } from 'react'");
+  expect(cdnImportsBeforeFirstFile).toContain("react/jsx-runtime");
+
+  // Local imports (./Card) should be stripped
+  expect(bundle).not.toMatch(/import\s+.*['"]\.\/Card['"]/);
+});
+
+test("createBundleFromFiles merges different imports from same package", () => {
+  const files = new Map([
+    ["/App.jsx", `
+      import React from 'react';
+      export default function App() {
+        return <div>App</div>;
+      }
+    `],
+    ["/utils.jsx", `
+      import { useState } from 'react';
+      export function useCustom() {
+        return useState(0);
+      }
+    `],
+  ]);
+
+  const result = createBundleFromFiles(files);
+
+  expect(result.errors).toHaveLength(0);
+
+  const bundle = result.code;
+
+  // Both imports from 'react' should be merged into a single import statement
+  // import React from 'react' + import { useState } from 'react'
+  // → import React, { useState } from 'react'
+  expect(bundle).toContain("import React, { useState } from 'react'");
+
+  // Should NOT have separate import statements for the same package
+  expect(bundle.match(/import\s+[^;]+from\s+['"]react['"]/g)).toHaveLength(1);
+
+  // Should still have the jsx-runtime import
+  expect(bundle).toContain("react/jsx-runtime");
+});
+
+test("createBundleFromFiles merges conflicting imports from same package", () => {
+  const files = new Map([
+    ["/App.jsx", `
+      import React from 'react';
+      export default function App() {
+        return <div>App</div>;
+      }
+    `],
+    ["/Component.jsx", `
+      import React, { useState, useCallback } from 'react';
+      export default function Component() {
+        const [val, setVal] = useState(0);
+        const cb = useCallback(() => {}, []);
+        return <div>{val}</div>;
+      }
+    `],
+  ]);
+
+  const result = createBundleFromFiles(files);
+
+  expect(result.errors).toHaveLength(0);
+
+  const bundle = result.code;
+
+  // Both files import React from 'react', with different named bindings.
+  // Should merge into one import with all bindings.
+  expect(bundle).toContain("import React, { useState, useCallback } from 'react'");
+
+  // React should only be bound once from the 'react' package
+  const reactFromReact = bundle.match(/import\s+[^;]*\bReact\b[^;]*from\s+['"]react['"]/g);
+  expect(reactFromReact).toHaveLength(1);
 });
 
 // CSS Support Tests

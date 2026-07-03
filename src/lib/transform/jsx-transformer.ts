@@ -100,6 +100,12 @@ function isLocalImport(imp: string): boolean {
   return imp.startsWith(".") || imp.startsWith("/") || imp.startsWith("@/");
 }
 
+function formatNamedBindings(bindings: Map<string, string>): string {
+  return [...bindings.entries()]
+    .map(([exported, alias]) => exported === alias ? exported : `${exported} as ${alias}`)
+    .join(', ');
+}
+
 function isCdnImport(imp: string): boolean {
   return !isLocalImport(imp);
 }
@@ -200,18 +206,105 @@ export function createBundleFromFiles(files: Map<string, string>): {
   // (Babel keeps them as import declarations, which won't resolve in a module context)
   const cssImportRemoveRegex = /import\s+['"][^'"]+\.css['"]\s*;?\s*/g;
 
+  // Collect and merge CDN imports across all files to avoid duplicate bindings.
+  // We parse each import by source module and merge bindings so that different
+  // files importing different things from the same package are combined safely.
+  // e.g. File A: `import React from 'react'` + File B: `import React, { useState } from 'react'`
+  //   → `import React, { useState } from 'react'` (single import, no conflict)
+  const mergedImports = new Map<string, {
+    defaultBinding: string | null;
+    namedBindings: Map<string, string>;
+    namespaceBinding: string | null;
+  }>();
+  const sideEffectImports = new Set<string>();
+
+  function parseAndCollectImports(code: string): void {
+    const importRegex = /import\s+(?:{[^}]+}|[^,\s]+|\*\s+as\s+\w+)?\s*(?:,\s*(?:{[^}]+}|\*\s+as\s+\w+))?\s+from\s+['"]([^'"]+)['"]\s*;?\s*/g;
+    let match;
+    while ((match = importRegex.exec(code)) !== null) {
+      const source = match[1];
+      if (isLocalImport(source) || source.endsWith('.css')) continue;
+
+      const clause = match[0].trim();
+      const defaultOnlyMatch = clause.match(/^import\s+(\w+)\s+from\s/);
+      const namedMatch = clause.match(/^import\s+(?:(\w+)\s*,\s*)?\{\s*([^}]+)\s*\}\s+from\s/);
+      const namespaceMatch = clause.match(/^import\s+(?:(\w+)\s*,\s*)?\*\s+as\s+(\w+)\s+from\s/);
+
+      if (!mergedImports.has(source)) {
+        mergedImports.set(source, { defaultBinding: null, namedBindings: new Map(), namespaceBinding: null });
+      }
+      const merged = mergedImports.get(source)!;
+
+      if (namespaceMatch) {
+        if (namespaceMatch[1]) merged.defaultBinding = namespaceMatch[1];
+        merged.namespaceBinding = namespaceMatch[2];
+      } else if (namedMatch) {
+        if (namedMatch[1]) merged.defaultBinding = namedMatch[1];
+        const members = namedMatch[2].split(',').map(s => s.trim()).filter(Boolean);
+        for (const member of members) {
+          const parts = member.split(/\s+as\s+/);
+          const exported = parts[0].trim();
+          const alias = parts[1]?.trim() || exported;
+          merged.namedBindings.set(exported, alias);
+        }
+      } else if (defaultOnlyMatch) {
+        merged.defaultBinding = defaultOnlyMatch[1];
+      }
+    }
+
+    const sideEffectRegex = /import\s+['"]([^'"]+)['"]\s*;?\s*/g;
+    while ((match = sideEffectRegex.exec(code)) !== null) {
+      const source = match[1];
+      if (!isLocalImport(source) && !source.endsWith('.css')) {
+        sideEffectImports.add(source);
+      }
+    }
+  }
+
+  for (const [, code] of transformed) {
+    parseAndCollectImports(code);
+  }
+
+  const cdnImportParts: string[] = [];
+  for (const [source, info] of mergedImports) {
+    const parts: string[] = ['import '];
+    if (info.defaultBinding && info.namespaceBinding) {
+      parts.push(`${info.defaultBinding}, * as ${info.namespaceBinding}`);
+    } else if (info.defaultBinding) {
+      parts.push(info.defaultBinding);
+      if (info.namedBindings.size > 0) {
+        parts.push(`, { ${formatNamedBindings(info.namedBindings)} }`);
+      }
+    } else if (info.namespaceBinding) {
+      parts.push(`* as ${info.namespaceBinding}`);
+    } else if (info.namedBindings.size > 0) {
+      parts.push(`{ ${formatNamedBindings(info.namedBindings)} }`);
+    }
+    parts.push(` from '${source}';`);
+    cdnImportParts.push(parts.join(''));
+  }
+  for (const source of sideEffectImports) {
+    if (!mergedImports.has(source)) {
+      cdnImportParts.push(`import '${source}';`);
+    }
+  }
+  if (cdnImportParts.length > 0) {
+    parts.push(cdnImportParts.join('\n'));
+  }
+
   for (const [path, code] of transformed) {
     const pathTag = JSON.stringify(path);
 
     // Remove .css imports
     let rewritten = code.replace(cssImportRemoveRegex, "");
 
-    // Remove all import statements for local files (@/, /, ./, ../)
+    // Remove ALL import statements (local and CDN) — CDN imports are
+    // deduplicated and emitted once above
     rewritten = rewritten.replace(
-      /import\s+(?:{[^}]*}|\w+(?:\s*,\s*{[^}]*})?)?\s*from\s+['"]((\.\.?\/|@\/|\/)[^'"]+)['"]\s*;?\s*/g,
+      /import\s+(?:{[^}]*}|\w+(?:\s*,\s*{[^}]*})?|\*\s+as\s+\w+)?\s*(?:,\s*(?:{[^}]*}|\*\s+as\s+\w+))?\s*from\s+['"][^'"]+['"]\s*;?\s*/g,
       ""
     );
-    rewritten = rewritten.replace(/import\s+['"]((\.\.?\/|@\/|\/)[^'"]+)['"]\s*;?\s*/g, "");
+    rewritten = rewritten.replace(/import\s+['"][^'"]+['"]\s*;?\s*/g, "");
 
     // Strip all `export` keywords from declarations
     // export default function X -> function X
