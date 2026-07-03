@@ -320,6 +320,18 @@ export function createBundleFromFiles(files: Map<string, string>): {
     // export { X, Y } -> remove entirely
     rewritten = rewritten.replace(/export\s+\{[^}]*\};\s*/g, "");
 
+    // Safety net: rewrite CommonJS patterns the AI sometimes emits
+    // module.exports = X → const __moduleExports = X
+    rewritten = rewritten.replace(
+      /module\.exports\s*=\s*([^;]+);?\s*/g,
+      "const __moduleExports = $1;"
+    );
+    // exports.X = Y → const __exports_X = Y
+    rewritten = rewritten.replace(
+      /exports\.(\w+)\s*=\s*([^;]+);?\s*/g,
+      "const __exports_$1 = $2;"
+    );
+
     parts.push(`// --- ${path} ---\n${rewritten}`);
   }
 
