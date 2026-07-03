@@ -3,11 +3,14 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Plus, LogOut, FolderOpen, ChevronDown } from "lucide-react";
+import { Plus, LogOut, FolderOpen, ChevronDown, Download } from "lucide-react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { signOut } from "@/actions";
 import { getProjects } from "@/actions/get-projects";
 import { createProject } from "@/actions/create-project";
+import { useFileSystem } from "@/lib/contexts/file-system-context";
+import { useChat } from "@/lib/contexts/chat-context";
+import { downloadProjectZip } from "@/lib/download-zip";
 import {
   Popover,
   PopoverContent,
@@ -83,6 +86,24 @@ export function HeaderActions({ user, projectId }: HeaderActionsProps) {
     await signOut();
   };
 
+  const { getAllFiles, refreshTrigger } = useFileSystem();
+  const { status } = useChat();
+
+  const isStreaming = status === "streaming" || status === "submitted";
+  const [hasFiles, setHasFiles] = useState(false);
+
+  useEffect(() => {
+    setHasFiles(getAllFiles().size > 0);
+  }, [refreshTrigger, getAllFiles]);
+
+  const canDownload = hasFiles && !isStreaming;
+
+  const handleDownload = () => {
+    const files = getAllFiles();
+    if (files.size === 0) return;
+    downloadProjectZip(files, "project.zip");
+  };
+
   const handleNewDesign = async () => {
     const project = await createProject({
       name: `Design #${~~(Math.random() * 100000)}`,
@@ -96,6 +117,10 @@ export function HeaderActions({ user, projectId }: HeaderActionsProps) {
     return (
       <>
         <div className="flex gap-2">
+          <Button variant="outline" className="h-8 gap-2" onClick={handleDownload} disabled={!canDownload}>
+            <Download className="h-4 w-4" />
+            Download
+          </Button>
           <Button variant="outline" className="h-8" onClick={handleSignInClick}>
             Sign In
           </Button>
@@ -154,6 +179,11 @@ export function HeaderActions({ user, projectId }: HeaderActionsProps) {
           </PopoverContent>
         </Popover>
       )}
+
+      <Button variant="outline" className="h-8 gap-2" onClick={handleDownload} disabled={!canDownload}>
+        <Download className="h-4 w-4" />
+        Download
+      </Button>
 
       <Button className="flex items-center gap-2 h-8" onClick={handleNewDesign}>
         <Plus className="h-4 w-4" />

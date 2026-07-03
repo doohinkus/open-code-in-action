@@ -2,20 +2,26 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
+import { useChat } from "@/lib/contexts/chat-context";
 import {
   createImportMap,
   createPreviewHTML,
 } from "@/lib/transform/jsx-transformer";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 
 export function PreviewFrame() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { getAllFiles, refreshTrigger } = useFileSystem();
+  const { status } = useChat();
   const [error, setError] = useState<string | null>(null);
   const [entryPoint, setEntryPoint] = useState<string>("/App.jsx");
   const [isFirstLoad, setIsFirstLoad] = useState(true);
 
+  const isGenerating = status === "streaming" || status === "submitted";
+
   useEffect(() => {
+    if (isGenerating) return;
+
     const updatePreview = () => {
       try {
         const files = getAllFiles();
@@ -98,7 +104,25 @@ export function PreviewFrame() {
     };
 
     updatePreview();
-  }, [refreshTrigger, getAllFiles, entryPoint, error, isFirstLoad]);
+  }, [refreshTrigger, getAllFiles, entryPoint, error, isFirstLoad, isGenerating]);
+
+  if (isGenerating) {
+    return (
+      <div className="h-full flex items-center justify-center p-8 bg-gray-50">
+        <div className="text-center max-w-md">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
+            <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Generating Preview...
+          </h3>
+          <p className="text-sm text-gray-500">
+            Building your React components
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     if (error === "firstLoad") {
