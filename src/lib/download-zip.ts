@@ -28,7 +28,7 @@ export function createZipBlob(files: Map<string, string>): Blob {
     }))
     .sort((a, b) => a.path.localeCompare(b.path));
 
-  const parts: BlobPart[] = [];
+  const localParts: Uint8Array[] = [];
   const central: Uint8Array[] = [];
   let offset = 0;
 
@@ -47,7 +47,7 @@ export function createZipBlob(files: Map<string, string>): Blob {
     local.set(u16(name.length), 26);
     local.set(name, 30);
 
-    parts.push(local, entry.data);
+    localParts.push(local, entry.data);
 
     const cd = new Uint8Array(46 + name.length);
     cd.set([0x50, 0x4b, 0x01, 0x02], 0);
@@ -73,8 +73,7 @@ export function createZipBlob(files: Map<string, string>): Blob {
   eocd.set(u32(cdSize), 12);
   eocd.set(u32(offset), 16);
 
-  parts.push(...central, eocd);
-  return new Blob(parts, { type: "application/zip" });
+  return new Blob([...localParts, ...central, eocd] as BlobPart[], { type: "application/zip" });
 }
 
 export function downloadProjectZip(
