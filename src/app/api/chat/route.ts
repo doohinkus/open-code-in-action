@@ -60,7 +60,7 @@ function checkOrigin(req: Request): boolean {
   const origin = req.headers.get("origin") || "";
   const referer = req.headers.get("referer") || "";
   const urlToCheck = origin || referer || "";
-  if (!urlToCheck) return true;
+  if (!urlToCheck) return false;
   // Allow all Vercel preview deployments
   if (urlToCheck.endsWith(".vercel.app")) return true;
   return ALLOWED_ORIGINS.some((allowed) => urlToCheck.startsWith(allowed));
@@ -101,10 +101,15 @@ function validateInput(
   return null;
 }
 
-export async function OPTIONS() {
+export async function OPTIONS(req: Request) {
+  const origin = req.headers.get("origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.find((o) => origin.startsWith(o)) ||
+    (origin.endsWith(".vercel.app") ? origin : ALLOWED_ORIGINS[0]);
+
   return new Response(null, {
     status: 204,
     headers: {
+      "Access-Control-Allow-Origin": allowedOrigin,
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
       "Access-Control-Max-Age": "86400",
@@ -206,7 +211,22 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toDataStreamResponse();
+  const aiResponse = result.toDataStreamResponse();
+
+  // Add CORS headers for credentialed requests
+  const origin = req.headers.get("origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.find((o) => origin.startsWith(o)) ||
+    (origin.endsWith(".vercel.app") ? origin : ALLOWED_ORIGINS[0]);
+
+  const responseHeaders = new Headers(aiResponse.headers);
+  responseHeaders.set("Access-Control-Allow-Origin", allowedOrigin);
+  responseHeaders.set("Access-Control-Allow-Credentials", "true");
+
+  return new Response(aiResponse.body, {
+    status: aiResponse.status,
+    statusText: aiResponse.statusText,
+    headers: responseHeaders,
+  });
 }
 
 export const maxDuration = 120;

@@ -428,7 +428,7 @@ export function createPreviewHTML(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Preview</title>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src ${nonce ? `'nonce-${nonce}'` : "'unsafe-inline'"} blob: https://cdn.tailwindcss.com https://esm.sh; style-src 'unsafe-inline' https://cdn.tailwindcss.com; connect-src blob: https://esm.sh https://cdn.tailwindcss.com; img-src https: data: blob:; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src ${nonce ? `'nonce-${nonce}'` : "'unsafe-inline'"} blob: https://cdn.tailwindcss.com https://esm.sh; style-src 'unsafe-inline' https://cdn.tailwindcss.com; connect-src blob: https://esm.sh https://cdn.tailwindcss.com; img-src https: data: blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
@@ -523,7 +523,7 @@ export function createPreviewHTML(
             ${e.path}
             ${location ? `<span class="error-location">${location}</span>` : ''}
           </div>
-          <div class="error-message">${cleanError.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+          <div class="error-message">${cleanError.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')}</div>
         </div>
       `;
       }).join('')}
@@ -565,9 +565,12 @@ export function createPreviewHTML(
       }
     }
 
+    const __escapeHtml = (str) => str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+
     async function loadApp() {
       try {
         const mod = await import(window.__bundleUrl);
+        URL.revokeObjectURL(window.__bundleUrl);
         const App = mod.default || mod.App;
         if (!App) {
           throw new Error('No default export or App export found in entry point');
@@ -575,8 +578,9 @@ export function createPreviewHTML(
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(React.createElement(ErrorBoundary, null, React.createElement(App)));
       } catch (error) {
+        if (window.__bundleUrl) URL.revokeObjectURL(window.__bundleUrl);
         console.error('Failed to load app:', error);
-        document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + error.toString().replace(/</g,'&lt;') + '</pre></div>';
+        document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error.toString()) + '</pre></div>';
       }
     }
 

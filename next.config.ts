@@ -11,11 +11,33 @@ const csp = [
   `style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net`,
   `img-src 'self' data: blob: https:`,
   `connect-src 'self' https://cdn.tailwindcss.com https://esm.sh https://cdn.jsdelivr.net blob:`,
-  `font-src 'self' https://cdn.jsdelivr.net`,
+  `font-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net`,
   `frame-src 'self'`,
+  `frame-ancestors 'self'`,
   `base-uri 'self'`,
   `form-action 'self'`,
+  `object-src 'none'`,
+  `upgrade-insecure-requests`,
 ].join("; ");
+
+const securityHeaders = [
+  {
+    key: "X-Content-Type-Options",
+    value: "nosniff",
+  },
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload",
+  },
+  {
+    key: "Referrer-Policy",
+    value: "strict-origin-when-cross-origin",
+  },
+  {
+    key: "Permissions-Policy",
+    value: "geolocation=(), microphone=(), camera=(), clipboard-write=(self), fullscreen=(self)",
+  },
+];
 
 const nextConfig: NextConfig = {
   devIndicators: false,
@@ -28,6 +50,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: csp,
           },
+          ...securityHeaders,
         ],
       },
     ];
