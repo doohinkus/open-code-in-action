@@ -81,7 +81,8 @@ export function PreviewFrame() {
         }
 
         const { importMap, styles, errors, bundleCode } = createImportMap(files);
-        const previewHTML = createPreviewHTML(foundEntryPoint, importMap, styles, errors, bundleCode);
+        const nonce = crypto.randomUUID();
+        const previewHTML = createPreviewHTML(foundEntryPoint, importMap, styles, errors, bundleCode, nonce);
 
         if (iframeRef.current) {
           const iframe = iframeRef.current;

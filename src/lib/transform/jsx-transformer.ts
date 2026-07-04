@@ -419,7 +419,8 @@ export function createPreviewHTML(
   importMap: string,
   styles: string = "",
   errors: Array<{ path: string; error: string }> = [],
-  bundleCode?: string
+  bundleCode?: string,
+  nonce?: string
 ): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -427,7 +428,7 @@ export function createPreviewHTML(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Preview</title>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline' 'unsafe-eval' blob: https://cdn.tailwindcss.com https://esm.sh; style-src 'unsafe-inline' https://cdn.tailwindcss.com; connect-src blob: https://esm.sh https://cdn.tailwindcss.com; img-src https: data: blob:; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src ${nonce ? `'nonce-${nonce}'` : "'unsafe-inline'"} blob: https://cdn.tailwindcss.com https://esm.sh; style-src 'unsafe-inline' https://cdn.tailwindcss.com; connect-src blob: https://esm.sh https://cdn.tailwindcss.com; img-src https: data: blob:; base-uri 'none'; form-action 'none'">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
@@ -498,7 +499,7 @@ export function createPreviewHTML(
     }
   </style>
   ${styles ? `<style>\n${styles}</style>` : ''}
-  <script type="importmap">
+  <script type="importmap"${nonce ? ` nonce="${nonce}"` : ''}>
     ${importMap}
   </script>
 </head>
@@ -530,12 +531,12 @@ export function createPreviewHTML(
   ` : ''}
   <div id="root"></div>
   ${errors.length === 0 && bundleCode ? `
-  <script>
+  <script${nonce ? ` nonce="${nonce}"` : ''}>
     const __bundleSrc = ${JSON.stringify(bundleCode)};
     const __blob = new Blob([__bundleSrc], {type: 'application/javascript'});
     window.__bundleUrl = URL.createObjectURL(__blob);
   </script>
-  <script type="module">
+  <script${nonce ? ` nonce="${nonce}"` : ''} type="module">
     import React from 'react';
     import ReactDOM from 'react-dom/client';
 
