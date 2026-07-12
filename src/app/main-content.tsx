@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -14,6 +15,7 @@ import { CodeEditor } from "@/components/editor/CodeEditor";
 import { PreviewFrame } from "@/components/preview/PreviewFrame";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HeaderActions } from "@/components/HeaderActions";
+import { authClient } from "@/lib/auth/client";
 
 interface MainContentProps {
   user?: {
@@ -31,12 +33,21 @@ interface MainContentProps {
 }
 
 export function MainContent({ user, project }: MainContentProps) {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [activeView, setActiveView] = useState<"preview" | "code">("preview");
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      authClient.getSession().then(({ data }) => {
+        if (data?.user) router.refresh();
+      }).catch(() => {});
+    }
+  }, [user, router]);
 
   if (!mounted) {
     return (
