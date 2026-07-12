@@ -15,7 +15,7 @@ const csp = [
   `frame-src 'self'`,
   `frame-ancestors 'self'`,
   `base-uri 'self'`,
-  `form-action 'self'`,
+  `form-action 'self' https://accounts.google.com`,
   `object-src 'none'`,
   `upgrade-insecure-requests`,
 ].join("; ");
