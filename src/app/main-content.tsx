@@ -16,6 +16,14 @@ import { PreviewFrame } from "@/components/preview/PreviewFrame";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HeaderActions } from "@/components/HeaderActions";
 import { authClient } from "@/lib/auth/client";
+import { useChat } from "@/lib/contexts/chat-context";
+import { useFileSystem } from "@/lib/contexts/file-system-context";
+
+function HeaderActionsWrapper({ user, projectId }: { user?: { id: string; email: string } | null; projectId?: string }) {
+  const { messages } = useChat();
+  const { getAllFiles } = useFileSystem();
+  return <HeaderActions user={user} projectId={projectId} messages={messages} getAllFiles={getAllFiles} />;
+}
 
 interface MainContentProps {
   user?: {
@@ -97,7 +105,7 @@ export function MainContent({ user, project }: MainContentProps) {
                       <TabsTrigger value="code" className="data-[state=active]:bg-white data-[state=active]:text-neutral-900 data-[state=active]:shadow-sm text-neutral-600 px-4 py-1.5 text-sm font-medium transition-all">Code</TabsTrigger>
                     </TabsList>
                   </Tabs>
-                  <HeaderActions user={user} projectId={project?.id} />
+                  <HeaderActionsWrapper user={user} projectId={project?.id} />
                 </div>
 
                 {/* Content Area */}
