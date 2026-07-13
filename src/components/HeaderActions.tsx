@@ -316,7 +316,7 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
               onClick={startEditing}
             >
               <Pencil className="h-3 w-3" />
-              Menu
+              Rename
             </Button>
           )}
         </div>
