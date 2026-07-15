@@ -5,6 +5,8 @@ import {
   useContext,
   ReactNode,
   useEffect,
+  useRef,
+  useCallback,
 } from "react";
 import { useChat as useAIChat } from "@ai-sdk/react";
 import { Message } from "ai";
@@ -22,6 +24,7 @@ interface ChatContextType {
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   status: string;
+  append: (message: Message | { role: "user"; content: string }) => Promise<string | null | undefined>;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -31,14 +34,20 @@ export function ChatProvider({
   projectId,
   initialMessages = [],
 }: ChatContextProps & { children: ReactNode }) {
-  const { fileSystem, handleToolCall } = useFileSystem();
+  const {
+    fileSystem,
+    handleToolCall,
+    validateCurrentFiles,
+    setIsFixingErrors,
+  } = useFileSystem();
 
   const {
     messages,
     input,
     handleInputChange,
-    handleSubmit,
+    handleSubmit: originalHandleSubmit,
     status,
+    append,
   } = useAIChat({
     api: "/api/chat",
     initialMessages,
@@ -50,6 +59,43 @@ export function ChatProvider({
       handleToolCall(toolCall);
     },
   });
+
+  const fixAttemptCount = useRef(0);
+  const prevStatusRef = useRef(status);
+
+  const handleSubmit = useCallback(
+    (e: React.FormEvent<HTMLFormElement>) => {
+      fixAttemptCount.current = 0;
+      setIsFixingErrors(false);
+      originalHandleSubmit(e);
+    },
+    [originalHandleSubmit, setIsFixingErrors]
+  );
+
+  useEffect(() => {
+    const wasStreaming =
+      prevStatusRef.current === "streaming" ||
+      prevStatusRef.current === "submitted";
+    const isNowReady = status === "ready" || status === "error";
+    prevStatusRef.current = status;
+
+    if (!wasStreaming || !isNowReady) return;
+
+    const errors = validateCurrentFiles();
+    if (errors.length > 0 && fixAttemptCount.current < 2) {
+      fixAttemptCount.current++;
+      setIsFixingErrors(true);
+      const errorList = errors
+        .map((e) => `- ${e.path}: ${e.error}`)
+        .join("\n");
+      append({
+        role: "user",
+        content: `The generated code has syntax errors that need to be fixed:\n\n${errorList}\n\nPlease fix all syntax errors using the str_replace_editor tool.`,
+      });
+    } else {
+      setIsFixingErrors(false);
+    }
+  }, [status, validateCurrentFiles, setIsFixingErrors, append]);
 
   // Track anonymous work
   useEffect(() => {
@@ -66,6 +112,7 @@ export function ChatProvider({
         handleInputChange,
         handleSubmit,
         status,
+        append,
       }}
     >
       {children}

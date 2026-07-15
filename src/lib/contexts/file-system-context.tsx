@@ -8,6 +8,7 @@ import React, {
   useEffect,
 } from "react";
 import { VirtualFileSystem, FileNode } from "@/lib/file-system";
+import { validateFiles } from "@/lib/transform/jsx-transformer";
 
 interface ToolCall {
   toolName: string;
@@ -27,6 +28,11 @@ interface FileSystemContextType {
   refreshTrigger: number;
   handleToolCall: (toolCall: ToolCall) => void;
   reset: () => void;
+  syntaxErrors: Array<{ path: string; error: string }>;
+  isFixingErrors: boolean;
+  setIsFixingErrors: (value: boolean) => void;
+  setSyntaxErrors: (errors: Array<{ path: string; error: string }>) => void;
+  validateCurrentFiles: () => Array<{ path: string; error: string }>;
 }
 
 const FileSystemContext = createContext<FileSystemContextType | undefined>(
@@ -51,6 +57,10 @@ export function FileSystemProvider({
   });
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [syntaxErrors, setSyntaxErrors] = useState<
+    Array<{ path: string; error: string }>
+  >([]);
+  const [isFixingErrors, setIsFixingErrors] = useState(false);
 
   const triggerRefresh = useCallback(() => {
     setRefreshTrigger((prev) => prev + 1);
@@ -139,8 +149,17 @@ export function FileSystemProvider({
   const reset = useCallback(() => {
     fileSystem.reset();
     setSelectedFile(null);
+    setSyntaxErrors([]);
+    setIsFixingErrors(false);
     triggerRefresh();
   }, [fileSystem, triggerRefresh]);
+
+  const validateCurrentFiles = useCallback(() => {
+    const files = fileSystem.getAllFiles();
+    const errors = validateFiles(files);
+    setSyntaxErrors(errors);
+    return errors;
+  }, [fileSystem]);
 
   const handleToolCall = useCallback(
     (toolCall: ToolCall) => {
@@ -226,6 +245,11 @@ export function FileSystemProvider({
         refreshTrigger,
         handleToolCall,
         reset,
+        syntaxErrors,
+        isFixingErrors,
+        setIsFixingErrors,
+        setSyntaxErrors,
+        validateCurrentFiles,
       }}
     >
       {children}

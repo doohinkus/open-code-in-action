@@ -590,6 +590,27 @@ export function createPreviewHTML(
 </html>`;
 }
 
+export function validateFiles(
+  files: Map<string, string>
+): Array<{ path: string; error: string }> {
+  const errors: Array<{ path: string; error: string }> = [];
+  const filePaths = new Set(files.keys());
+  for (const [path, content] of files) {
+    if (
+      path.endsWith(".js") ||
+      path.endsWith(".jsx") ||
+      path.endsWith(".ts") ||
+      path.endsWith(".tsx")
+    ) {
+      const { error } = transformJSX(content, path, filePaths);
+      if (error) {
+        errors.push({ path, error });
+      }
+    }
+  }
+  return errors;
+}
+
 export function createBlobURL(
   code: string,
   mimeType: string = "application/javascript"

@@ -11,7 +11,7 @@ import { AlertCircle, Loader2 } from "lucide-react";
 
 export function PreviewFrame() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const { getAllFiles, refreshTrigger } = useFileSystem();
+  const { getAllFiles, refreshTrigger, isFixingErrors } = useFileSystem();
   const { status } = useChat();
   const [error, setError] = useState<string | null>(null);
   const [entryPoint, setEntryPoint] = useState<string>("/App.jsx");
@@ -20,7 +20,7 @@ export function PreviewFrame() {
   const isGenerating = status === "streaming" || status === "submitted";
 
   useEffect(() => {
-    if (isGenerating) return;
+    if (isGenerating || isFixingErrors) return;
 
     const updatePreview = () => {
       try {
@@ -105,7 +105,7 @@ export function PreviewFrame() {
     };
 
     updatePreview();
-  }, [refreshTrigger, getAllFiles, entryPoint, error, isFirstLoad, isGenerating]);
+  }, [refreshTrigger, getAllFiles, entryPoint, error, isFirstLoad, isGenerating, isFixingErrors]);
 
   if (isGenerating) {
     return (
@@ -119,6 +119,24 @@ export function PreviewFrame() {
           </h3>
           <p className="text-sm text-gray-500">
             Building your React components
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isFixingErrors) {
+    return (
+      <div className="h-full flex items-center justify-center p-8 bg-gray-50">
+        <div className="text-center max-w-md">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
+            <Loader2 className="h-8 w-8 text-amber-600 animate-spin" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Fixing Syntax Errors...
+          </h3>
+          <p className="text-sm text-gray-500">
+            The AI is automatically fixing code errors
           </p>
         </div>
       </div>
