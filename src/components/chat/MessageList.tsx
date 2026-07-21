@@ -76,11 +76,29 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
                             );
                           case "tool-invocation":
                             const tool = part.toolInvocation;
-                            const toolLabels: Record<string, string> = {
-                              str_replace_editor: "Editing files",
-                              file_manager: "Managing files",
+                            const getLabel = (toolName: string, args: any): string => {
+                              if (!args) return toolName;
+                              const { command, path, new_path } = args as {
+                                command?: string;
+                                path?: string;
+                                new_path?: string;
+                              };
+                              if (toolName === "str_replace_editor") {
+                                switch (command) {
+                                  case "create": return `Creating ${path}`;
+                                  case "str_replace": return `Editing ${path}`;
+                                  case "insert": return `Editing ${path}`;
+                                  case "view": return `Viewing ${path}`;
+                                  default: return `Editing ${path}`;
+                                }
+                              }
+                              if (toolName === "file_manager") {
+                                if (command === "rename") return `Renaming ${path} → ${new_path}`;
+                                if (command === "delete") return `Deleting ${path}`;
+                              }
+                              return `${toolName} ${path || ""}`;
                             };
-                            const label = toolLabels[tool.toolName] || tool.toolName;
+                            const label = getLabel(tool.toolName, tool.args);
                             return (
                               <div key={partIndex} className="inline-flex items-center gap-2 mt-2 px-3 py-1.5 bg-neutral-50 rounded-lg text-xs font-mono border border-neutral-200">
                                 {tool.state === "result" && tool.result ? (

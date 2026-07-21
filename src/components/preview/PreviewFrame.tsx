@@ -8,6 +8,7 @@ import {
   createPreviewHTML,
 } from "@/lib/transform/jsx-transformer";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { GenerationActivityLog } from "./GenerationActivityLog";
 
 export function PreviewFrame() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -117,9 +118,7 @@ export function PreviewFrame() {
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
             Generating Preview...
           </h3>
-          <p className="text-sm text-gray-500">
-            Building your React components
-          </p>
+          <GenerationActivityLog />
         </div>
       </div>
     );
@@ -135,9 +134,7 @@ export function PreviewFrame() {
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
             Fixing Syntax Errors...
           </h3>
-          <p className="text-sm text-gray-500">
-            The AI is automatically fixing code errors
-          </p>
+          <GenerationActivityLog />
         </div>
       </div>
     );
