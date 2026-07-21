@@ -36,7 +36,15 @@
 - **shadcn/ui**: New York style, `components.json` at root. Existing UI components in `src/components/ui/`
 - **CSS**: Tailwind v4 with `@import "tailwindcss"` syntax (not v3 config file). Uses `@tailwindcss/typography` plugin and `tw-animate-css`
 
+## Before Pushing (REQUIRED)
+**Always run before `git push`:**
+```bash
+npm run lint && npm test -- --run
+```
+Fix any failures before pushing. Never push with failing tests.
+
 ## Testing
 - Vitest config: `vitest.config.mts` — uses `@vitejs/plugin-react` and `vite-tsconfig-paths`
 - Run single test file: `npx vitest src/lib/__tests__/file-system.test.ts`
 - Tests in `src/lib/__tests__/`, `src/lib/transform/__tests__/`, `src/lib/contexts/__tests__/`, `src/components/chat/__tests__/`
+- Known: `.opencode/node_modules/zod` tests fail (missing deps) — these are pre-existing and unrelated to project code
