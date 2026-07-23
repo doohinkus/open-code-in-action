@@ -24,6 +24,8 @@ interface ChatContextType {
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   status: string;
+  error: Error | undefined;
+  reload: (chatRequestOptions?: any) => Promise<string | null | undefined>;
   append: (message: Message | { role: "user"; content: string }) => Promise<string | null | undefined>;
 }
 
@@ -47,6 +49,8 @@ export function ChatProvider({
     handleInputChange,
     handleSubmit: originalHandleSubmit,
     status,
+    error,
+    reload,
     append,
   } = useAIChat({
     api: "/api/chat",
@@ -112,6 +116,8 @@ export function ChatProvider({
         handleInputChange,
         handleSubmit,
         status,
+        error,
+        reload,
         append,
       }}
     >

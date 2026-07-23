@@ -3,6 +3,7 @@ import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatInterface } from "../ChatInterface";
 import { useChat } from "@/lib/contexts/chat-context";
+import { ToastProvider } from "@/components/ui/toast";
 
 // Mock the dependencies
 vi.mock("@/lib/contexts/chat-context", () => ({
@@ -49,6 +50,8 @@ const mockUseChat = {
   handleInputChange: vi.fn(),
   handleSubmit: vi.fn(),
   status: "idle" as const,
+  error: undefined,
+  reload: vi.fn(),
 };
 
 beforeEach(() => {
@@ -61,7 +64,11 @@ afterEach(() => {
 });
 
 test("renders chat interface with message list and input", () => {
-  render(<ChatInterface />);
+  render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
 
   expect(screen.getByTestId("message-list")).toBeDefined();
   expect(screen.getByTestId("message-input")).toBeDefined();
@@ -79,7 +86,11 @@ test("passes correct props to MessageList", () => {
     status: "streaming",
   });
 
-  render(<ChatInterface />);
+  render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
 
   const messageList = screen.getByTestId("message-list");
   expect(messageList.textContent).toContain("2 messages");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { useChat } from "@/lib/contexts/chat-context";
 import { Loader2, Check } from "lucide-react";
 
@@ -70,10 +70,16 @@ function extractActivities(messages: any[]): ActivityEntry[] {
 export function GenerationActivityLog() {
   const { messages } = useChat();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const startTimeRef = useRef<number>(Date.now());
+  const [, forceUpdate] = React.useState(0);
 
   const activities = extractActivities(messages);
   const totalSteps = activities.length;
   const completedCount = activities.filter((a) => a.status === "done").length;
+
+  useEffect(() => {
+    startTimeRef.current = Date.now();
+  }, [messages.length]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -81,11 +87,23 @@ export function GenerationActivityLog() {
     }
   }, [activities.length]);
 
+  useEffect(() => {
+    if (totalSteps > 0) return;
+    const interval = setInterval(() => forceUpdate((n) => n + 1), 1000);
+    return () => clearInterval(interval);
+  }, [totalSteps]);
+
   if (totalSteps === 0) {
+    const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
     return (
       <div className="flex items-center gap-2 mt-3 text-gray-500">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span className="text-sm">Preparing...</span>
+        <span className="text-sm">
+          Preparing...
+          {elapsed > 0 && (
+            <span className="ml-1 text-gray-400">({elapsed}s)</span>
+          )}
+        </span>
       </div>
     );
   }
