@@ -104,7 +104,11 @@ test("passes correct props to MessageInput", () => {
     status: "submitted",
   });
 
-  render(<ChatInterface />);
+  render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
 
   const input = screen.getByTestId("input");
   expect(input).toHaveProperty("value", "Test input");
@@ -117,7 +121,11 @@ test("isLoading is true when status is submitted", () => {
     status: "submitted",
   });
 
-  render(<ChatInterface />);
+  render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
 
   const submitButton = screen.getByTestId("submit");
   expect(submitButton).toHaveProperty("disabled", true);
@@ -129,7 +137,11 @@ test("isLoading is true when status is streaming", () => {
     status: "streaming",
   });
 
-  render(<ChatInterface />);
+  render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
 
   const submitButton = screen.getByTestId("submit");
   expect(submitButton).toHaveProperty("disabled", true);
@@ -141,7 +153,11 @@ test("isLoading is false when status is idle", () => {
     status: "idle",
   });
 
-  render(<ChatInterface />);
+  render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
 
   const submitButton = screen.getByTestId("submit");
   expect(submitButton).toHaveProperty("disabled", false);
@@ -149,7 +165,11 @@ test("isLoading is false when status is idle", () => {
 
 
 test("scrolls when messages change", () => {
-  const { rerender } = render(<ChatInterface />);
+  const { rerender } = render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
 
   // Get initial scroll container
   const scrollContainer = screen.getByTestId("message-list").closest("[data-radix-scroll-area-viewport]");
@@ -164,7 +184,11 @@ test("scrolls when messages change", () => {
     ],
   });
 
-  rerender(<ChatInterface />);
+  rerender(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
 
   // Verify component re-rendered with new messages
   const messageList = screen.getByTestId("message-list");
@@ -172,7 +196,11 @@ test("scrolls when messages change", () => {
 });
 
 test("renders with correct layout classes", () => {
-  const { container } = render(<ChatInterface />);
+  const { container } = render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
 
   const mainDiv = container.firstChild as HTMLElement;
   expect(mainDiv.className).toContain("flex");
