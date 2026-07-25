@@ -35,7 +35,7 @@ const securityHeaders = [
   },
   {
     key: "Permissions-Policy",
-    value: "geolocation=(), microphone=(), camera=(), clipboard-write=(self), fullscreen=(self)",
+    value: "geolocation=(), microphone=(self), camera=(), clipboard-write=(self), fullscreen=(self)",
   },
 ];
 
