@@ -170,11 +170,22 @@ export async function POST(req: Request) {
   const model = getLanguageModel();
   // Use fewer steps for mock provider to prevent repetition
   const maxSteps = hasRealProvider() ? 40 : 4;
+
+  // Enable reasoning/thinking tokens for providers that support it
+  const reasoningOptions: Record<string, any> = {};
+  if (
+    process.env.OPENAI_COMPATIBLE_BASE_URL?.trim() &&
+    process.env.OPENAI_COMPATIBLE_MODEL?.trim()
+  ) {
+    reasoningOptions["opencode-compatible"] = { reasoningEffort: "medium" };
+  }
+
   const result = streamText({
     model,
     messages,
     maxTokens: 10_000,
     maxSteps,
+    ...(Object.keys(reasoningOptions).length > 0 && { providerOptions: reasoningOptions }),
     onError: (err: any) => {
       console.error(err);
     },
@@ -211,7 +222,7 @@ export async function POST(req: Request) {
     },
   });
 
-  const aiResponse = result.toDataStreamResponse();
+  const aiResponse = result.toDataStreamResponse({ sendReasoning: true });
 
   // Add CORS headers for credentialed requests
   const origin = req.headers.get("origin") || "";

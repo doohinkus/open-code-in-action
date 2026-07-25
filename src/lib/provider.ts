@@ -6,6 +6,7 @@ import {
   LanguageModelV1StreamPart,
   LanguageModelV1Message,
 } from "@ai-sdk/provider";
+import { createReasoningNormalizingFetch } from "./reasoning-normalizer";
 
 const MODEL = "claude-haiku-4-5";
 
@@ -526,6 +527,7 @@ export function getLanguageModel() {
       name: "opencode-compatible",
       baseURL: openaiCompatibleBaseURL,
       ...(openaiCompatibleApiKey ? { apiKey: openaiCompatibleApiKey } : {}),
+      fetch: createReasoningNormalizingFetch(),
     });
     return provider.chatModel(openaiCompatibleModel);
   }

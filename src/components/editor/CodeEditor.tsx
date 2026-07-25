@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import Editor from "@monaco-editor/react";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 import { Code2 } from "lucide-react";
@@ -20,24 +20,24 @@ export function CodeEditor() {
   };
 
   const getLanguageFromPath = (path: string): string => {
-    const extension = path.split('.').pop()?.toLowerCase();
+    const extension = path.split(".").pop()?.toLowerCase();
     switch (extension) {
-      case 'js':
-      case 'jsx':
-        return 'javascript';
-      case 'ts':
-      case 'tsx':
-        return 'typescript';
-      case 'json':
-        return 'json';
-      case 'css':
-        return 'css';
-      case 'html':
-        return 'html';
-      case 'md':
-        return 'markdown';
+      case "js":
+      case "jsx":
+        return "javascript";
+      case "ts":
+      case "tsx":
+        return "typescript";
+      case "json":
+        return "json";
+      case "css":
+        return "css";
+      case "html":
+        return "html";
+      case "md":
+        return "markdown";
       default:
-        return 'plaintext';
+        return "plaintext";
     }
   };
 
@@ -46,9 +46,7 @@ export function CodeEditor() {
       <div className="h-full flex items-center justify-center bg-gray-900">
         <div className="text-center">
           <Code2 className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-          <p className="text-sm text-gray-500">
-            Select a file to edit
-          </p>
+          <p className="text-sm text-gray-500">Select a file to edit</p>
           <p className="text-xs text-gray-600 mt-1">
             Choose a file from the file tree
           </p>
@@ -57,7 +55,7 @@ export function CodeEditor() {
     );
   }
 
-  const content = getFileContent(selectedFile) || '';
+  const content = getFileContent(selectedFile) || "";
   const language = getLanguageFromPath(selectedFile);
 
   return (
@@ -71,12 +69,12 @@ export function CodeEditor() {
       options={{
         minimap: { enabled: false },
         fontSize: 14,
-        lineNumbers: 'on',
+        lineNumbers: "on",
         roundedSelection: false,
         scrollBeyondLastLine: false,
         readOnly: false,
         automaticLayout: true,
-        wordWrap: 'on',
+        wordWrap: "on",
         padding: { top: 16, bottom: 16 },
       }}
     />
