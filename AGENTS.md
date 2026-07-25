@@ -50,7 +50,7 @@
 3. Navigate to `http://localhost:3000` with Playwright MCP
 4. Verify page loads (title, chat input, preview/code tabs visible)
 5. Send a test message: type "Create a counter component" and press Enter
-6. Confirm mock provider responds with "Creating /App.jsx"
+6. Confirm provider responds (mock: "Creating /App.jsx"; real: actual AI-generated text + tool calls)
 7. Check Preview tab: Counter component renders with Decrement/Reset/Increment buttons
 8. Check Code tab: File tree shows `App.jsx`, Monaco editor displays React code
 9. Close browser and stop dev server: `pkill -f "next dev"`
