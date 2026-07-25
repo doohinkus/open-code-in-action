@@ -20,6 +20,7 @@ export function MessageInput({
   const {
     isListening,
     isSupported,
+    hasPermission,
     transcript,
     interimTranscript,
     startListening,
@@ -84,7 +85,7 @@ export function MessageInput({
           rows={3}
         />
         <div className="absolute right-2 bottom-2 flex items-center gap-1">
-          {isSupported && (
+          {isSupported && hasPermission !== "denied" && (
             <button
               type="button"
               onClick={toggleListening}

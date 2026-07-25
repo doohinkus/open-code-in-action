@@ -7,7 +7,7 @@ afterEach(() => {
   cleanup();
 });
 
-function mockSpeechRecognition() {
+function mockSpeechRecognition(permissionState: PermissionState = "granted") {
   const mockStart = vi.fn();
   const mockStop = vi.fn();
   const mockAbort = vi.fn();
@@ -33,7 +33,32 @@ function mockSpeechRecognition() {
     writable: true,
   });
 
-  return { mockStart, mockStop, mockAbort };
+  const changeListeners: Array<() => void> = [];
+  const mockPermissionStatus = {
+    state: permissionState,
+    onchange: null as (() => void) | null,
+    addEventListener: vi.fn((event: string, cb: () => void) => {
+      if (event === "change") changeListeners.push(cb);
+    }),
+    removeEventListener: vi.fn(),
+    addEventListener2: undefined as undefined,
+    removeEventListener2: undefined as undefined,
+    dispatchEvent: vi.fn(),
+    triggerChange: (newState: PermissionState) => {
+      mockPermissionStatus.state = newState;
+      changeListeners.forEach((cb) => cb());
+    },
+  };
+
+  Object.defineProperty(navigator, "permissions", {
+    value: {
+      query: vi.fn().mockResolvedValue(mockPermissionStatus),
+    },
+    writable: true,
+    configurable: true,
+  });
+
+  return { mockStart, mockStop, mockAbort, mockPermissionStatus };
 }
 
 function getSendButton() {
@@ -400,4 +425,72 @@ test("textarea has pr-24 padding for both buttons", () => {
 
   const textarea = screen.getByRole("textbox");
   expect(textarea.className).toContain("pr-24");
+});
+
+test("hides mic button when microphone permission is denied", async () => {
+  mockSpeechRecognition("denied");
+  const mockProps = {
+    input: "",
+    handleInputChange: vi.fn(),
+    handleSubmit: vi.fn(),
+    isLoading: false,
+  };
+
+  render(<MessageInput {...mockProps} />);
+
+  await vi.waitFor(() => {
+    expect(screen.queryByTitle("Start voice input")).toBeNull();
+  });
+});
+
+test("shows mic button when microphone permission is granted", async () => {
+  mockSpeechRecognition("granted");
+  const mockProps = {
+    input: "",
+    handleInputChange: vi.fn(),
+    handleSubmit: vi.fn(),
+    isLoading: false,
+  };
+
+  render(<MessageInput {...mockProps} />);
+
+  await vi.waitFor(() => {
+    expect(getMicButton()).toBeDefined();
+  });
+});
+
+test("shows mic button when microphone permission is prompt", async () => {
+  mockSpeechRecognition("prompt");
+  const mockProps = {
+    input: "",
+    handleInputChange: vi.fn(),
+    handleSubmit: vi.fn(),
+    isLoading: false,
+  };
+
+  render(<MessageInput {...mockProps} />);
+
+  await vi.waitFor(() => {
+    expect(getMicButton()).toBeDefined();
+  });
+});
+
+test("shows mic button when navigator.permissions is unavailable", () => {
+  mockSpeechRecognition();
+  Object.defineProperty(navigator, "permissions", {
+    value: undefined,
+    writable: true,
+    configurable: true,
+  });
+
+  const mockProps = {
+    input: "",
+    handleInputChange: vi.fn(),
+    handleSubmit: vi.fn(),
+    isLoading: false,
+  };
+
+  render(<MessageInput {...mockProps} />);
+
+  expect(getMicButton()).toBeDefined();
 });

@@ -2,9 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
+type MicPermission = "granted" | "denied" | "prompt" | "unknown";
+
 interface SpeechRecognitionHook {
   isListening: boolean;
   isSupported: boolean;
+  hasPermission: MicPermission;
   transcript: string;
   interimTranscript: string;
   error: string | null;
@@ -64,6 +67,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [hasPermission, setHasPermission] = useState<MicPermission>("unknown");
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const shouldListenRef = useRef(false);
@@ -71,6 +75,25 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const isSupported =
     typeof window !== "undefined" &&
     typeof (window.SpeechRecognition || window.webkitSpeechRecognition) === "function";
+
+  useEffect(() => {
+    if (!isSupported || !navigator.permissions) {
+      setHasPermission(navigator.permissions ? "unknown" : "unknown");
+      return;
+    }
+
+    navigator.permissions
+      .query({ name: "microphone" as PermissionName })
+      .then((status) => {
+        setHasPermission(status.state as MicPermission);
+        status.addEventListener("change", () => {
+          setHasPermission(status.state as MicPermission);
+        });
+      })
+      .catch(() => {
+        setHasPermission("unknown");
+      });
+  }, [isSupported]);
 
   useEffect(() => {
     if (!isSupported) return;
@@ -166,6 +189,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   return {
     isListening,
     isSupported,
+    hasPermission,
     transcript,
     interimTranscript,
     error,
