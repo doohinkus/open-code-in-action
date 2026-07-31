@@ -16,6 +16,8 @@ import { PreviewFrame } from "@/components/preview/PreviewFrame";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HeaderActions } from "@/components/HeaderActions";
 import { authClient } from "@/lib/auth/client";
+import { getAnonWorkData, clearAnonWork } from "@/lib/anon-work-tracker";
+import { createProject } from "@/actions/create-project";
 import { useChat } from "@/lib/contexts/chat-context";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 
@@ -66,9 +68,28 @@ export function MainContent({ user, project }: MainContentProps) {
 
   useEffect(() => {
     if (!user) {
-      authClient.getSession().then(({ data }) => {
-        if (data?.user) router.refresh();
-      }).catch(() => {});
+      authClient
+        .getSession()
+        .then(async ({ data }) => {
+          if (!data?.user) return;
+          const anonWork = getAnonWorkData();
+          if (anonWork && anonWork.messages.length > 0) {
+            try {
+              const project = await createProject({
+                name: `Design from ${new Date().toLocaleTimeString()}`,
+                messages: anonWork.messages,
+                data: anonWork.fileSystemData,
+              });
+              clearAnonWork();
+              router.push(`/${project.id}`);
+              return;
+            } catch (error) {
+              console.error("Failed to migrate anonymous work:", error);
+            }
+          }
+          router.refresh();
+        })
+        .catch(() => {});
     }
   }, [user, router]);
 

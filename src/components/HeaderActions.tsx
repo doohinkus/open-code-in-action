@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, LogOut, FolderOpen, ChevronDown, Download, MoreVertical, Save, Pencil, Trash2, Check, X } from "lucide-react";
-import { AuthDialog } from "@/components/auth/AuthDialog";
 import { signOut } from "@/actions";
+import { useAuth } from "@/hooks/use-auth";
 import { getProjects } from "@/actions/get-projects";
 import { createProject } from "@/actions/create-project";
 import { renameProject } from "@/actions/rename-project";
@@ -60,8 +60,7 @@ interface Project {
 export function HeaderActions({ user, projectId, messages = [], getAllFiles }: HeaderActionsProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const [authDialogOpen, setAuthDialogOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const { signInWithGoogle, isLoading } = useAuth();
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -98,14 +97,8 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
 
   const currentProject = projects.find((p) => p.id === projectId);
 
-  const handleSignInClick = () => {
-    setAuthMode("signin");
-    setAuthDialogOpen(true);
-  };
-
-  const handleSignUpClick = () => {
-    setAuthMode("signup");
-    setAuthDialogOpen(true);
+  const handleSignIn = async () => {
+    await signInWithGoogle();
   };
 
   const handleSignOut = async () => {
@@ -383,11 +376,8 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
           </>
         ) : (
           <>
-            <Button variant="outline" className="h-8" onClick={handleSignInClick}>
+            <Button variant="outline" className="h-8" onClick={handleSignIn} disabled={isLoading}>
               Sign In
-            </Button>
-            <Button className="h-8" onClick={handleSignUpClick}>
-              Sign Up
             </Button>
           </>
         )}
@@ -479,23 +469,14 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
             ) : (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignInClick}>
+                <DropdownMenuItem onClick={handleSignIn} disabled={isLoading}>
                   Sign In
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleSignUpClick}>
-                  Sign Up
                 </DropdownMenuItem>
               </>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-
-      <AuthDialog
-        open={authDialogOpen}
-        onOpenChange={setAuthDialogOpen}
-        defaultMode={authMode}
-      />
     </div>
   );
 }

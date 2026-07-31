@@ -31,12 +31,13 @@
 - **Virtual file system** (`src/lib/file-system.ts`): in-memory, never writes to real FS. Serialized to/from project data. Commands mirror Claude Code's str_replace_editor pattern.
 - **Preview**: `src/lib/transform/jsx-transformer.ts` — Babel standalone transpiles → blob URLs → import map (esm.sh CDN) → iframe srcdoc with Tailwind CSS CDN
 - **Auth**: Neon Auth (`@neondatabase/auth`), `src/lib/auth.ts` + `src/lib/auth/server.ts`. Cookie name: `__Secure-neon-auth.session_token`. Middleware protects `/api/projects` and `/api/filesystem`
+- **Sign-in**: Google-only, no email/password or sign-up. Header "Sign In" redirects to Google OAuth via `authClient.signIn.social` in `src/hooks/use-auth.ts`; `signOut`/`getUser` live in `src/actions/index.ts`. Email/password must stay disabled on the Neon Auth gateway
 - **Component structure (left→right)**: Chat panel (35%) | Preview/Code tabs (65%). Code view splits further into FileTree (30%) + Monaco editor (70%)
 - **Path aliases**: `@/` → `./src/*`, `@/components/ui` for shadcn, `@/lib/utils` for `cn()` helper
 
 ## Important Constraints
 - **Node 25+ SSR fix**: `node-compat.cjs` loaded in `next.config.ts` deletes `localStorage`/`sessionStorage` globals on server — do not remove
-- **Anonymous users**: Work stored in `sessionStorage` via `src/lib/anon-work-tracker.ts`. Cleared on sign-up
+- **Anonymous users**: Work stored in `sessionStorage` via `src/lib/anon-work-tracker.ts`. On Google sign-in, `src/app/main-content.tsx` migrates it into a project and clears it
 - **`server-only`**: `src/lib/auth.ts` imports `server-only` — never import it in client components
 - **shadcn/ui**: New York style, `components.json` at root. Existing UI components in `src/components/ui/`
 - **CSS**: Tailwind v4 with `@import "tailwindcss"` syntax (not v3 config file). Uses `@tailwindcss/typography` plugin and `tw-animate-css`

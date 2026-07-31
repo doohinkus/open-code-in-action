@@ -92,7 +92,7 @@ npx prisma migrate dev --name <description>
 
 ### Neon Auth
 
-Authentication is handled by [Neon Auth](https://neon.tech/docs/guides/neon-auth) (`@neondatabase/auth`). Users sign up/login through Neon's auth gateway — no password column in the local schema. Required env vars: `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET`.
+Authentication is handled by [Neon Auth](https://neon.tech/docs/guides/neon-auth) (`@neondatabase/auth`). Sign-in is Google-only — the header "Sign In" button redirects straight to Google OAuth; there is no email/password or sign-up flow. Anonymous users can use the app without an account; their work is migrated into a project when they sign in. Required env vars: `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET`. Email/password auth must be disabled in the Neon Auth gateway so it can't be reached via the `/api/auth/*` proxy.
 
 ## CI/CD Pipeline
 
@@ -124,7 +124,7 @@ Push to main
 
 ## Usage
 
-1. Sign up (via Neon Auth) or continue as anonymous user
+1. Sign in with Google or continue as an anonymous user
 2. Describe the React component you want to create in the chat
 3. View generated components in real-time preview
 4. Switch to Code view to see and edit the generated files
