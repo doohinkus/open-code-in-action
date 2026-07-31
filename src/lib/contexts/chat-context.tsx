@@ -7,6 +7,7 @@ import {
   useEffect,
   useRef,
   useCallback,
+  useState,
 } from "react";
 import { useChat as useAIChat } from "@ai-sdk/react";
 import { Message } from "ai";
@@ -27,7 +28,12 @@ interface ChatContextType {
   error: Error | undefined;
   reload: (chatRequestOptions?: any) => Promise<string | null | undefined>;
   append: (message: Message | { role: "user"; content: string }) => Promise<string | null | undefined>;
+  stop: () => void;
+  requestFix: (errorText: string) => void;
+  generationTimedOut: boolean;
 }
+
+const STALL_TIMEOUT_MS = 120_000;
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
@@ -52,6 +58,7 @@ export function ChatProvider({
     error,
     reload,
     append,
+    stop,
   } = useAIChat({
     api: "/api/chat",
     initialMessages,
@@ -66,24 +73,54 @@ export function ChatProvider({
 
   const fixAttemptCount = useRef(0);
   const prevStatusRef = useRef(status);
+  const [generationTimedOut, setGenerationTimedOut] = useState(false);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
       fixAttemptCount.current = 0;
+      setGenerationTimedOut(false);
       setIsFixingErrors(false);
       originalHandleSubmit(e);
     },
     [originalHandleSubmit, setIsFixingErrors]
   );
 
+  // Watchdog: if no stream activity for STALL_TIMEOUT_MS while generating,
+  // abort the request so the UI doesn't hang indefinitely.
+  useEffect(() => {
+    if (status !== "submitted" && status !== "streaming") return;
+
+    const timer = setTimeout(() => {
+      stop();
+      setGenerationTimedOut(true);
+    }, STALL_TIMEOUT_MS);
+
+    return () => clearTimeout(timer);
+  }, [status, messages, stop]);
+
+  const requestFix = useCallback(
+    (errorText: string) => {
+      setIsFixingErrors(true);
+      append({
+        role: "user",
+        content: `The preview is showing this error:\n\n${errorText}\n\nPlease fix it using the str_replace_editor tool.`,
+      });
+    },
+    [append, setIsFixingErrors]
+  );
+
   useEffect(() => {
     const wasStreaming =
       prevStatusRef.current === "streaming" ||
       prevStatusRef.current === "submitted";
-    const isNowReady = status === "ready" || status === "error";
+    const isNowReady = status === "ready";
     prevStatusRef.current = status;
 
     if (!wasStreaming || !isNowReady) return;
+    if (generationTimedOut) {
+      setIsFixingErrors(false);
+      return;
+    }
 
     const errors = validateCurrentFiles();
     if (errors.length > 0 && fixAttemptCount.current < 2) {
@@ -99,7 +136,7 @@ export function ChatProvider({
     } else {
       setIsFixingErrors(false);
     }
-  }, [status, validateCurrentFiles, setIsFixingErrors, append]);
+  }, [status, validateCurrentFiles, setIsFixingErrors, append, generationTimedOut]);
 
   // Track anonymous work
   useEffect(() => {
@@ -119,6 +156,9 @@ export function ChatProvider({
         error,
         reload,
         append,
+        stop,
+        requestFix,
+        generationTimedOut,
       }}
     >
       {children}

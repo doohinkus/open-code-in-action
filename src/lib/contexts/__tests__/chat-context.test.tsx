@@ -43,6 +43,10 @@ describe("ChatContext", () => {
   };
 
   const mockHandleToolCall = vi.fn();
+  const mockValidateCurrentFiles = vi.fn<() => Array<{ path: string; error: string }>>(
+    () => []
+  );
+  const mockSetIsFixingErrors = vi.fn();
 
   const mockUseAIChat = {
     messages: [],
@@ -50,6 +54,8 @@ describe("ChatContext", () => {
     handleInputChange: vi.fn(),
     handleSubmit: vi.fn(),
     status: "idle",
+    stop: vi.fn(),
+    append: vi.fn(),
   };
 
   beforeEach(() => {
@@ -58,6 +64,8 @@ describe("ChatContext", () => {
     (useFileSystem as any).mockReturnValue({
       fileSystem: mockFileSystem,
       handleToolCall: mockHandleToolCall,
+      validateCurrentFiles: mockValidateCurrentFiles,
+      setIsFixingErrors: mockSetIsFixingErrors,
     });
 
     (useAIChat as any).mockReturnValue(mockUseAIChat);
@@ -65,6 +73,7 @@ describe("ChatContext", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   test("renders with default values", () => {
@@ -195,5 +204,94 @@ describe("ChatContext", () => {
     onToolCallHandler({ toolCall });
 
     expect(mockHandleToolCall).toHaveBeenCalledWith(toolCall);
+  });
+
+  test("watchdog stops generation when there is no stream activity", () => {
+    vi.useFakeTimers();
+    const mockStop = vi.fn();
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "streaming",
+      stop: mockStop,
+    });
+
+    render(
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(121_000);
+    });
+
+    expect(mockStop).toHaveBeenCalled();
+  });
+
+  test("auto-fixes syntax errors after a successful generation", () => {
+    const mockAppend = vi.fn(() => Promise.resolve());
+    mockValidateCurrentFiles.mockReturnValueOnce([
+      { path: "/App.jsx", error: "Unexpected token" },
+    ]);
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "streaming",
+      append: mockAppend,
+    });
+
+    const { rerender } = render(
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+    );
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "ready",
+      append: mockAppend,
+    });
+
+    rerender(
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+    );
+
+    expect(mockAppend).toHaveBeenCalledWith({
+      role: "user",
+      content: expect.stringContaining("syntax errors"),
+    });
+  });
+
+  test("does not auto-fix when generation ends in an error status", () => {
+    const mockAppend = vi.fn();
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "streaming",
+      append: mockAppend,
+    });
+
+    const { rerender } = render(
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+    );
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "error",
+      append: mockAppend,
+    });
+
+    rerender(
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+    );
+
+    expect(mockAppend).not.toHaveBeenCalled();
   });
 });

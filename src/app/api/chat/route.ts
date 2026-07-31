@@ -188,6 +188,9 @@ export async function POST(req: Request) {
     messages,
     maxTokens: 10_000,
     maxSteps,
+    // Hard ceiling in local dev too (maxDuration only applies on Vercel).
+    // Kept just under the 120s Vercel limit; the client watchdog mirrors this.
+    abortSignal: AbortSignal.timeout(110_000),
     ...(Object.keys(reasoningOptions).length > 0 && { providerOptions: reasoningOptions }),
     onError: (err: any) => {
       console.error(err);

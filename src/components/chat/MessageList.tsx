@@ -100,13 +100,33 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
                               return `${toolName} ${path || ""}`;
                             };
                             const label = getLabel(tool.toolName, tool.args);
+                            const toolResult = tool.state === "result" ? tool.result : null;
+                            const toolFailed =
+                              toolResult !== null &&
+                              ((typeof toolResult === "string" &&
+                                toolResult.startsWith("Error")) ||
+                                (typeof toolResult === "object" &&
+                                  toolResult !== null &&
+                                  (toolResult as any).error != null));
                             return (
                               <div key={partIndex} className="inline-flex items-center gap-2 mt-2 px-3 py-1.5 bg-neutral-50 rounded-lg text-xs font-mono border border-neutral-200">
-                                {tool.state === "result" && tool.result ? (
-                                  <>
-                                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                    <span className="text-neutral-700">{label}</span>
-                                  </>
+                                {tool.state === "result" ? (
+                                  toolFailed ? (
+                                    <>
+                                      <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                                      <span className="text-neutral-700">{label}</span>
+                                      <span className="text-red-600">
+                                        {typeof toolResult === "string"
+                                          ? toolResult
+                                          : (toolResult as any)?.error}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                      <span className="text-neutral-700">{label}</span>
+                                    </>
+                                  )
                                 ) : (
                                   <>
                                     <Loader2 className="w-3 h-3 animate-spin text-blue-600" />

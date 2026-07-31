@@ -254,6 +254,33 @@ test("createPreviewHTML displays syntax errors", () => {
   expect(html).not.toContain("loadApp()");
 });
 
+test("createPreviewHTML escapes </script> in bundleCode", () => {
+  const bundleCode = `const App = () => 'literal </script> here'; export default App;`;
+
+  const html = createPreviewHTML("/App.jsx", "{}", "", [], bundleCode);
+
+  // The bundle source embedded in the inline script must not contain the
+  // raw "</script>" sequence, or the script tag would terminate early.
+  expect(html).toContain("\\u003c/script");
+  expect(html.split("</script>").length).toBeGreaterThanOrEqual(4);
+});
+
+test("createPreviewHTML renders a fallback panel for an empty bundle", () => {
+  const html = createPreviewHTML("/App.jsx", "{}", "", []);
+
+  expect(html).toContain("No renderable component");
+  expect(html).not.toContain("loadApp()");
+});
+
+test("createPreviewHTML includes the parent error bridge", () => {
+  const html = createPreviewHTML("/App.jsx", "{}", "", [], "export default function App() {}");
+
+  expect(html).toContain("uigen:error");
+  expect(html).toContain("parent.postMessage");
+  expect(html).toContain("unhandledrejection");
+  expect(html).toContain("componentStack");
+});
+
 test("createImportMap handles syntax errors gracefully", () => {
   vi.mocked(Babel.transform).mockImplementation((code, options) => {
     if (options.filename === "/BadComponent.jsx") {

@@ -81,6 +81,60 @@ test("MessageList renders messages with parts", () => {
   expect(screen.getByText("Editing /App.jsx")).toBeDefined();
 });
 
+test("MessageList marks string-error tool results as failures", () => {
+  const messages: Message[] = [
+    {
+      id: "1",
+      role: "assistant",
+      content: "",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolInvocation: {
+            toolCallId: "asdf",
+            args: { command: "str_replace", path: "/App.jsx" },
+            toolName: "str_replace_editor",
+            state: "result",
+            result: "Error: String not found",
+          },
+        },
+      ],
+    },
+  ];
+
+  render(<MessageList messages={messages} />);
+
+  expect(screen.getByText("Editing /App.jsx")).toBeDefined();
+  expect(screen.getByText("Error: String not found")).toBeDefined();
+});
+
+test("MessageList marks object-error tool results as failures", () => {
+  const messages: Message[] = [
+    {
+      id: "1",
+      role: "assistant",
+      content: "",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolInvocation: {
+            toolCallId: "asdf",
+            args: { command: "delete", path: "/App.jsx" },
+            toolName: "file_manager",
+            state: "result",
+            result: { success: false, error: "Cannot delete root" },
+          },
+        },
+      ],
+    },
+  ];
+
+  render(<MessageList messages={messages} />);
+
+  expect(screen.getByText("Deleting /App.jsx")).toBeDefined();
+  expect(screen.getByText("Cannot delete root")).toBeDefined();
+});
+
 test("MessageList shows content for assistant message with content", () => {
   const messages: Message[] = [
     {

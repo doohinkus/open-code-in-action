@@ -414,6 +414,19 @@ export function createImportMap(files: Map<string, string>): {
   };
 }
 
+function escapeScriptString(value: string): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 export function createPreviewHTML(
   entryPoint: string,
   importMap: string,
@@ -447,6 +460,14 @@ export function createPreviewHTML(
       margin: 1rem;
       border-radius: 4px;
       background: #fee;
+    }
+    .error-stack {
+      color: #7f1d1d;
+      font-size: 12px;
+      margin-top: 8px;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow: auto;
     }
     .syntax-errors {
       background: #fef5f5;
@@ -500,7 +521,7 @@ export function createPreviewHTML(
   </style>
   ${styles ? `<style>\n${styles}</style>` : ''}
   <script type="importmap"${nonce ? ` nonce="${nonce}"` : ''}>
-    ${importMap}
+    ${importMap.replace(/</g, "\\u003c")}
   </script>
 </head>
 <body>
@@ -520,19 +541,33 @@ export function createPreviewHTML(
         return `
         <div class="error-item">
           <div class="error-path">
-            ${e.path}
-            ${location ? `<span class="error-location">${location}</span>` : ''}
+            ${escapeHtml(e.path)}
+            ${location ? `<span class="error-location">${escapeHtml(location)}</span>` : ''}
           </div>
-          <div class="error-message">${cleanError.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')}</div>
+          <div class="error-message">${escapeHtml(cleanError)}</div>
         </div>
       `;
       }).join('')}
     </div>
   ` : ''}
   <div id="root"></div>
+  ${errors.length === 0 && !bundleCode ? `
+    <div class="syntax-errors">
+      <h3>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink: 0;">
+          <path d="M10 0C4.48 0 0 4.48 0 10s4.48 10 10 10 10-4.48 10-10S15.52 0 10 0zm1 15h-2v-2h2v2zm0-4h-2V5h2v6z" fill="#dc2626"/>
+        </svg>
+        No renderable component
+      </h3>
+      <div class="error-item">
+        <div class="error-path">No JavaScript/JSX component found</div>
+        <div class="error-message">Add an App.jsx file that exports a default React component to see a preview here.</div>
+      </div>
+    </div>
+  ` : ''}
   ${errors.length === 0 && bundleCode ? `
   <script${nonce ? ` nonce="${nonce}"` : ''}>
-    const __bundleSrc = ${JSON.stringify(bundleCode)};
+    const __bundleSrc = ${escapeScriptString(bundleCode)};
     const __blob = new Blob([__bundleSrc], {type: 'application/javascript'});
     window.__bundleUrl = URL.createObjectURL(__blob);
   </script>
@@ -540,10 +575,16 @@ export function createPreviewHTML(
     import React from 'react';
     import ReactDOM from 'react-dom/client';
 
+    const __postError = (message, stack) => {
+      try {
+        parent.postMessage({ type: 'uigen:error', message: String(message), stack: stack ? String(stack) : '' }, '*');
+      } catch (e) {}
+    };
+
     class ErrorBoundary extends React.Component {
       constructor(props) {
         super(props);
-        this.state = { hasError: false, error: null };
+        this.state = { hasError: false, error: null, componentStack: null };
       }
 
       static getDerivedStateFromError(error) {
@@ -552,20 +593,35 @@ export function createPreviewHTML(
 
       componentDidCatch(error, errorInfo) {
         console.error('Error caught by boundary:', error, errorInfo);
+        const stack = errorInfo && errorInfo.componentStack ? String(errorInfo.componentStack) : null;
+        this.setState({ componentStack: stack });
+        __postError(error && error.message ? error.message : String(error), stack);
       }
 
       render() {
         if (this.state.hasError) {
-          return React.createElement('div', { className: 'error-boundary' },
+          const children = [
             React.createElement('h2', null, 'Something went wrong'),
-            React.createElement('pre', null, this.state.error?.toString())
-          );
+            React.createElement('pre', null, this.state.error && this.state.error.toString ? this.state.error.toString() : String(this.state.error))
+          ];
+          if (this.state.componentStack) {
+            children.push(React.createElement('pre', { className: 'error-stack' }, this.state.componentStack));
+          }
+          return React.createElement('div', { className: 'error-boundary' }, children);
         }
         return this.props.children;
       }
     }
 
     const __escapeHtml = (str) => str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+
+    window.addEventListener('error', (e) => {
+      __postError(e && e.message ? e.message : 'Unknown script error', e && e.error && e.error.stack);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      const reason = e && e.reason;
+      __postError(reason && reason.message ? reason.message : String(reason), reason && reason.stack);
+    });
 
     async function loadApp() {
       try {
@@ -580,7 +636,8 @@ export function createPreviewHTML(
       } catch (error) {
         if (window.__bundleUrl) URL.revokeObjectURL(window.__bundleUrl);
         console.error('Failed to load app:', error);
-        document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error.toString()) + '</pre></div>';
+        __postError(error && error.message ? error.message : String(error), error && error.stack);
+        document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error && error.toString ? error.toString() : String(error)) + '</pre></div>';
       }
     }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useRef } from "react";
-import { Send, Mic, MicOff } from "lucide-react";
+import { Send, Mic, MicOff, Square } from "lucide-react";
 import { useSpeechRecognition } from "@/lib/hooks/use-speech-recognition";
 
 interface MessageInputProps {
@@ -9,6 +9,7 @@ interface MessageInputProps {
   handleInputChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
   handleSubmit: (e: FormEvent<HTMLFormElement>) => void;
   isLoading: boolean;
+  onStop?: () => void;
 }
 
 export function MessageInput({
@@ -16,6 +17,7 @@ export function MessageInput({
   handleInputChange,
   handleSubmit,
   isLoading,
+  onStop,
 }: MessageInputProps) {
   const {
     isListening,
@@ -102,6 +104,16 @@ export function MessageInput({
               ) : (
                 <Mic className="h-4 w-4 text-neutral-400 group-hover:text-neutral-600" />
               )}
+            </button>
+          )}
+          {isLoading && onStop && (
+            <button
+              type="button"
+              onClick={onStop}
+              title="Stop generating"
+              className="p-2.5 rounded-lg transition-all hover:bg-red-50 group"
+            >
+              <Square className="h-4 w-4 text-red-500 fill-red-500 group-hover:text-red-600 group-hover:fill-red-600" />
             </button>
           )}
           <button

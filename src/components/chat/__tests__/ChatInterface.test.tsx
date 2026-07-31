@@ -29,7 +29,7 @@ vi.mock("../MessageList", () => ({
 }));
 
 vi.mock("../MessageInput", () => ({
-  MessageInput: ({ input, handleInputChange, handleSubmit, isLoading }: any) => (
+  MessageInput: ({ input, handleInputChange, handleSubmit, isLoading, onStop }: any) => (
     <div data-testid="message-input">
       <input
         value={input}
@@ -40,6 +40,11 @@ vi.mock("../MessageInput", () => ({
       <button onClick={handleSubmit} disabled={isLoading} data-testid="submit">
         Submit
       </button>
+      {isLoading && onStop && (
+        <button onClick={onStop} data-testid="stop">
+          Stop
+        </button>
+      )}
     </div>
   ),
 }));
@@ -52,6 +57,8 @@ const mockUseChat = {
   status: "idle" as const,
   error: undefined,
   reload: vi.fn(),
+  stop: vi.fn(),
+  generationTimedOut: false,
 };
 
 beforeEach(() => {
@@ -215,4 +222,72 @@ test("renders with correct layout classes", () => {
   const inputWrapper = screen.getByTestId("message-input").parentElement;
   expect(inputWrapper?.className).toContain("mt-4");
   expect(inputWrapper?.className).toContain("flex-shrink-0");
+});
+
+test("shows a stop button while streaming and stops on click", async () => {
+  const mockStop = vi.fn();
+
+  (useChat as any).mockReturnValue({
+    ...mockUseChat,
+    status: "streaming",
+    stop: mockStop,
+  });
+
+  render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
+
+  const stopButton = screen.getByTestId("stop");
+  expect(stopButton).toBeDefined();
+
+  await userEvent.click(stopButton);
+  expect(mockStop).toHaveBeenCalled();
+});
+
+test("maps server error JSON body to a friendly toast", async () => {
+  const { rerender } = render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
+
+  (useChat as any).mockReturnValue({
+    ...mockUseChat,
+    status: "error",
+    error: new Error('{"error":"Too many requests. Please try again later."}'),
+  });
+
+  rerender(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
+
+  await waitFor(() => {
+    expect(
+      screen.getByText("Too many requests. Please wait a moment and try again.")
+    ).toBeDefined();
+  });
+});
+
+test("shows a timeout toast when generation timed out", async () => {
+  (useChat as any).mockReturnValue({
+    ...mockUseChat,
+    status: "ready",
+    generationTimedOut: true,
+  });
+
+  render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
+
+  await waitFor(() => {
+    expect(
+      screen.getByText("Generation timed out. Please try again.")
+    ).toBeDefined();
+  });
 });
