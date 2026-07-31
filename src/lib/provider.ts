@@ -510,6 +510,13 @@ export default function App() {
 }
 
 export function getLanguageModel() {
+  if (process.env.FORCE_MOCK_PROVIDER?.trim() === "1") {
+    console.log(
+      "FORCE_MOCK_PROVIDER=1 is set. Using the mock provider for deterministic tests."
+    );
+    return new MockLanguageModel("mock-" + MODEL);
+  }
+
   const googleApiKey = process.env.GOOGLE_API_KEY?.trim();
   const googleModel = process.env.GOOGLE_GEMINI_MODEL?.trim();
 

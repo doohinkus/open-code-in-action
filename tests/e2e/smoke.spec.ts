@@ -17,6 +17,6 @@ test("chat panel is present", async ({ page }) => {
 test("preview panel loads", async ({ page }) => {
   await page.goto("/");
 
-  const preview = page.locator("iframe, [class*='preview']").first();
-  await expect(preview).toBeVisible({ timeout: 10000 });
+  // Fresh session with no files shows the preview empty state
+  await expect(page.getByText("Welcome to UI Generator")).toBeVisible();
 });

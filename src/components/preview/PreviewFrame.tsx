@@ -115,9 +115,9 @@ export function PreviewFrame() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
             <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">
             Generating Preview...
-          </h3>
+          </h2>
           <GenerationActivityLog />
         </div>
       </div>
@@ -131,9 +131,9 @@ export function PreviewFrame() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
             <Loader2 className="h-8 w-8 text-amber-600 animate-spin" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">
             Fixing Syntax Errors...
-          </h3>
+          </h2>
           <GenerationActivityLog />
         </div>
       </div>
@@ -160,9 +160,9 @@ export function PreviewFrame() {
                 />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">
               Welcome to UI Generator
-            </h3>
+            </h2>
             <p className="text-sm text-gray-600 mb-3">
               Start building React components with AI assistance
             </p>
@@ -180,9 +180,9 @@ export function PreviewFrame() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
             <AlertCircle className="h-8 w-8 text-gray-400" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">
             No Preview Available
-          </h3>
+          </h2>
           <p className="text-sm text-gray-500">{error}</p>
           <p className="text-xs text-gray-400 mt-2">
             Start by creating a React component using the AI assistant

@@ -39,6 +39,9 @@ function checkRateLimit(ip: string): boolean {
 }
 
 function hasRealProvider(): boolean {
+  if (process.env.FORCE_MOCK_PROVIDER?.trim() === "1") {
+    return false;
+  }
   return !!(process.env.GOOGLE_API_KEY?.trim()) ||
          !!(process.env.ANTHROPIC_API_KEY?.trim() && process.env.ANTHROPIC_API_KEY?.trim() !== "your-api-key-here") ||
          !!(process.env.OPENAI_COMPATIBLE_BASE_URL?.trim() && process.env.OPENAI_COMPATIBLE_MODEL?.trim());

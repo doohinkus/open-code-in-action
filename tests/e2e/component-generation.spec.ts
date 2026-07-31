@@ -9,8 +9,13 @@ test("user can send a message in chat", async ({ page }) => {
   await chatInput.fill("Create a counter component");
   await chatInput.press("Enter");
 
-  const assistantMessage = page.locator("[class*='message'], [class*='assistant']").first();
-  await expect(assistantMessage).toBeVisible({ timeout: 15000 });
+  // User message echoes back in the conversation
+  await expect(page.getByText("Create a counter component")).toBeVisible();
+
+  // Assistant eventually responds with a generated component
+  await expect(page.locator('[data-role="assistant"]')).toBeVisible({
+    timeout: 15000,
+  });
 });
 
 test("navigation between preview and code tabs works", async ({ page }) => {

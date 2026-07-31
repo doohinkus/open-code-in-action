@@ -13,7 +13,7 @@ import { ChatInterface } from "@/components/chat/ChatInterface";
 import { FileTree } from "@/components/editor/FileTree";
 import { CodeEditor } from "@/components/editor/CodeEditor";
 import { PreviewFrame } from "@/components/preview/PreviewFrame";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HeaderActions } from "@/components/HeaderActions";
 import { authClient } from "@/lib/auth/client";
 import { useChat } from "@/lib/contexts/chat-context";
@@ -115,7 +115,7 @@ function AppShell({ user, project }: MainContentProps) {
   }
 
   return (
-    <div className="h-dvh w-full overflow-hidden bg-neutral-50">
+    <main className="h-dvh w-full overflow-hidden bg-neutral-50">
       {isMobile ? (
         <MobileShell
           user={user}
@@ -131,7 +131,7 @@ function AppShell({ user, project }: MainContentProps) {
           setActiveView={setActiveView}
         />
       )}
-    </div>
+    </main>
   );
 }
 
@@ -158,12 +158,13 @@ function MobileShell({
         <HeaderActionsWrapper user={user} projectId={project?.id} />
       </div>
 
-      {/* View Tabs */}
-      <div className="px-4 py-2 border-b border-neutral-200/60 bg-white flex-shrink-0">
-        <Tabs
-          value={mobileTab}
-          onValueChange={(v) => setMobileTab?.(v as MobileTab)}
-        >
+      {/* View Tabs + Content */}
+      <Tabs
+        value={mobileTab}
+        onValueChange={(v) => setMobileTab?.(v as MobileTab)}
+        className="flex flex-col flex-1 min-h-0 min-w-0 gap-0"
+      >
+        <div className="px-4 py-2 border-b border-neutral-200/60 bg-white flex-shrink-0">
           <TabsList className="bg-neutral-100 border border-neutral-200/60 p-0.5 h-9 w-full shadow-sm">
             <TabsTrigger value="chat" className="flex-1 data-[state=active]:bg-white data-[state=active]:text-neutral-900 data-[state=active]:shadow-sm text-neutral-600 px-4 py-1.5 text-sm font-medium transition-all">
               Chat
@@ -175,33 +176,45 @@ function MobileShell({
               Code
             </TabsTrigger>
           </TabsList>
-        </Tabs>
-      </div>
+        </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden bg-neutral-50">
-        {mobileTab === "chat" && <ChatInterface />}
-        {mobileTab === "preview" && (
-          <div className="h-full bg-white">
-            <PreviewFrame />
-          </div>
-        )}
-        {mobileTab === "code" && (
-          <ResizablePanelGroup direction="vertical" className="h-full">
-            <ResizablePanel defaultSize={30} minSize={20} maxSize={50}>
-              <div className="h-full bg-neutral-50 border-b border-neutral-200">
-                <FileTree />
-              </div>
-            </ResizablePanel>
-            <ResizableHandle className="h-[1px] bg-neutral-200 hover:bg-neutral-300 transition-colors" />
-            <ResizablePanel defaultSize={70}>
-              <div className="h-full bg-white">
-                <CodeEditor />
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        )}
-      </div>
+        <TabsContent
+          value="chat"
+          className="flex-1 min-h-0 min-w-0 overflow-hidden bg-neutral-50"
+        >
+          {mobileTab === "chat" && <ChatInterface />}
+        </TabsContent>
+        <TabsContent
+          value="preview"
+          className="flex-1 min-h-0 min-w-0 overflow-hidden bg-neutral-50"
+        >
+          {mobileTab === "preview" && (
+            <div className="h-full bg-white">
+              <PreviewFrame />
+            </div>
+          )}
+        </TabsContent>
+        <TabsContent
+          value="code"
+          className="flex-1 min-h-0 min-w-0 overflow-hidden bg-neutral-50"
+        >
+          {mobileTab === "code" && (
+            <ResizablePanelGroup direction="vertical" className="h-full">
+              <ResizablePanel defaultSize={30} minSize={20} maxSize={50}>
+                <div className="h-full bg-neutral-50 border-b border-neutral-200">
+                  <FileTree />
+                </div>
+              </ResizablePanel>
+              <ResizableHandle className="h-[1px] bg-neutral-200 hover:bg-neutral-300 transition-colors" />
+              <ResizablePanel defaultSize={70}>
+                <div className="h-full bg-white">
+                  <CodeEditor />
+                </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -235,55 +248,65 @@ function DesktopShell({
         {/* Right Panel - Preview/Code */}
         <ResizablePanel defaultSize={65}>
           <div className="h-full flex flex-col bg-white">
-            {/* Top Bar */}
-            <div className="h-14 border-b border-neutral-200/60 px-6 flex items-center justify-between bg-neutral-50/50">
-              <Tabs
-                value={activeView}
-                onValueChange={(v) =>
-                  setActiveView?.(v as "preview" | "code")
-                }
-              >
+            <Tabs
+              value={activeView}
+              onValueChange={(v) =>
+                setActiveView?.(v as "preview" | "code")
+              }
+              className="flex flex-col h-full min-w-0 gap-0"
+            >
+              {/* Top Bar */}
+              <div className="h-14 border-b border-neutral-200/60 px-6 flex items-center justify-between bg-neutral-50/50 flex-shrink-0">
                 <TabsList className="bg-white/60 border border-neutral-200/60 p-0.5 h-9 shadow-sm">
                   <TabsTrigger value="preview" className="data-[state=active]:bg-white data-[state=active]:text-neutral-900 data-[state=active]:shadow-sm text-neutral-600 px-4 py-1.5 text-sm font-medium transition-all">Preview</TabsTrigger>
                   <TabsTrigger value="code" className="data-[state=active]:bg-white data-[state=active]:text-neutral-900 data-[state=active]:shadow-sm text-neutral-600 px-4 py-1.5 text-sm font-medium transition-all">Code</TabsTrigger>
                 </TabsList>
-              </Tabs>
-              <HeaderActionsWrapper user={user} projectId={project?.id} />
-            </div>
+                <HeaderActionsWrapper user={user} projectId={project?.id} />
+              </div>
 
-            {/* Content Area */}
-            <div className="flex-1 overflow-hidden bg-neutral-50">
-              {activeView === "preview" ? (
-                <div className="h-full bg-white">
-                  <PreviewFrame />
-                </div>
-              ) : (
-                <ResizablePanelGroup
-                  direction="horizontal"
-                  className="h-full"
-                >
-                  {/* File Tree */}
-                  <ResizablePanel
-                    defaultSize={30}
-                    minSize={20}
-                    maxSize={50}
+              {/* Content Area */}
+              <TabsContent
+                value="preview"
+                className="flex-1 min-h-0 min-w-0 overflow-hidden bg-neutral-50"
+              >
+                {activeView === "preview" && (
+                  <div className="h-full bg-white">
+                    <PreviewFrame />
+                  </div>
+                )}
+              </TabsContent>
+              <TabsContent
+                value="code"
+                className="flex-1 min-h-0 min-w-0 overflow-hidden bg-neutral-50"
+              >
+                {activeView === "code" && (
+                  <ResizablePanelGroup
+                    direction="horizontal"
+                    className="h-full"
                   >
-                    <div className="h-full bg-neutral-50 border-r border-neutral-200">
-                      <FileTree />
-                    </div>
-                  </ResizablePanel>
+                    {/* File Tree */}
+                    <ResizablePanel
+                      defaultSize={30}
+                      minSize={20}
+                      maxSize={50}
+                    >
+                      <div className="h-full bg-neutral-50 border-r border-neutral-200">
+                        <FileTree />
+                      </div>
+                    </ResizablePanel>
 
-                  <ResizableHandle className="w-[1px] bg-neutral-200 hover:bg-neutral-300 transition-colors" />
+                    <ResizableHandle className="w-[1px] bg-neutral-200 hover:bg-neutral-300 transition-colors" />
 
-                  {/* Code Editor */}
-                  <ResizablePanel defaultSize={70}>
-                    <div className="h-full bg-white">
-                      <CodeEditor />
-                    </div>
-                  </ResizablePanel>
-                </ResizablePanelGroup>
-              )}
-            </div>
+                    {/* Code Editor */}
+                    <ResizablePanel defaultSize={70}>
+                      <div className="h-full bg-white">
+                        <CodeEditor />
+                      </div>
+                    </ResizablePanel>
+                  </ResizablePanelGroup>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>

@@ -27,5 +27,9 @@ export default defineConfig({
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 30000,
+        env: {
+          ...process.env,
+          FORCE_MOCK_PROVIDER: "1",
+        },
       },
 });
