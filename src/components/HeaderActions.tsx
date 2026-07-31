@@ -34,6 +34,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -211,72 +214,50 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
     }
   };
 
-  if (!user) {
-    return (
-      <>
-        <div className="flex gap-2">
-          <Button variant="outline" className="h-8 gap-2" onClick={handleDownload} disabled={!canDownload}>
-            <Download className="h-4 w-4" />
-            Download
-          </Button>
-          <Button variant="outline" className="h-8" onClick={handleSignInClick}>
-            Sign In
-          </Button>
-          <Button className="h-8" onClick={handleSignUpClick}>
-            Sign Up
-          </Button>
-        </div>
-        <AuthDialog
-          open={authDialogOpen}
-          onOpenChange={setAuthDialogOpen}
-          defaultMode={authMode}
-        />
-      </>
-    );
-  }
-
   return (
     <div className="flex items-center gap-2">
-      {/* Project Selector */}
-      {!initialLoading && (
-        <Popover open={projectsOpen} onOpenChange={setProjectsOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="h-8 gap-2" role="combobox">
-              <FolderOpen className="h-4 w-4" />
-              {currentProject ? currentProject.name : "Select Project"}
-              <ChevronDown className="h-3 w-3 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[300px] p-0" align="end">
-            <Command>
-              <CommandInput
-                placeholder="Search projects..."
-                value={searchQuery}
-                onValueChange={setSearchQuery}
-              />
-              <CommandList>
-                <CommandEmpty>No projects found.</CommandEmpty>
-                <CommandGroup>
-                  {filteredProjects.map((project) => (
-                    <CommandItem
-                      key={project.id}
-                      value={project.name}
-                      onSelect={() => {
-                        router.push(`/${project.id}`);
-                        setProjectsOpen(false);
-                        setSearchQuery("");
-                      }}
-                    >
-                      <div className="flex flex-col">
-                        <span className="font-medium">{project.name}</span>
-                      </div>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+      {/* Project Selector (desktop) */}
+      {!initialLoading && user && (
+        <div className="hidden lg:block">
+          <Popover open={projectsOpen} onOpenChange={setProjectsOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="h-8 gap-2" role="combobox">
+                <FolderOpen className="h-4 w-4" />
+                {currentProject ? currentProject.name : "Select Project"}
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[300px] p-0" align="end">
+              <Command>
+                <CommandInput
+                  placeholder="Search projects..."
+                  value={searchQuery}
+                  onValueChange={setSearchQuery}
+                />
+                <CommandList>
+                  <CommandEmpty>No projects found.</CommandEmpty>
+                  <CommandGroup>
+                    {filteredProjects.map((project) => (
+                      <CommandItem
+                        key={project.id}
+                        value={project.name}
+                        onSelect={() => {
+                          router.push(`/${project.id}`);
+                          setProjectsOpen(false);
+                          setSearchQuery("");
+                        }}
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium">{project.name}</span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
       )}
 
       {/* Inline Editable Project Name */}
@@ -289,7 +270,7 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="h-8 w-48"
+                className="h-8 w-40 sm:w-48"
                 autoFocus
               />
               <Button
@@ -312,7 +293,7 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
           ) : (
             <Button
               variant="ghost"
-              className="h-8 gap-1 text-sm font-medium"
+              className="hidden lg:inline-flex h-8 gap-1 text-sm font-medium"
               onClick={startEditing}
             >
               <Pencil className="h-3 w-3" />
@@ -322,33 +303,35 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
         </div>
       )}
 
-      {/* Kebab Menu for Project Actions */}
+      {/* Kebab Menu for Project Actions (desktop) */}
       {canManageProject && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleSave}>
-              <Save className="h-4 w-4" />
-              Save
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={startEditing}>
-              <Pencil className="h-4 w-4" />
-              Rename
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => setShowDeleteConfirm(true)}
-              className="text-red-600 focus:text-red-600"
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="hidden lg:block">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleSave}>
+                <Save className="h-4 w-4" />
+                Save
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={startEditing}>
+                <Pencil className="h-4 w-4" />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-red-600 focus:text-red-600"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       )}
 
       {/* Delete Confirmation Inline */}
@@ -374,25 +357,145 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
         </div>
       )}
 
-      <Button variant="outline" className="h-8 gap-2" onClick={handleDownload} disabled={!canDownload}>
-        <Download className="h-4 w-4" />
-        Download
-      </Button>
+      {/* Desktop actions */}
+      <div className="hidden lg:flex items-center gap-2">
+        <Button variant="outline" className="h-8 gap-2" onClick={handleDownload} disabled={!canDownload}>
+          <Download className="h-4 w-4" />
+          Download
+        </Button>
 
-      <Button className="flex items-center gap-2 h-8" onClick={handleNewDesign}>
-        <Plus className="h-4 w-4" />
-        New Design
-      </Button>
+        {user ? (
+          <>
+            <Button className="flex items-center gap-2 h-8" onClick={handleNewDesign}>
+              <Plus className="h-4 w-4" />
+              New Design
+            </Button>
 
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8"
-        onClick={handleSignOut}
-        title="Sign out"
-      >
-        <LogOut className="h-4 w-4" />
-      </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleSignOut}
+              title="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="outline" className="h-8" onClick={handleSignInClick}>
+              Sign In
+            </Button>
+            <Button className="h-8" onClick={handleSignUpClick}>
+              Sign Up
+            </Button>
+          </>
+        )}
+      </div>
+
+      {/* Mobile menu */}
+      <div className="flex lg:hidden">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              aria-label="Menu"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {!initialLoading && user && (
+              <>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <FolderOpen className="h-4 w-4" />
+                    Projects
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {filteredProjects.map((project) => (
+                      <DropdownMenuItem
+                        key={project.id}
+                        onSelect={() => {
+                          router.push(`/${project.id}`);
+                          setProjectsOpen(false);
+                          setSearchQuery("");
+                        }}
+                      >
+                        <span className="truncate max-w-[200px]">
+                          {project.name}
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                    {filteredProjects.length === 0 && (
+                      <DropdownMenuItem disabled>
+                        No projects found.
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSeparator />
+              </>
+            )}
+
+            {user && (
+              <DropdownMenuItem onClick={handleNewDesign}>
+                <Plus className="h-4 w-4" />
+                New Design
+              </DropdownMenuItem>
+            )}
+
+            <DropdownMenuItem onClick={handleDownload} disabled={!canDownload}>
+              <Download className="h-4 w-4" />
+              Download
+            </DropdownMenuItem>
+
+            {user ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSave} disabled={!canManageProject}>
+                  <Save className="h-4 w-4" />
+                  Save
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={startEditing}>
+                  <Pencil className="h-4 w-4" />
+                  Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="text-red-600 focus:text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut}>
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
+                </DropdownMenuItem>
+              </>
+            ) : (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignInClick}>
+                  Sign In
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSignUpClick}>
+                  Sign Up
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <AuthDialog
+        open={authDialogOpen}
+        onOpenChange={setAuthDialogOpen}
+        defaultMode={authMode}
+      />
     </div>
   );
 }
