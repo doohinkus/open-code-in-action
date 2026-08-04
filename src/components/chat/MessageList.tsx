@@ -58,7 +58,10 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
                     <>
                       {message.parts.map((part, partIndex) => {
                         switch (part.type) {
-                          case "text":
+                          case "text": {
+                            const prevPart = message.parts[partIndex - 1];
+                            const consumed = prevPart?.type === "reasoning" && !prevPart.reasoning?.trim();
+                            if (consumed) return null;
                             return message.role === "user" ? (
                               <span key={partIndex} className="whitespace-pre-wrap">{part.text}</span>
                             ) : (
@@ -68,13 +71,23 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
                                 className="prose-sm"
                               />
                             );
-                          case "reasoning":
+                          }
+                          case "reasoning": {
+                            const hasReasoning = !!part.reasoning?.trim();
+                            const nextPart = message.parts[partIndex + 1];
+                            const consumedText = !hasReasoning && nextPart?.type === "text" ? nextPart.text : "";
+                            if (!hasReasoning && !consumedText) return null;
                             return (
                               <div key={partIndex} className="mt-3 p-3 bg-white/50 rounded-md border border-neutral-200">
                                 <span className="text-xs font-medium text-neutral-600 block mb-1">Reasoning</span>
-                                <span className="text-sm text-neutral-700">{part.reasoning}</span>
+                                {hasReasoning ? (
+                                  <span className="text-sm text-neutral-700">{part.reasoning}</span>
+                                ) : (
+                                  <MarkdownRenderer content={consumedText} className="prose-sm" />
+                                )}
                               </div>
                             );
+                          }
                           case "tool-invocation":
                             const tool = part.toolInvocation;
                             const getLabel = (toolName: string, args: any): string => {

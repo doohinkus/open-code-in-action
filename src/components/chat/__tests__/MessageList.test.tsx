@@ -210,6 +210,65 @@ test("MessageList renders reasoning parts", () => {
   ).toBeDefined();
 });
 
+test("MessageList wraps empty reasoning part's following text in the reasoning container", () => {
+  const messages: Message[] = [
+    {
+      id: "1",
+      role: "assistant",
+      content: "",
+      parts: [
+        { type: "reasoning", reasoning: "", details: [] },
+        { type: "text", text: "Created a counter component in /App.jsx" },
+      ],
+    },
+  ];
+
+  render(<MessageList messages={messages} />);
+
+  expect(screen.getByText("Reasoning")).toBeDefined();
+  expect(
+    screen.getByText("Created a counter component in /App.jsx")
+  ).toBeDefined();
+  expect(
+    screen.getAllByText("Created a counter component in /App.jsx").length
+  ).toBe(1);
+});
+
+test("MessageList keeps non-empty reasoning and separate text parts", () => {
+  const messages: Message[] = [
+    {
+      id: "1",
+      role: "assistant",
+      content: "",
+      parts: [
+        { type: "reasoning", reasoning: "Let me think about this.", details: [] },
+        { type: "text", text: "Final answer" },
+      ],
+    },
+  ];
+
+  render(<MessageList messages={messages} />);
+
+  expect(screen.getByText("Reasoning")).toBeDefined();
+  expect(screen.getByText("Let me think about this.")).toBeDefined();
+  expect(screen.getByText("Final answer")).toBeDefined();
+});
+
+test("MessageList skips reasoning container when reasoning is empty and no text follows", () => {
+  const messages: Message[] = [
+    {
+      id: "1",
+      role: "assistant",
+      content: "",
+      parts: [{ type: "reasoning", reasoning: "", details: [] }],
+    },
+  ];
+
+  render(<MessageList messages={messages} />);
+
+  expect(screen.queryByText("Reasoning")).toBeNull();
+});
+
 test("MessageList renders multiple messages in correct order", () => {
   const messages: Message[] = [
     {
