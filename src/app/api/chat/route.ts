@@ -179,7 +179,7 @@ export async function POST(req: Request) {
     process.env.OPENAI_COMPATIBLE_BASE_URL?.trim() &&
     process.env.OPENAI_COMPATIBLE_MODEL?.trim()
   ) {
-    reasoningOptions["opencode-compatible"] = { reasoningEffort: "low" };
+    reasoningOptions["opencode-compatible"] = { reasoningEffort: "medium" };
   }
 
   const result = streamText({
