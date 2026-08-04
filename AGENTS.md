@@ -61,9 +61,9 @@
 ## Before Pushing (REQUIRED)
 **Always run before `git push`:**
 ```bash
-npm run lint && npm test -- --run
+npm run lint && npm test -- --run && npx tsc --noEmit
 ```
-Fix any failures before pushing. Never push with failing tests.
+Fix any failures before pushing. Never push with failing tests. `next lint` and vitest do NOT catch TypeScript errors — the Vercel build (`npm run build` / `vercel-build`) does, so run `npx tsc --noEmit` (or `npm run build`) before pushing.
 
 ## Testing
 - Vitest config: `vitest.config.mts` — uses `@vitejs/plugin-react` and `vite-tsconfig-paths`

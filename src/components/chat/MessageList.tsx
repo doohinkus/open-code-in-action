@@ -26,7 +26,9 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
   return (
     <div className="flex flex-col h-full overflow-y-auto px-4 py-6">
       <div className="space-y-6 max-w-4xl mx-auto w-full">
-        {messages.map((message) => (
+        {messages.map((message) => {
+          const parts = message.parts;
+          return (
           <div
             key={message.id || message.content}
             data-role={message.role}
@@ -54,12 +56,12 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
                   : "bg-white text-neutral-900 border border-neutral-200 shadow-sm"
               )}>
                 <div className="text-sm">
-                  {message.parts ? (
+                  {parts ? (
                     <>
-                      {message.parts.map((part, partIndex) => {
+                      {parts.map((part, partIndex) => {
                         switch (part.type) {
                           case "text": {
-                            const prevPart = message.parts[partIndex - 1];
+                            const prevPart = parts[partIndex - 1];
                             const consumed = prevPart?.type === "reasoning" && !prevPart.reasoning?.trim();
                             if (consumed) return null;
                             return message.role === "user" ? (
@@ -74,7 +76,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
                           }
                           case "reasoning": {
                             const hasReasoning = !!part.reasoning?.trim();
-                            const nextPart = message.parts[partIndex + 1];
+                            const nextPart = parts[partIndex + 1];
                             const consumedText = !hasReasoning && nextPart?.type === "text" ? nextPart.text : "";
                             if (!hasReasoning && !consumedText) return null;
                             return (
@@ -195,7 +197,8 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
