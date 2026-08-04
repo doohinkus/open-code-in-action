@@ -223,7 +223,7 @@ describe("ChatContext", () => {
     );
 
     act(() => {
-      vi.advanceTimersByTime(121_000);
+      vi.advanceTimersByTime(131_000);
     });
 
     expect(mockStop).toHaveBeenCalled();

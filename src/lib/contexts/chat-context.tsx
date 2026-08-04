@@ -33,7 +33,7 @@ interface ChatContextType {
   generationTimedOut: boolean;
 }
 
-const STALL_TIMEOUT_MS = 120_000;
+const STALL_TIMEOUT_MS = 130_000;
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 

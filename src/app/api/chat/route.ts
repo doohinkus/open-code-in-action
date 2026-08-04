@@ -172,15 +172,14 @@ export async function POST(req: Request) {
 
   const model = getLanguageModel();
   // Use fewer steps for mock provider to prevent repetition
-  const maxSteps = hasRealProvider() ? 40 : 4;
+  const maxSteps = hasRealProvider() ? 5 : 4;
 
-  // Enable reasoning/thinking tokens for providers that support it
   const reasoningOptions: Record<string, any> = {};
   if (
     process.env.OPENAI_COMPATIBLE_BASE_URL?.trim() &&
     process.env.OPENAI_COMPATIBLE_MODEL?.trim()
   ) {
-    reasoningOptions["opencode-compatible"] = { reasoningEffort: "medium" };
+    reasoningOptions["opencode-compatible"] = { reasoningEffort: "low" };
   }
 
   const result = streamText({
@@ -188,9 +187,6 @@ export async function POST(req: Request) {
     messages,
     maxTokens: 10_000,
     maxSteps,
-    // Hard ceiling in local dev too (maxDuration only applies on Vercel).
-    // Kept just under the 120s Vercel limit; the client watchdog mirrors this.
-    abortSignal: AbortSignal.timeout(110_000),
     ...(Object.keys(reasoningOptions).length > 0 && { providerOptions: reasoningOptions }),
     onError: (err: any) => {
       console.error(err);

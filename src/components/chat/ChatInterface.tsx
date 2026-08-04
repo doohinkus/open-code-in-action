@@ -14,6 +14,8 @@ function mapErrorMessage(raw: string): string {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed.error === "string") {
       serverMessage = parsed.error;
+    } else if (parsed?.error?.message) {
+      serverMessage = parsed.error.message;
     }
   } catch {
     // Not JSON — raw error message from the SDK/fetch layer.
@@ -34,6 +36,12 @@ function mapErrorMessage(raw: string): string {
   }
   if (/failed to fetch|network/i.test(text)) {
     return "Network error. Check your connection and try again.";
+  }
+  if (/internal server error/i.test(text)) {
+    return "AI provider returned an internal server error. The model may be temporarily unavailable. Please try again or switch models.";
+  }
+  if (/CreditsError|no payment|billing/i.test(text)) {
+    return "AI provider account has no credits. Please add a payment method or switch to a free model.";
   }
   return serverMessage || "Something went wrong. Please try again.";
 }
