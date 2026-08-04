@@ -209,11 +209,9 @@ function MobileShell({
           value="preview"
           className="flex-1 min-h-0 min-w-0 overflow-hidden bg-neutral-50"
         >
-          {mobileTab === "preview" && (
-            <div className="h-full bg-white">
-              <PreviewFrame />
-            </div>
-          )}
+          <div className={`h-full bg-white ${mobileTab !== "preview" ? "hidden" : ""}`}>
+            <PreviewFrame />
+          </div>
         </TabsContent>
         <TabsContent
           value="code"
@@ -290,11 +288,9 @@ function DesktopShell({
                 value="preview"
                 className="flex-1 min-h-0 min-w-0 overflow-hidden bg-neutral-50"
               >
-                {activeView === "preview" && (
-                  <div className="h-full bg-white">
-                    <PreviewFrame />
-                  </div>
-                )}
+                <div className={`h-full bg-white ${activeView !== "preview" ? "hidden" : ""}`}>
+                  <PreviewFrame />
+                </div>
               </TabsContent>
               <TabsContent
                 value="code"
