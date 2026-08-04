@@ -141,7 +141,8 @@ export function PreviewFrame() {
     }, REBUILD_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [refreshTrigger, getAllFiles, entryPoint, error, isFirstLoad, isGenerating, isFixingErrors]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger, getAllFiles, entryPoint, isFirstLoad, isGenerating, isFixingErrors]);
 
   if (isGenerating) {
     return (
