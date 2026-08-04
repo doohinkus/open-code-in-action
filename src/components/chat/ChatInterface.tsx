@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useChat } from "@/lib/contexts/chat-context";
 import { useToast } from "@/components/ui/toast";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, FlaskConical, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 function mapErrorMessage(raw: string): string {
   let serverMessage: string | null = null;
@@ -58,9 +58,56 @@ export function ChatInterface() {
     reload,
     stop,
     generationTimedOut,
+    append,
   } = useChat();
   const { toast } = useToast();
   const prevStatusRef = useRef(status);
+  const [testStatus, setTestStatus] = useState<"idle" | "running" | "pass" | "fail">("idle");
+
+  const handleTestConnection = useCallback(async () => {
+    setTestStatus("running");
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: "Reply with only the word OK" }],
+          files: {},
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        const msg = body?.error || `HTTP ${res.status}`;
+        toast(`Connection failed: ${msg}`, "error");
+        setTestStatus("fail");
+        return;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) {
+        toast("Connection failed: no response body", "error");
+        setTestStatus("fail");
+        return;
+      }
+      const decoder = new TextDecoder();
+      let text = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+      }
+      if (text.includes("Internal server error") || text.includes("CreditsError")) {
+        const detail = text.includes("CreditsError") ? "No credits on account" : "Provider returned 500";
+        toast(`Provider error: ${detail}`, "error");
+        setTestStatus("fail");
+      } else {
+        toast("Provider is healthy", "success");
+        setTestStatus("pass");
+      }
+    } catch (e: any) {
+      toast(`Connection failed: ${e.message}`, "error");
+      setTestStatus("fail");
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (prevStatusRef.current !== "error" && status === "error" && error) {
@@ -112,6 +159,32 @@ export function ChatInterface() {
           isLoading={status === "submitted" || status === "streaming"}
           onStop={stop}
         />
+        {messages.length === 0 && (
+          <div className="mt-3 flex justify-center">
+            <button
+              onClick={handleTestConnection}
+              disabled={testStatus === "running"}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {testStatus === "running" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : testStatus === "pass" ? (
+                <CheckCircle2 className="h-3 w-3 text-green-600" />
+              ) : testStatus === "fail" ? (
+                <XCircle className="h-3 w-3 text-red-500" />
+              ) : (
+                <FlaskConical className="h-3 w-3" />
+              )}
+              {testStatus === "running"
+                ? "Testing..."
+                : testStatus === "pass"
+                  ? "Provider healthy"
+                  : testStatus === "fail"
+                    ? "Provider error"
+                    : "Test connection"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
