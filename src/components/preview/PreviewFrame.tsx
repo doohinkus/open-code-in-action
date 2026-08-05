@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 import { useChat } from "@/lib/contexts/chat-context";
 import {
@@ -9,6 +10,7 @@ import {
 } from "@/lib/transform/jsx-transformer";
 import { AlertCircle, Loader2, Wand2 } from "lucide-react";
 import { GenerationActivityLog } from "./GenerationActivityLog";
+import { logger } from "@/lib/observability/logger";
 
 const REBUILD_DEBOUNCE_MS = 350;
 
@@ -35,6 +37,11 @@ export function PreviewFrame() {
       const data = event.data;
       if (data && data.type === "uigen:error") {
         setPreviewError({ message: data.message, stack: data.stack });
+        const error = new Error(data.message);
+        error.stack = data.stack;
+        Sentry.captureException(error, {
+          tags: { source: "preview-sandbox" },
+        });
       }
     };
     window.addEventListener("message", handleMessage);
@@ -132,7 +139,12 @@ export function PreviewFrame() {
             setPreviewError(null);
           }
         } catch (err) {
-          console.error("Preview error:", err);
+          logger.error("preview.build_failed", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          Sentry.captureException(err, {
+            tags: { source: "preview-build" },
+          });
           setError(err instanceof Error ? err.message : "Unknown preview error");
         }
       };

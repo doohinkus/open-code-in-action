@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
+import { logger } from "@/lib/observability/logger";
 
 export default function Error({
   error,
@@ -10,7 +12,11 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("App error boundary:", error);
+    logger.error("error.boundary.caught", {
+      message: error.message,
+      digest: error.digest,
+    });
+    Sentry.captureException(error);
   }, [error]);
 
   return (

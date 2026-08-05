@@ -1,5 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
+import { logger } from "@/lib/observability/logger";
+
 export default function GlobalError({
   error,
   reset,
@@ -7,6 +11,14 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    logger.error("error.global_boundary.caught", {
+      message: error.message,
+      digest: error.digest,
+    });
+    Sentry.captureException(error);
+  }, [error]);
+
   return (
     <html lang="en">
       <body className="h-dvh flex items-center justify-center bg-neutral-50">

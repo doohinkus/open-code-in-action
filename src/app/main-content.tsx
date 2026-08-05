@@ -20,6 +20,7 @@ import { getAnonWorkData, clearAnonWork } from "@/lib/anon-work-tracker";
 import { createProject } from "@/actions/create-project";
 import { useChat } from "@/lib/contexts/chat-context";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
+import { logger } from "@/lib/observability/logger";
 
 function HeaderActionsWrapper({ user, projectId }: { user?: { id: string; email: string } | null; projectId?: string }) {
   const { messages } = useChat();
@@ -84,7 +85,9 @@ export function MainContent({ user, project }: MainContentProps) {
               router.push(`/${project.id}`);
               return;
             } catch (error) {
-              console.error("Failed to migrate anonymous work:", error);
+              logger.error("anon_work.migration_failed", {
+                error: error instanceof Error ? error.message : String(error),
+              });
             }
           }
           router.refresh();

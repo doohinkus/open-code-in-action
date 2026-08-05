@@ -1,12 +1,14 @@
 import type { FileNode } from "@/lib/file-system";
 import { VirtualFileSystem } from "@/lib/file-system";
 import { streamText, appendResponseMessages } from "ai";
+import * as Sentry from "@sentry/nextjs";
 import { buildStrReplaceTool } from "@/lib/tools/str-replace";
 import { buildFileManagerTool } from "@/lib/tools/file-manager";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getLanguageModel } from "@/lib/provider";
 import { generationPrompt } from "@/lib/prompts/generation";
+import { logger, getRequestId, hashIp } from "@/lib/observability/logger";
 
 const MAX_MESSAGE_COUNT = 200;
 const MAX_MESSAGE_LENGTH = 50_000;
@@ -122,7 +124,17 @@ export async function OPTIONS(req: Request) {
 
 export async function POST(req: Request) {
   const ip = getClientIp(req);
+  const requestId = getRequestId(req);
+  const startedAt = Date.now();
+
+  logger.info("chat.request.start", {
+    requestId,
+    ip: hashIp(ip),
+    provider: hasRealProvider() ? "real" : "mock",
+  });
+
   if (!checkRateLimit(ip)) {
+    logger.warn("chat.request.rate_limited", { requestId, ip: hashIp(ip) });
     return Response.json(
       { error: "Too many requests. Please try again later." },
       { status: 429 }
@@ -130,6 +142,10 @@ export async function POST(req: Request) {
   }
 
   if (!checkOrigin(req)) {
+    logger.warn("chat.request.bad_origin", {
+      requestId,
+      origin: req.headers.get("origin") || req.headers.get("referer") || "",
+    });
     return Response.json({ error: "Invalid request origin" }, { status: 403 });
   }
 
@@ -144,6 +160,10 @@ export async function POST(req: Request) {
 
   const validationError = validateInput(messages, files);
   if (validationError) {
+    logger.warn("chat.request.invalid", {
+      requestId,
+      reason: validationError,
+    });
     return Response.json({ error: validationError }, { status: 400 });
   }
 
@@ -154,6 +174,7 @@ export async function POST(req: Request) {
 
   // Require authentication for project saves
   if (projectId && !session) {
+    logger.warn("chat.request.unauthorized", { requestId, projectId });
     return Response.json(
       { error: "Authentication required to save to a project" },
       { status: 401 }
@@ -182,6 +203,18 @@ export async function POST(req: Request) {
     reasoningOptions["opencode-compatible"] = { reasoningEffort: "medium" };
   }
 
+  const { span, finish: finishSpan } = Sentry.startSpanManual(
+    {
+      name: "chat.generation",
+      op: "ai.generate",
+      attributes: {
+        provider: hasRealProvider() ? "real" : "mock",
+        projectId: projectId ?? "anonymous",
+      },
+    },
+    (span, finish) => ({ span, finish })
+  );
+
   const result = streamText({
     model,
     messages,
@@ -189,13 +222,47 @@ export async function POST(req: Request) {
     maxSteps,
     ...(Object.keys(reasoningOptions).length > 0 && { providerOptions: reasoningOptions }),
     onError: (err: any) => {
-      console.error(err);
+      logger.error("chat.stream.error", {
+        requestId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      Sentry.captureException(err, { tags: { requestId } });
+      span.setAttribute("finishReason", "error");
+      finishSpan();
     },
     tools: {
       str_replace_editor: buildStrReplaceTool(fileSystem),
       file_manager: buildFileManagerTool(fileSystem),
     },
-    onFinish: async ({ response }) => {
+    onFinish: async ({ response, usage, finishReason, steps }) => {
+      const toolCallCount = steps.reduce(
+        (acc, step) => acc + (step.toolCalls?.length ?? 0),
+        0
+      );
+      const durationMs = Date.now() - startedAt;
+
+      span.setAttributes({
+        finishReason,
+        steps: steps.length,
+        toolCalls: toolCallCount,
+        promptTokens: usage?.promptTokens ?? 0,
+        completionTokens: usage?.completionTokens ?? 0,
+      });
+      Sentry.setMeasurement("latency_ms", durationMs, "millisecond", span);
+      finishSpan();
+
+      logger.info("chat.request.finish", {
+        requestId,
+        durationMs,
+        finishReason,
+        promptTokens: usage?.promptTokens,
+        completionTokens: usage?.completionTokens,
+        totalTokens: usage?.totalTokens,
+        steps: steps.length,
+        toolCalls: toolCallCount,
+        projectId: projectId ?? null,
+      });
+
       // Save to project if projectId is provided (auth already verified above)
       if (projectId) {
         try {
@@ -218,7 +285,15 @@ export async function POST(req: Request) {
             },
           });
         } catch (error) {
-          console.error("Failed to save project data:", error);
+          logger.error("chat.project.save_failed", {
+            requestId,
+            projectId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          Sentry.captureException(error, {
+            tags: { requestId },
+            extra: { projectId },
+          });
         }
       }
     },

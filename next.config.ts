@@ -3,6 +3,8 @@
 // NODE_OPTIONS='--require …' approach, this works on Windows.
 import "./node-compat.cjs";
 
+import { withSentryConfig } from "@sentry/nextjs";
+
 import type { NextConfig } from "next";
 
 const csp = [
@@ -10,7 +12,7 @@ const csp = [
   `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://esm.sh https://cdn.jsdelivr.net blob:`,
   `style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net`,
   `img-src 'self' data: blob: https:`,
-  `connect-src 'self' https://cdn.tailwindcss.com https://esm.sh https://cdn.jsdelivr.net blob:`,
+  `connect-src 'self' https://cdn.tailwindcss.com https://esm.sh https://cdn.jsdelivr.net https://*.ingest.sentry.io blob:`,
   `font-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net`,
   `frame-src 'self'`,
   `frame-ancestors 'self'`,
@@ -57,4 +59,11 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  telemetry: false,
+  silent: true,
+  widenClientFileUpload: true,
+});

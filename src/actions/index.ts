@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { deleteSession, getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { logger } from "@/lib/observability/logger";
 
 async function ensureUser(sessionUserId: string, email: string) {
   const existing = await prisma.user.findUnique({
@@ -37,7 +38,10 @@ export async function getUser() {
     });
     return user;
   } catch (error) {
-    console.error("Get user error:", error);
+    logger.error("action.get_user.failed", {
+      userId: session.userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 }

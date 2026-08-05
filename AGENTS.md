@@ -43,6 +43,12 @@
 - **CSS**: Tailwind v4 with `@import "tailwindcss"` syntax (not v3 config file). Uses `@tailwindcss/typography` plugin and `tw-animate-css`
 - **Required env vars**: `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET` — app and `npm run setup` fail without them. See `.example.env` for all vars.
 
+## Observability
+- **Structured logging**: `src/lib/observability/logger.ts` — leveled JSON-line logger + `requestId`/`hashIp` helpers. Used in `/api/chat`, server actions, error boundaries, and the preview. Do not add raw `console.error` in new code; use `logger`.
+- **Health endpoint**: `GET /api/health` → `200 {status:"ok"}` or `503 {status:"degraded"}` (does `SELECT 1` against Postgres). Use for uptime checks.
+- **Sentry** (`@sentry/nextjs`): config in `sentry.server.config.ts`, `sentry.edge.config.ts`, `src/instrumentation.ts`, and `src/instrumentation-client.ts` (client — not `sentry.client.config.ts`, which is deprecated under Turbopack). `next.config.ts` wraps with `withSentryConfig`. Requires `SENTRY_DSN` at runtime; `SENTRY_ORG`/`SENTRY_PROJECT`/`SENTRY_AUTH_TOKEN` for source-map upload at build. Builds succeed without any of them (upload skipped).
+- **CSP**: `connect-src` in `next.config.ts` allows `https://*.ingest.sentry.io` for Sentry ingest. If you add other Sentry features (Session Replay, etc.), update it.
+
 ## Pre-Commit Verification (REQUIRED)
 **Always run before committing significant changes:**
 
