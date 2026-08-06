@@ -21,6 +21,7 @@ import { createProject } from "@/actions/create-project";
 import { useChat } from "@/lib/contexts/chat-context";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 import { logger } from "@/lib/observability/logger";
+import { LoadingScreen } from "@/components/LoadingScreen";
 
 function HeaderActionsWrapper({ user, projectId }: { user?: { id: string; email: string } | null; projectId?: string }) {
   const { messages } = useChat();
@@ -100,7 +101,7 @@ export function MainContent({ user, project }: MainContentProps) {
     return (
       <FileSystemProvider initialData={project?.data}>
         <ChatProvider projectId={project?.id} initialMessages={project?.messages}>
-          <div className="h-dvh w-full overflow-hidden bg-neutral-50" />
+          <LoadingScreen />
         </ChatProvider>
       </FileSystemProvider>
     );
@@ -135,7 +136,7 @@ function AppShell({ user, project }: MainContentProps) {
   }, [status]);
 
   if (isMobile === null) {
-    return <div className="h-dvh w-full overflow-hidden bg-neutral-50" />;
+    return <LoadingScreen />;
   }
 
   return (
