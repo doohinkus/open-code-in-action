@@ -20,6 +20,7 @@ interface ChatContextProps {
 }
 
 interface ChatContextType {
+  projectId?: string;
   messages: Message[];
   input: string;
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -148,6 +149,7 @@ export function ChatProvider({
   return (
     <ChatContext.Provider
       value={{
+        projectId,
         messages,
         input,
         handleInputChange,

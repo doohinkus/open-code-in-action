@@ -13,6 +13,7 @@ import { ChatInterface } from "@/components/chat/ChatInterface";
 import { FileTree } from "@/components/editor/FileTree";
 import { CodeEditor } from "@/components/editor/CodeEditor";
 import { PreviewFrame } from "@/components/preview/PreviewFrame";
+import { ShareBar } from "@/components/share/ShareBar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HeaderActions } from "@/components/HeaderActions";
 import { authClient } from "@/lib/auth/client";
@@ -215,7 +216,12 @@ function MobileShell({
           className={`${mobileTab !== "preview" ? "hidden" : "flex-1"} min-h-0 min-w-0 overflow-hidden bg-neutral-50`}
         >
           <div className="h-full bg-white">
-            <PreviewFrame />
+            <div className="flex flex-col h-full">
+              <ShareBar />
+              <div className="flex-1 min-h-0">
+                <PreviewFrame />
+              </div>
+            </div>
           </div>
         </TabsContent>
         <TabsContent
@@ -295,7 +301,12 @@ function DesktopShell({
                 className={`${activeView !== "preview" ? "hidden" : "flex-1"} min-h-0 min-w-0 overflow-hidden bg-neutral-50`}
               >
                 <div className="h-full bg-white">
-                  <PreviewFrame />
+                  <div className="flex flex-col h-full">
+                    <ShareBar />
+                    <div className="flex-1 min-h-0">
+                      <PreviewFrame />
+                    </div>
+                  </div>
                 </div>
               </TabsContent>
               <TabsContent

@@ -138,6 +138,16 @@ exports.Prisma.ProjectScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.ShareScalarFieldEnum = {
+  id: 'id',
+  token: 'token',
+  name: 'name',
+  data: 'data',
+  projectId: 'projectId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -156,7 +166,8 @@ exports.Prisma.NullsOrder = {
 
 exports.Prisma.ModelName = {
   User: 'User',
-  Project: 'Project'
+  Project: 'Project',
+  Share: 'Share'
 };
 
 /**

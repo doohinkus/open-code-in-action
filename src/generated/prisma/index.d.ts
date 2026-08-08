@@ -23,6 +23,11 @@ export type User = $Result.DefaultSelection<Prisma.$UserPayload>
  * 
  */
 export type Project = $Result.DefaultSelection<Prisma.$ProjectPayload>
+/**
+ * Model Share
+ * 
+ */
+export type Share = $Result.DefaultSelection<Prisma.$SharePayload>
 
 /**
  * ##  Prisma Client ʲˢ
@@ -161,6 +166,16 @@ export class PrismaClient<
     * ```
     */
   get project(): Prisma.ProjectDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.share`: Exposes CRUD operations for the **Share** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Shares
+    * const shares = await prisma.share.findMany()
+    * ```
+    */
+  get share(): Prisma.ShareDelegate<ExtArgs, ClientOptions>;
 }
 
 export namespace Prisma {
@@ -603,7 +618,8 @@ export namespace Prisma {
 
   export const ModelName: {
     User: 'User',
-    Project: 'Project'
+    Project: 'Project',
+    Share: 'Share'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -622,7 +638,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "user" | "project"
+      modelProps: "user" | "project" | "share"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -774,6 +790,80 @@ export namespace Prisma {
           }
         }
       }
+      Share: {
+        payload: Prisma.$SharePayload<ExtArgs>
+        fields: Prisma.ShareFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.ShareFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SharePayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.ShareFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SharePayload>
+          }
+          findFirst: {
+            args: Prisma.ShareFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SharePayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.ShareFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SharePayload>
+          }
+          findMany: {
+            args: Prisma.ShareFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SharePayload>[]
+          }
+          create: {
+            args: Prisma.ShareCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SharePayload>
+          }
+          createMany: {
+            args: Prisma.ShareCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.ShareCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SharePayload>[]
+          }
+          delete: {
+            args: Prisma.ShareDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SharePayload>
+          }
+          update: {
+            args: Prisma.ShareUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SharePayload>
+          }
+          deleteMany: {
+            args: Prisma.ShareDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.ShareUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.ShareUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SharePayload>[]
+          }
+          upsert: {
+            args: Prisma.ShareUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SharePayload>
+          }
+          aggregate: {
+            args: Prisma.ShareAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateShare>
+          }
+          groupBy: {
+            args: Prisma.ShareGroupByArgs<ExtArgs>
+            result: $Utils.Optional<ShareGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.ShareCountArgs<ExtArgs>
+            result: $Utils.Optional<ShareCountAggregateOutputType> | number
+          }
+        }
+      }
     }
   } & {
     other: {
@@ -872,6 +962,7 @@ export namespace Prisma {
   export type GlobalOmitConfig = {
     user?: UserOmit
     project?: ProjectOmit
+    share?: ShareOmit
   }
 
   /* Types for Logging */
@@ -975,6 +1066,37 @@ export namespace Prisma {
    */
   export type UserCountOutputTypeCountProjectsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: ProjectWhereInput
+  }
+
+
+  /**
+   * Count Type ProjectCountOutputType
+   */
+
+  export type ProjectCountOutputType = {
+    shares: number
+  }
+
+  export type ProjectCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    shares?: boolean | ProjectCountOutputTypeCountSharesArgs
+  }
+
+  // Custom InputTypes
+  /**
+   * ProjectCountOutputType without action
+   */
+  export type ProjectCountOutputTypeDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProjectCountOutputType
+     */
+    select?: ProjectCountOutputTypeSelect<ExtArgs> | null
+  }
+
+  /**
+   * ProjectCountOutputType without action
+   */
+  export type ProjectCountOutputTypeCountSharesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ShareWhereInput
   }
 
 
@@ -2220,6 +2342,8 @@ export namespace Prisma {
     createdAt?: boolean
     updatedAt?: boolean
     user?: boolean | Project$userArgs<ExtArgs>
+    shares?: boolean | Project$sharesArgs<ExtArgs>
+    _count?: boolean | ProjectCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["project"]>
 
   export type ProjectSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -2257,6 +2381,8 @@ export namespace Prisma {
   export type ProjectOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "name" | "userId" | "messages" | "data" | "createdAt" | "updatedAt", ExtArgs["result"]["project"]>
   export type ProjectInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     user?: boolean | Project$userArgs<ExtArgs>
+    shares?: boolean | Project$sharesArgs<ExtArgs>
+    _count?: boolean | ProjectCountOutputTypeDefaultArgs<ExtArgs>
   }
   export type ProjectIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     user?: boolean | Project$userArgs<ExtArgs>
@@ -2269,6 +2395,7 @@ export namespace Prisma {
     name: "Project"
     objects: {
       user: Prisma.$UserPayload<ExtArgs> | null
+      shares: Prisma.$SharePayload<ExtArgs>[]
     }
     scalars: $Extensions.GetPayloadResult<{
       id: string
@@ -2673,6 +2800,7 @@ export namespace Prisma {
   export interface Prisma__ProjectClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
     user<T extends Project$userArgs<ExtArgs> = {}>(args?: Subset<T, Project$userArgs<ExtArgs>>): Prisma__UserClient<$Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+    shares<T extends Project$sharesArgs<ExtArgs> = {}>(args?: Subset<T, Project$sharesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -3124,6 +3252,30 @@ export namespace Prisma {
   }
 
   /**
+   * Project.shares
+   */
+  export type Project$sharesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareInclude<ExtArgs> | null
+    where?: ShareWhereInput
+    orderBy?: ShareOrderByWithRelationInput | ShareOrderByWithRelationInput[]
+    cursor?: ShareWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: ShareScalarFieldEnum | ShareScalarFieldEnum[]
+  }
+
+  /**
    * Project without action
    */
   export type ProjectDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -3139,6 +3291,1109 @@ export namespace Prisma {
      * Choose, which related nodes to fetch as well
      */
     include?: ProjectInclude<ExtArgs> | null
+  }
+
+
+  /**
+   * Model Share
+   */
+
+  export type AggregateShare = {
+    _count: ShareCountAggregateOutputType | null
+    _min: ShareMinAggregateOutputType | null
+    _max: ShareMaxAggregateOutputType | null
+  }
+
+  export type ShareMinAggregateOutputType = {
+    id: string | null
+    token: string | null
+    name: string | null
+    data: string | null
+    projectId: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type ShareMaxAggregateOutputType = {
+    id: string | null
+    token: string | null
+    name: string | null
+    data: string | null
+    projectId: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type ShareCountAggregateOutputType = {
+    id: number
+    token: number
+    name: number
+    data: number
+    projectId: number
+    createdAt: number
+    updatedAt: number
+    _all: number
+  }
+
+
+  export type ShareMinAggregateInputType = {
+    id?: true
+    token?: true
+    name?: true
+    data?: true
+    projectId?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type ShareMaxAggregateInputType = {
+    id?: true
+    token?: true
+    name?: true
+    data?: true
+    projectId?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type ShareCountAggregateInputType = {
+    id?: true
+    token?: true
+    name?: true
+    data?: true
+    projectId?: true
+    createdAt?: true
+    updatedAt?: true
+    _all?: true
+  }
+
+  export type ShareAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which Share to aggregate.
+     */
+    where?: ShareWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Shares to fetch.
+     */
+    orderBy?: ShareOrderByWithRelationInput | ShareOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: ShareWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Shares from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Shares.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned Shares
+    **/
+    _count?: true | ShareCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ShareMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ShareMaxAggregateInputType
+  }
+
+  export type GetShareAggregateType<T extends ShareAggregateArgs> = {
+        [P in keyof T & keyof AggregateShare]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateShare[P]>
+      : GetScalarType<T[P], AggregateShare[P]>
+  }
+
+
+
+
+  export type ShareGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ShareWhereInput
+    orderBy?: ShareOrderByWithAggregationInput | ShareOrderByWithAggregationInput[]
+    by: ShareScalarFieldEnum[] | ShareScalarFieldEnum
+    having?: ShareScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ShareCountAggregateInputType | true
+    _min?: ShareMinAggregateInputType
+    _max?: ShareMaxAggregateInputType
+  }
+
+  export type ShareGroupByOutputType = {
+    id: string
+    token: string
+    name: string
+    data: string
+    projectId: string | null
+    createdAt: Date
+    updatedAt: Date
+    _count: ShareCountAggregateOutputType | null
+    _min: ShareMinAggregateOutputType | null
+    _max: ShareMaxAggregateOutputType | null
+  }
+
+  type GetShareGroupByPayload<T extends ShareGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ShareGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ShareGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ShareGroupByOutputType[P]>
+            : GetScalarType<T[P], ShareGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ShareSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    token?: boolean
+    name?: boolean
+    data?: boolean
+    projectId?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+    project?: boolean | Share$projectArgs<ExtArgs>
+  }, ExtArgs["result"]["share"]>
+
+  export type ShareSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    token?: boolean
+    name?: boolean
+    data?: boolean
+    projectId?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+    project?: boolean | Share$projectArgs<ExtArgs>
+  }, ExtArgs["result"]["share"]>
+
+  export type ShareSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    token?: boolean
+    name?: boolean
+    data?: boolean
+    projectId?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+    project?: boolean | Share$projectArgs<ExtArgs>
+  }, ExtArgs["result"]["share"]>
+
+  export type ShareSelectScalar = {
+    id?: boolean
+    token?: boolean
+    name?: boolean
+    data?: boolean
+    projectId?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }
+
+  export type ShareOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "token" | "name" | "data" | "projectId" | "createdAt" | "updatedAt", ExtArgs["result"]["share"]>
+  export type ShareInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    project?: boolean | Share$projectArgs<ExtArgs>
+  }
+  export type ShareIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    project?: boolean | Share$projectArgs<ExtArgs>
+  }
+  export type ShareIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    project?: boolean | Share$projectArgs<ExtArgs>
+  }
+
+  export type $SharePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "Share"
+    objects: {
+      project: Prisma.$ProjectPayload<ExtArgs> | null
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      token: string
+      name: string
+      data: string
+      projectId: string | null
+      createdAt: Date
+      updatedAt: Date
+    }, ExtArgs["result"]["share"]>
+    composites: {}
+  }
+
+  type ShareGetPayload<S extends boolean | null | undefined | ShareDefaultArgs> = $Result.GetResult<Prisma.$SharePayload, S>
+
+  type ShareCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<ShareFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: ShareCountAggregateInputType | true
+    }
+
+  export interface ShareDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['Share'], meta: { name: 'Share' } }
+    /**
+     * Find zero or one Share that matches the filter.
+     * @param {ShareFindUniqueArgs} args - Arguments to find a Share
+     * @example
+     * // Get one Share
+     * const share = await prisma.share.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ShareFindUniqueArgs>(args: SelectSubset<T, ShareFindUniqueArgs<ExtArgs>>): Prisma__ShareClient<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one Share that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ShareFindUniqueOrThrowArgs} args - Arguments to find a Share
+     * @example
+     * // Get one Share
+     * const share = await prisma.share.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ShareFindUniqueOrThrowArgs>(args: SelectSubset<T, ShareFindUniqueOrThrowArgs<ExtArgs>>): Prisma__ShareClient<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first Share that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShareFindFirstArgs} args - Arguments to find a Share
+     * @example
+     * // Get one Share
+     * const share = await prisma.share.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ShareFindFirstArgs>(args?: SelectSubset<T, ShareFindFirstArgs<ExtArgs>>): Prisma__ShareClient<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first Share that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShareFindFirstOrThrowArgs} args - Arguments to find a Share
+     * @example
+     * // Get one Share
+     * const share = await prisma.share.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ShareFindFirstOrThrowArgs>(args?: SelectSubset<T, ShareFindFirstOrThrowArgs<ExtArgs>>): Prisma__ShareClient<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more Shares that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShareFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all Shares
+     * const shares = await prisma.share.findMany()
+     * 
+     * // Get first 10 Shares
+     * const shares = await prisma.share.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const shareWithIdOnly = await prisma.share.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends ShareFindManyArgs>(args?: SelectSubset<T, ShareFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a Share.
+     * @param {ShareCreateArgs} args - Arguments to create a Share.
+     * @example
+     * // Create one Share
+     * const Share = await prisma.share.create({
+     *   data: {
+     *     // ... data to create a Share
+     *   }
+     * })
+     * 
+     */
+    create<T extends ShareCreateArgs>(args: SelectSubset<T, ShareCreateArgs<ExtArgs>>): Prisma__ShareClient<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many Shares.
+     * @param {ShareCreateManyArgs} args - Arguments to create many Shares.
+     * @example
+     * // Create many Shares
+     * const share = await prisma.share.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends ShareCreateManyArgs>(args?: SelectSubset<T, ShareCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many Shares and returns the data saved in the database.
+     * @param {ShareCreateManyAndReturnArgs} args - Arguments to create many Shares.
+     * @example
+     * // Create many Shares
+     * const share = await prisma.share.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many Shares and only return the `id`
+     * const shareWithIdOnly = await prisma.share.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends ShareCreateManyAndReturnArgs>(args?: SelectSubset<T, ShareCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a Share.
+     * @param {ShareDeleteArgs} args - Arguments to delete one Share.
+     * @example
+     * // Delete one Share
+     * const Share = await prisma.share.delete({
+     *   where: {
+     *     // ... filter to delete one Share
+     *   }
+     * })
+     * 
+     */
+    delete<T extends ShareDeleteArgs>(args: SelectSubset<T, ShareDeleteArgs<ExtArgs>>): Prisma__ShareClient<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one Share.
+     * @param {ShareUpdateArgs} args - Arguments to update one Share.
+     * @example
+     * // Update one Share
+     * const share = await prisma.share.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends ShareUpdateArgs>(args: SelectSubset<T, ShareUpdateArgs<ExtArgs>>): Prisma__ShareClient<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more Shares.
+     * @param {ShareDeleteManyArgs} args - Arguments to filter Shares to delete.
+     * @example
+     * // Delete a few Shares
+     * const { count } = await prisma.share.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends ShareDeleteManyArgs>(args?: SelectSubset<T, ShareDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more Shares.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShareUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many Shares
+     * const share = await prisma.share.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends ShareUpdateManyArgs>(args: SelectSubset<T, ShareUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more Shares and returns the data updated in the database.
+     * @param {ShareUpdateManyAndReturnArgs} args - Arguments to update many Shares.
+     * @example
+     * // Update many Shares
+     * const share = await prisma.share.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more Shares and only return the `id`
+     * const shareWithIdOnly = await prisma.share.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends ShareUpdateManyAndReturnArgs>(args: SelectSubset<T, ShareUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one Share.
+     * @param {ShareUpsertArgs} args - Arguments to update or create a Share.
+     * @example
+     * // Update or create a Share
+     * const share = await prisma.share.upsert({
+     *   create: {
+     *     // ... data to create a Share
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the Share we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ShareUpsertArgs>(args: SelectSubset<T, ShareUpsertArgs<ExtArgs>>): Prisma__ShareClient<$Result.GetResult<Prisma.$SharePayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of Shares.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShareCountArgs} args - Arguments to filter Shares to count.
+     * @example
+     * // Count the number of Shares
+     * const count = await prisma.share.count({
+     *   where: {
+     *     // ... the filter for the Shares we want to count
+     *   }
+     * })
+    **/
+    count<T extends ShareCountArgs>(
+      args?: Subset<T, ShareCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ShareCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a Share.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShareAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ShareAggregateArgs>(args: Subset<T, ShareAggregateArgs>): Prisma.PrismaPromise<GetShareAggregateType<T>>
+
+    /**
+     * Group by Share.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShareGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ShareGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ShareGroupByArgs['orderBy'] }
+        : { orderBy?: ShareGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ShareGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetShareGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the Share model
+   */
+  readonly fields: ShareFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for Share.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ShareClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    project<T extends Share$projectArgs<ExtArgs> = {}>(args?: Subset<T, Share$projectArgs<ExtArgs>>): Prisma__ProjectClient<$Result.GetResult<Prisma.$ProjectPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the Share model
+   */
+  interface ShareFieldRefs {
+    readonly id: FieldRef<"Share", 'String'>
+    readonly token: FieldRef<"Share", 'String'>
+    readonly name: FieldRef<"Share", 'String'>
+    readonly data: FieldRef<"Share", 'String'>
+    readonly projectId: FieldRef<"Share", 'String'>
+    readonly createdAt: FieldRef<"Share", 'DateTime'>
+    readonly updatedAt: FieldRef<"Share", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * Share findUnique
+   */
+  export type ShareFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareInclude<ExtArgs> | null
+    /**
+     * Filter, which Share to fetch.
+     */
+    where: ShareWhereUniqueInput
+  }
+
+  /**
+   * Share findUniqueOrThrow
+   */
+  export type ShareFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareInclude<ExtArgs> | null
+    /**
+     * Filter, which Share to fetch.
+     */
+    where: ShareWhereUniqueInput
+  }
+
+  /**
+   * Share findFirst
+   */
+  export type ShareFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareInclude<ExtArgs> | null
+    /**
+     * Filter, which Share to fetch.
+     */
+    where?: ShareWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Shares to fetch.
+     */
+    orderBy?: ShareOrderByWithRelationInput | ShareOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for Shares.
+     */
+    cursor?: ShareWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Shares from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Shares.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of Shares.
+     */
+    distinct?: ShareScalarFieldEnum | ShareScalarFieldEnum[]
+  }
+
+  /**
+   * Share findFirstOrThrow
+   */
+  export type ShareFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareInclude<ExtArgs> | null
+    /**
+     * Filter, which Share to fetch.
+     */
+    where?: ShareWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Shares to fetch.
+     */
+    orderBy?: ShareOrderByWithRelationInput | ShareOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for Shares.
+     */
+    cursor?: ShareWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Shares from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Shares.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of Shares.
+     */
+    distinct?: ShareScalarFieldEnum | ShareScalarFieldEnum[]
+  }
+
+  /**
+   * Share findMany
+   */
+  export type ShareFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareInclude<ExtArgs> | null
+    /**
+     * Filter, which Shares to fetch.
+     */
+    where?: ShareWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Shares to fetch.
+     */
+    orderBy?: ShareOrderByWithRelationInput | ShareOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing Shares.
+     */
+    cursor?: ShareWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Shares from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Shares.
+     */
+    skip?: number
+    distinct?: ShareScalarFieldEnum | ShareScalarFieldEnum[]
+  }
+
+  /**
+   * Share create
+   */
+  export type ShareCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareInclude<ExtArgs> | null
+    /**
+     * The data needed to create a Share.
+     */
+    data: XOR<ShareCreateInput, ShareUncheckedCreateInput>
+  }
+
+  /**
+   * Share createMany
+   */
+  export type ShareCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many Shares.
+     */
+    data: ShareCreateManyInput | ShareCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * Share createManyAndReturn
+   */
+  export type ShareCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * The data used to create many Shares.
+     */
+    data: ShareCreateManyInput | ShareCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * Share update
+   */
+  export type ShareUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareInclude<ExtArgs> | null
+    /**
+     * The data needed to update a Share.
+     */
+    data: XOR<ShareUpdateInput, ShareUncheckedUpdateInput>
+    /**
+     * Choose, which Share to update.
+     */
+    where: ShareWhereUniqueInput
+  }
+
+  /**
+   * Share updateMany
+   */
+  export type ShareUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update Shares.
+     */
+    data: XOR<ShareUpdateManyMutationInput, ShareUncheckedUpdateManyInput>
+    /**
+     * Filter which Shares to update
+     */
+    where?: ShareWhereInput
+    /**
+     * Limit how many Shares to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * Share updateManyAndReturn
+   */
+  export type ShareUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * The data used to update Shares.
+     */
+    data: XOR<ShareUpdateManyMutationInput, ShareUncheckedUpdateManyInput>
+    /**
+     * Filter which Shares to update
+     */
+    where?: ShareWhereInput
+    /**
+     * Limit how many Shares to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * Share upsert
+   */
+  export type ShareUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareInclude<ExtArgs> | null
+    /**
+     * The filter to search for the Share to update in case it exists.
+     */
+    where: ShareWhereUniqueInput
+    /**
+     * In case the Share found by the `where` argument doesn't exist, create a new Share with this data.
+     */
+    create: XOR<ShareCreateInput, ShareUncheckedCreateInput>
+    /**
+     * In case the Share was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ShareUpdateInput, ShareUncheckedUpdateInput>
+  }
+
+  /**
+   * Share delete
+   */
+  export type ShareDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareInclude<ExtArgs> | null
+    /**
+     * Filter which Share to delete.
+     */
+    where: ShareWhereUniqueInput
+  }
+
+  /**
+   * Share deleteMany
+   */
+  export type ShareDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which Shares to delete
+     */
+    where?: ShareWhereInput
+    /**
+     * Limit how many Shares to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * Share.project
+   */
+  export type Share$projectArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Project
+     */
+    select?: ProjectSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Project
+     */
+    omit?: ProjectOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProjectInclude<ExtArgs> | null
+    where?: ProjectWhereInput
+  }
+
+  /**
+   * Share without action
+   */
+  export type ShareDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Share
+     */
+    select?: ShareSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Share
+     */
+    omit?: ShareOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShareInclude<ExtArgs> | null
   }
 
 
@@ -3177,6 +4432,19 @@ export namespace Prisma {
   };
 
   export type ProjectScalarFieldEnum = (typeof ProjectScalarFieldEnum)[keyof typeof ProjectScalarFieldEnum]
+
+
+  export const ShareScalarFieldEnum: {
+    id: 'id',
+    token: 'token',
+    name: 'name',
+    data: 'data',
+    projectId: 'projectId',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+  };
+
+  export type ShareScalarFieldEnum = (typeof ShareScalarFieldEnum)[keyof typeof ShareScalarFieldEnum]
 
 
   export const SortOrder: {
@@ -3315,6 +4583,7 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"Project"> | Date | string
     updatedAt?: DateTimeFilter<"Project"> | Date | string
     user?: XOR<UserNullableScalarRelationFilter, UserWhereInput> | null
+    shares?: ShareListRelationFilter
   }
 
   export type ProjectOrderByWithRelationInput = {
@@ -3326,6 +4595,7 @@ export namespace Prisma {
     createdAt?: SortOrder
     updatedAt?: SortOrder
     user?: UserOrderByWithRelationInput
+    shares?: ShareOrderByRelationAggregateInput
   }
 
   export type ProjectWhereUniqueInput = Prisma.AtLeast<{
@@ -3340,6 +4610,7 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"Project"> | Date | string
     updatedAt?: DateTimeFilter<"Project"> | Date | string
     user?: XOR<UserNullableScalarRelationFilter, UserWhereInput> | null
+    shares?: ShareListRelationFilter
   }, "id">
 
   export type ProjectOrderByWithAggregationInput = {
@@ -3366,6 +4637,71 @@ export namespace Prisma {
     data?: StringWithAggregatesFilter<"Project"> | string
     createdAt?: DateTimeWithAggregatesFilter<"Project"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Project"> | Date | string
+  }
+
+  export type ShareWhereInput = {
+    AND?: ShareWhereInput | ShareWhereInput[]
+    OR?: ShareWhereInput[]
+    NOT?: ShareWhereInput | ShareWhereInput[]
+    id?: StringFilter<"Share"> | string
+    token?: StringFilter<"Share"> | string
+    name?: StringFilter<"Share"> | string
+    data?: StringFilter<"Share"> | string
+    projectId?: StringNullableFilter<"Share"> | string | null
+    createdAt?: DateTimeFilter<"Share"> | Date | string
+    updatedAt?: DateTimeFilter<"Share"> | Date | string
+    project?: XOR<ProjectNullableScalarRelationFilter, ProjectWhereInput> | null
+  }
+
+  export type ShareOrderByWithRelationInput = {
+    id?: SortOrder
+    token?: SortOrder
+    name?: SortOrder
+    data?: SortOrder
+    projectId?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+    project?: ProjectOrderByWithRelationInput
+  }
+
+  export type ShareWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    token?: string
+    AND?: ShareWhereInput | ShareWhereInput[]
+    OR?: ShareWhereInput[]
+    NOT?: ShareWhereInput | ShareWhereInput[]
+    name?: StringFilter<"Share"> | string
+    data?: StringFilter<"Share"> | string
+    projectId?: StringNullableFilter<"Share"> | string | null
+    createdAt?: DateTimeFilter<"Share"> | Date | string
+    updatedAt?: DateTimeFilter<"Share"> | Date | string
+    project?: XOR<ProjectNullableScalarRelationFilter, ProjectWhereInput> | null
+  }, "id" | "token">
+
+  export type ShareOrderByWithAggregationInput = {
+    id?: SortOrder
+    token?: SortOrder
+    name?: SortOrder
+    data?: SortOrder
+    projectId?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+    _count?: ShareCountOrderByAggregateInput
+    _max?: ShareMaxOrderByAggregateInput
+    _min?: ShareMinOrderByAggregateInput
+  }
+
+  export type ShareScalarWhereWithAggregatesInput = {
+    AND?: ShareScalarWhereWithAggregatesInput | ShareScalarWhereWithAggregatesInput[]
+    OR?: ShareScalarWhereWithAggregatesInput[]
+    NOT?: ShareScalarWhereWithAggregatesInput | ShareScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"Share"> | string
+    token?: StringWithAggregatesFilter<"Share"> | string
+    name?: StringWithAggregatesFilter<"Share"> | string
+    data?: StringWithAggregatesFilter<"Share"> | string
+    projectId?: StringNullableWithAggregatesFilter<"Share"> | string | null
+    createdAt?: DateTimeWithAggregatesFilter<"Share"> | Date | string
+    updatedAt?: DateTimeWithAggregatesFilter<"Share"> | Date | string
   }
 
   export type UserCreateInput = {
@@ -3429,6 +4765,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     user?: UserCreateNestedOneWithoutProjectsInput
+    shares?: ShareCreateNestedManyWithoutProjectInput
   }
 
   export type ProjectUncheckedCreateInput = {
@@ -3439,6 +4776,7 @@ export namespace Prisma {
     data?: string
     createdAt?: Date | string
     updatedAt?: Date | string
+    shares?: ShareUncheckedCreateNestedManyWithoutProjectInput
   }
 
   export type ProjectUpdateInput = {
@@ -3449,6 +4787,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     user?: UserUpdateOneWithoutProjectsNestedInput
+    shares?: ShareUpdateManyWithoutProjectNestedInput
   }
 
   export type ProjectUncheckedUpdateInput = {
@@ -3459,6 +4798,7 @@ export namespace Prisma {
     data?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    shares?: ShareUncheckedUpdateManyWithoutProjectNestedInput
   }
 
   export type ProjectCreateManyInput = {
@@ -3486,6 +4826,75 @@ export namespace Prisma {
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     messages?: StringFieldUpdateOperationsInput | string
     data?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ShareCreateInput = {
+    id?: string
+    token: string
+    name?: string
+    data?: string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    project?: ProjectCreateNestedOneWithoutSharesInput
+  }
+
+  export type ShareUncheckedCreateInput = {
+    id?: string
+    token: string
+    name?: string
+    data?: string
+    projectId?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ShareUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    token?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    project?: ProjectUpdateOneWithoutSharesNestedInput
+  }
+
+  export type ShareUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    token?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    projectId?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ShareCreateManyInput = {
+    id?: string
+    token: string
+    name?: string
+    data?: string
+    projectId?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ShareUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    token?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ShareUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    token?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    projectId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -3599,9 +5008,19 @@ export namespace Prisma {
     isNot?: UserWhereInput | null
   }
 
+  export type ShareListRelationFilter = {
+    every?: ShareWhereInput
+    some?: ShareWhereInput
+    none?: ShareWhereInput
+  }
+
   export type SortOrderInput = {
     sort: SortOrder
     nulls?: NullsOrder
+  }
+
+  export type ShareOrderByRelationAggregateInput = {
+    _count?: SortOrder
   }
 
   export type ProjectCountOrderByAggregateInput = {
@@ -3650,6 +5069,41 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedStringNullableFilter<$PrismaModel>
     _max?: NestedStringNullableFilter<$PrismaModel>
+  }
+
+  export type ProjectNullableScalarRelationFilter = {
+    is?: ProjectWhereInput | null
+    isNot?: ProjectWhereInput | null
+  }
+
+  export type ShareCountOrderByAggregateInput = {
+    id?: SortOrder
+    token?: SortOrder
+    name?: SortOrder
+    data?: SortOrder
+    projectId?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type ShareMaxOrderByAggregateInput = {
+    id?: SortOrder
+    token?: SortOrder
+    name?: SortOrder
+    data?: SortOrder
+    projectId?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type ShareMinOrderByAggregateInput = {
+    id?: SortOrder
+    token?: SortOrder
+    name?: SortOrder
+    data?: SortOrder
+    projectId?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
   }
 
   export type ProjectCreateNestedManyWithoutUserInput = {
@@ -3708,6 +5162,20 @@ export namespace Prisma {
     connect?: UserWhereUniqueInput
   }
 
+  export type ShareCreateNestedManyWithoutProjectInput = {
+    create?: XOR<ShareCreateWithoutProjectInput, ShareUncheckedCreateWithoutProjectInput> | ShareCreateWithoutProjectInput[] | ShareUncheckedCreateWithoutProjectInput[]
+    connectOrCreate?: ShareCreateOrConnectWithoutProjectInput | ShareCreateOrConnectWithoutProjectInput[]
+    createMany?: ShareCreateManyProjectInputEnvelope
+    connect?: ShareWhereUniqueInput | ShareWhereUniqueInput[]
+  }
+
+  export type ShareUncheckedCreateNestedManyWithoutProjectInput = {
+    create?: XOR<ShareCreateWithoutProjectInput, ShareUncheckedCreateWithoutProjectInput> | ShareCreateWithoutProjectInput[] | ShareUncheckedCreateWithoutProjectInput[]
+    connectOrCreate?: ShareCreateOrConnectWithoutProjectInput | ShareCreateOrConnectWithoutProjectInput[]
+    createMany?: ShareCreateManyProjectInputEnvelope
+    connect?: ShareWhereUniqueInput | ShareWhereUniqueInput[]
+  }
+
   export type UserUpdateOneWithoutProjectsNestedInput = {
     create?: XOR<UserCreateWithoutProjectsInput, UserUncheckedCreateWithoutProjectsInput>
     connectOrCreate?: UserCreateOrConnectWithoutProjectsInput
@@ -3718,8 +5186,52 @@ export namespace Prisma {
     update?: XOR<XOR<UserUpdateToOneWithWhereWithoutProjectsInput, UserUpdateWithoutProjectsInput>, UserUncheckedUpdateWithoutProjectsInput>
   }
 
+  export type ShareUpdateManyWithoutProjectNestedInput = {
+    create?: XOR<ShareCreateWithoutProjectInput, ShareUncheckedCreateWithoutProjectInput> | ShareCreateWithoutProjectInput[] | ShareUncheckedCreateWithoutProjectInput[]
+    connectOrCreate?: ShareCreateOrConnectWithoutProjectInput | ShareCreateOrConnectWithoutProjectInput[]
+    upsert?: ShareUpsertWithWhereUniqueWithoutProjectInput | ShareUpsertWithWhereUniqueWithoutProjectInput[]
+    createMany?: ShareCreateManyProjectInputEnvelope
+    set?: ShareWhereUniqueInput | ShareWhereUniqueInput[]
+    disconnect?: ShareWhereUniqueInput | ShareWhereUniqueInput[]
+    delete?: ShareWhereUniqueInput | ShareWhereUniqueInput[]
+    connect?: ShareWhereUniqueInput | ShareWhereUniqueInput[]
+    update?: ShareUpdateWithWhereUniqueWithoutProjectInput | ShareUpdateWithWhereUniqueWithoutProjectInput[]
+    updateMany?: ShareUpdateManyWithWhereWithoutProjectInput | ShareUpdateManyWithWhereWithoutProjectInput[]
+    deleteMany?: ShareScalarWhereInput | ShareScalarWhereInput[]
+  }
+
   export type NullableStringFieldUpdateOperationsInput = {
     set?: string | null
+  }
+
+  export type ShareUncheckedUpdateManyWithoutProjectNestedInput = {
+    create?: XOR<ShareCreateWithoutProjectInput, ShareUncheckedCreateWithoutProjectInput> | ShareCreateWithoutProjectInput[] | ShareUncheckedCreateWithoutProjectInput[]
+    connectOrCreate?: ShareCreateOrConnectWithoutProjectInput | ShareCreateOrConnectWithoutProjectInput[]
+    upsert?: ShareUpsertWithWhereUniqueWithoutProjectInput | ShareUpsertWithWhereUniqueWithoutProjectInput[]
+    createMany?: ShareCreateManyProjectInputEnvelope
+    set?: ShareWhereUniqueInput | ShareWhereUniqueInput[]
+    disconnect?: ShareWhereUniqueInput | ShareWhereUniqueInput[]
+    delete?: ShareWhereUniqueInput | ShareWhereUniqueInput[]
+    connect?: ShareWhereUniqueInput | ShareWhereUniqueInput[]
+    update?: ShareUpdateWithWhereUniqueWithoutProjectInput | ShareUpdateWithWhereUniqueWithoutProjectInput[]
+    updateMany?: ShareUpdateManyWithWhereWithoutProjectInput | ShareUpdateManyWithWhereWithoutProjectInput[]
+    deleteMany?: ShareScalarWhereInput | ShareScalarWhereInput[]
+  }
+
+  export type ProjectCreateNestedOneWithoutSharesInput = {
+    create?: XOR<ProjectCreateWithoutSharesInput, ProjectUncheckedCreateWithoutSharesInput>
+    connectOrCreate?: ProjectCreateOrConnectWithoutSharesInput
+    connect?: ProjectWhereUniqueInput
+  }
+
+  export type ProjectUpdateOneWithoutSharesNestedInput = {
+    create?: XOR<ProjectCreateWithoutSharesInput, ProjectUncheckedCreateWithoutSharesInput>
+    connectOrCreate?: ProjectCreateOrConnectWithoutSharesInput
+    upsert?: ProjectUpsertWithoutSharesInput
+    disconnect?: ProjectWhereInput | boolean
+    delete?: ProjectWhereInput | boolean
+    connect?: ProjectWhereUniqueInput
+    update?: XOR<XOR<ProjectUpdateToOneWithWhereWithoutSharesInput, ProjectUpdateWithoutSharesInput>, ProjectUncheckedUpdateWithoutSharesInput>
   }
 
   export type NestedStringFilter<$PrismaModel = never> = {
@@ -3838,6 +5350,7 @@ export namespace Prisma {
     data?: string
     createdAt?: Date | string
     updatedAt?: Date | string
+    shares?: ShareCreateNestedManyWithoutProjectInput
   }
 
   export type ProjectUncheckedCreateWithoutUserInput = {
@@ -3847,6 +5360,7 @@ export namespace Prisma {
     data?: string
     createdAt?: Date | string
     updatedAt?: Date | string
+    shares?: ShareUncheckedCreateNestedManyWithoutProjectInput
   }
 
   export type ProjectCreateOrConnectWithoutUserInput = {
@@ -3907,6 +5421,34 @@ export namespace Prisma {
     create: XOR<UserCreateWithoutProjectsInput, UserUncheckedCreateWithoutProjectsInput>
   }
 
+  export type ShareCreateWithoutProjectInput = {
+    id?: string
+    token: string
+    name?: string
+    data?: string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ShareUncheckedCreateWithoutProjectInput = {
+    id?: string
+    token: string
+    name?: string
+    data?: string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ShareCreateOrConnectWithoutProjectInput = {
+    where: ShareWhereUniqueInput
+    create: XOR<ShareCreateWithoutProjectInput, ShareUncheckedCreateWithoutProjectInput>
+  }
+
+  export type ShareCreateManyProjectInputEnvelope = {
+    data: ShareCreateManyProjectInput | ShareCreateManyProjectInput[]
+    skipDuplicates?: boolean
+  }
+
   export type UserUpsertWithoutProjectsInput = {
     update: XOR<UserUpdateWithoutProjectsInput, UserUncheckedUpdateWithoutProjectsInput>
     create: XOR<UserCreateWithoutProjectsInput, UserUncheckedCreateWithoutProjectsInput>
@@ -3932,6 +5474,91 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
+  export type ShareUpsertWithWhereUniqueWithoutProjectInput = {
+    where: ShareWhereUniqueInput
+    update: XOR<ShareUpdateWithoutProjectInput, ShareUncheckedUpdateWithoutProjectInput>
+    create: XOR<ShareCreateWithoutProjectInput, ShareUncheckedCreateWithoutProjectInput>
+  }
+
+  export type ShareUpdateWithWhereUniqueWithoutProjectInput = {
+    where: ShareWhereUniqueInput
+    data: XOR<ShareUpdateWithoutProjectInput, ShareUncheckedUpdateWithoutProjectInput>
+  }
+
+  export type ShareUpdateManyWithWhereWithoutProjectInput = {
+    where: ShareScalarWhereInput
+    data: XOR<ShareUpdateManyMutationInput, ShareUncheckedUpdateManyWithoutProjectInput>
+  }
+
+  export type ShareScalarWhereInput = {
+    AND?: ShareScalarWhereInput | ShareScalarWhereInput[]
+    OR?: ShareScalarWhereInput[]
+    NOT?: ShareScalarWhereInput | ShareScalarWhereInput[]
+    id?: StringFilter<"Share"> | string
+    token?: StringFilter<"Share"> | string
+    name?: StringFilter<"Share"> | string
+    data?: StringFilter<"Share"> | string
+    projectId?: StringNullableFilter<"Share"> | string | null
+    createdAt?: DateTimeFilter<"Share"> | Date | string
+    updatedAt?: DateTimeFilter<"Share"> | Date | string
+  }
+
+  export type ProjectCreateWithoutSharesInput = {
+    id?: string
+    name: string
+    messages?: string
+    data?: string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    user?: UserCreateNestedOneWithoutProjectsInput
+  }
+
+  export type ProjectUncheckedCreateWithoutSharesInput = {
+    id?: string
+    name: string
+    userId?: string | null
+    messages?: string
+    data?: string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ProjectCreateOrConnectWithoutSharesInput = {
+    where: ProjectWhereUniqueInput
+    create: XOR<ProjectCreateWithoutSharesInput, ProjectUncheckedCreateWithoutSharesInput>
+  }
+
+  export type ProjectUpsertWithoutSharesInput = {
+    update: XOR<ProjectUpdateWithoutSharesInput, ProjectUncheckedUpdateWithoutSharesInput>
+    create: XOR<ProjectCreateWithoutSharesInput, ProjectUncheckedCreateWithoutSharesInput>
+    where?: ProjectWhereInput
+  }
+
+  export type ProjectUpdateToOneWithWhereWithoutSharesInput = {
+    where?: ProjectWhereInput
+    data: XOR<ProjectUpdateWithoutSharesInput, ProjectUncheckedUpdateWithoutSharesInput>
+  }
+
+  export type ProjectUpdateWithoutSharesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    messages?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    user?: UserUpdateOneWithoutProjectsNestedInput
+  }
+
+  export type ProjectUncheckedUpdateWithoutSharesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    userId?: NullableStringFieldUpdateOperationsInput | string | null
+    messages?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
   export type ProjectCreateManyUserInput = {
     id?: string
     name: string
@@ -3948,6 +5575,7 @@ export namespace Prisma {
     data?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    shares?: ShareUpdateManyWithoutProjectNestedInput
   }
 
   export type ProjectUncheckedUpdateWithoutUserInput = {
@@ -3957,12 +5585,49 @@ export namespace Prisma {
     data?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    shares?: ShareUncheckedUpdateManyWithoutProjectNestedInput
   }
 
   export type ProjectUncheckedUpdateManyWithoutUserInput = {
     id?: StringFieldUpdateOperationsInput | string
     name?: StringFieldUpdateOperationsInput | string
     messages?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ShareCreateManyProjectInput = {
+    id?: string
+    token: string
+    name?: string
+    data?: string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ShareUpdateWithoutProjectInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    token?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ShareUncheckedUpdateWithoutProjectInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    token?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ShareUncheckedUpdateManyWithoutProjectInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    token?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
     data?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
