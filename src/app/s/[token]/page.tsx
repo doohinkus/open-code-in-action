@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getShareData } from "@/lib/share";
+import { siteName, siteTagline } from "@/lib/og-image";
+import { getSiteUrl } from "@/lib/site-url";
 import { SharedPreview } from "@/components/share/SharedPreview";
 
 export const dynamic = "force-dynamic";
@@ -12,42 +14,45 @@ interface SharePageProps {
   params: Promise<{ token: string }>;
 }
 
-interface ShareData {
-  name: string;
-  files: Record<string, string>;
-}
-
-async function getShare(token: string): Promise<ShareData | null> {
-  if (!TOKEN_PATTERN.test(token)) return null;
-
-  const share = await prisma.share.findUnique({ where: { token } });
-  if (!share) return null;
-
-  let files: Record<string, string> = {};
-  try {
-    const parsed = JSON.parse(share.data);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      files = parsed;
-    }
-  } catch {
-    files = {};
-  }
-
-  return { name: share.name, files };
-}
-
 export async function generateMetadata({ params }: SharePageProps): Promise<Metadata> {
   const { token } = await params;
-  const share = await getShare(token);
+  if (!TOKEN_PATTERN.test(token)) {
+    return { title: "Shared component not found" };
+  }
+
+  const share = await getShareData(token);
   if (!share) {
     return { title: "Shared component not found" };
   }
-  return { title: `${share.name} · React Component Generator` };
+
+  const siteUrl = await getSiteUrl();
+  const pageUrl = `${siteUrl}/s/${token}`;
+  const imageUrl = `${pageUrl}/opengraph-image`;
+  const title = share.name;
+
+  return {
+    title,
+    description: siteTagline,
+    openGraph: {
+      type: "website",
+      siteName,
+      title,
+      description: siteTagline,
+      url: pageUrl,
+      locale: "en_US",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: siteTagline,
+      images: [{ url: imageUrl, width: 1200, height: 630, alt: share.name }],
+    },
+  };
 }
 
 export default async function SharePage({ params }: SharePageProps) {
   const { token } = await params;
-  const share = await getShare(token);
+  const share = await getShareData(token);
   if (!share) {
     notFound();
   }

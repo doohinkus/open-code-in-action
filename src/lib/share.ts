@@ -18,6 +18,32 @@ export {
 } from "@/lib/share-utils";
 export type { ShareInput } from "@/lib/share-utils";
 
+const TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+export interface ShareData {
+  name: string;
+  files: Record<string, string>;
+}
+
+export async function getShareData(token: string): Promise<ShareData | null> {
+  if (!TOKEN_PATTERN.test(token)) return null;
+
+  const share = await prisma.share.findUnique({ where: { token } });
+  if (!share) return null;
+
+  let files: Record<string, string> = {};
+  try {
+    const parsed = JSON.parse(share.data);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      files = parsed;
+    }
+  } catch {
+    files = {};
+  }
+
+  return { name: share.name, files };
+}
+
 export async function shareOwnerProjectId(
   projectId: string,
   userId: string
