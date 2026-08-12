@@ -23,7 +23,8 @@
 - No API key needed: `MockLanguageModel` in `src/lib/provider.ts` returns canned components (4-step limit, counter/form/card)
 - Provider priority (highest first): Google Gemini (`GOOGLE_API_KEY`) → OpenAI-compatible (`OPENAI_COMPATIBLE_BASE_URL`/`OPENAI_COMPATIBLE_MODEL`) → Anthropic Claude (`ANTHROPIC_API_KEY`) → Mock fallback
 - Chat API route: `src/app/api/chat/route.ts` — uses `ai` SDK `streamText` with tools; rate-limited to 30 requests/min/IP; `maxDuration = 120` for Vercel serverless
-- Mock provider uses `maxSteps=4`; real providers use `maxSteps=40` (`route.ts:172`)
+- Mock provider uses `maxSteps=4`; real providers use `maxSteps=5` (`route.ts:215`)
+- OpenAI-compatible provider sends `providerOptions["opencode-compatible"] = { reasoningEffort: "low" }` (`route.ts:222`)
 - Stream errors are surfaced to the client via `getErrorMessage` (`describeError` in `route.ts`); the AI SDK's default masks them as "An error occurred." — `mapErrorMessage` in `ChatInterface.tsx` shows the real message unless it's exactly that mask
 - AI tools: `str_replace_editor` (view/create/replace/insert) and `file_manager` (rename/delete) — operate on VirtualFileSystem
 - System prompt: `src/lib/prompts/generation.tsx` — requires `/App.jsx` entrypoint, `@/` import alias, Tailwind CSS
