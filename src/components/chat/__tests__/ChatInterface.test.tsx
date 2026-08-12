@@ -1,7 +1,7 @@
-import { test, expect, vi, afterEach, beforeEach } from "vitest";
+import { test, expect, vi, afterEach, beforeEach, describe } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ChatInterface } from "../ChatInterface";
+import { ChatInterface, mapErrorMessage } from "../ChatInterface";
 import { useChat } from "@/lib/contexts/chat-context";
 import { ToastProvider } from "@/components/ui/toast";
 
@@ -59,6 +59,7 @@ const mockUseChat = {
   reload: vi.fn(),
   stop: vi.fn(),
   generationTimedOut: false,
+  generationInterrupted: false,
 };
 
 beforeEach(() => {
@@ -290,4 +291,55 @@ test("shows a timeout toast when generation timed out", async () => {
       screen.getByText("Generation timed out. Please try again.")
     ).toBeDefined();
   });
+});
+
+describe("mapErrorMessage", () => {
+  test("maps rate limit errors to a friendly message", () => {
+    expect(mapErrorMessage("Rate limit exceeded")).toBe(
+      "Too many requests. Please wait a moment and try again."
+    );
+  });
+
+  test("maps FreeUsageLimit/quota errors to the credits message", () => {
+    expect(mapErrorMessage("FreeUsageLimit: You've reached the free usage limit.")).toBe(
+      "AI provider account has no credits or has hit its usage limit. Please add a payment method or try again later."
+    );
+    expect(mapErrorMessage("insufficient credits for this request")).toBe(
+      "AI provider account has no credits or has hit its usage limit. Please add a payment method or try again later."
+    );
+  });
+
+  test("falls back to the real server message when no pattern matches", () => {
+    expect(mapErrorMessage("Model temporarily overloaded")).toBe(
+      "Model temporarily overloaded"
+    );
+  });
+
+  test("extracts the real server message from a JSON error body", () => {
+    expect(mapErrorMessage('{"error":"Upstream provider 502"}')).toBe(
+      "Upstream provider 502"
+    );
+  });
+
+  test("uses the generic fallback for the SDK-masked error", () => {
+    expect(mapErrorMessage("An error occurred.")).toBe(
+      "Something went wrong. Please try again."
+    );
+  });
+});
+
+test("shows an interrupted banner when the generation was cut short", () => {
+  (useChat as any).mockReturnValue({
+    ...mockUseChat,
+    status: "ready",
+    generationInterrupted: true,
+  });
+
+  render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
+
+  expect(screen.getByText(/Generation was interrupted/i)).toBeDefined();
 });

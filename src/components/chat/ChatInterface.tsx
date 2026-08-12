@@ -8,7 +8,7 @@ import { useChat } from "@/lib/contexts/chat-context";
 import { useToast } from "@/components/ui/toast";
 import { RotateCcw, FlaskConical, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
-function mapErrorMessage(raw: string): string {
+export function mapErrorMessage(raw: string): string {
   let serverMessage: string | null = null;
   try {
     const parsed = JSON.parse(raw);
@@ -40,10 +40,13 @@ function mapErrorMessage(raw: string): string {
   if (/internal server error/i.test(text)) {
     return "AI provider returned an internal server error. The model may be temporarily unavailable. Please try again or switch models.";
   }
-  if (/CreditsError|no payment|billing/i.test(text)) {
-    return "AI provider account has no credits. Please add a payment method or switch to a free model.";
+  if (/CreditsError|no payment|billing|FreeUsageLimit|quota|insufficient credits/i.test(text)) {
+    return "AI provider account has no credits or has hit its usage limit. Please add a payment method or try again later.";
   }
-  return serverMessage || "Something went wrong. Please try again.";
+  if (text === "An error occurred.") {
+    return "Something went wrong. Please try again.";
+  }
+  return text || "Something went wrong. Please try again.";
 }
 
 export function ChatInterface() {
@@ -58,6 +61,7 @@ export function ChatInterface() {
     reload,
     stop,
     generationTimedOut,
+    generationInterrupted,
     append,
   } = useChat();
   const { toast } = useToast();
@@ -95,9 +99,12 @@ export function ChatInterface() {
         if (done) break;
         text += decoder.decode(value, { stream: true });
       }
-      if (text.includes("Internal server error") || text.includes("CreditsError")) {
-        const detail = text.includes("CreditsError") ? "No credits on account" : "Provider returned 500";
-        toast(`Provider error: ${detail}`, "error");
+      const match = text.match(/(?:^|\n)3:"([^"]*)"/);
+      if (match) {
+        toast(
+          `Provider error: ${match[1] || "the AI provider returned an error while streaming"}`,
+          "error"
+        );
         setTestStatus("fail");
       } else {
         toast("Provider is healthy", "success");
@@ -150,6 +157,12 @@ export function ChatInterface() {
               <RotateCcw className="h-3.5 w-3.5" />
               Retry
             </button>
+          </div>
+        )}
+        {generationInterrupted && (
+          <div className="mb-3 px-3 py-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg">
+            Generation was interrupted and may be incomplete. Say
+            &ldquo;continue&rdquo; to keep going, or try again.
           </div>
         )}
         <MessageInput

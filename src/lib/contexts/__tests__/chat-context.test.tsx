@@ -33,6 +33,9 @@ function TestComponent() {
         <button type="submit">Submit</button>
       </form>
       <div data-testid="status">{chat.status}</div>
+      <div data-testid="interrupted">
+        {chat.generationInterrupted ? "true" : "false"}
+      </div>
     </div>
   );
 }
@@ -113,9 +116,44 @@ describe("ChatContext", () => {
         projectId: "test-project",
       },
       onToolCall: expect.any(Function),
+      onFinish: expect.any(Function),
     });
 
     expect(screen.getByTestId("messages").textContent).toBe("2");
+  });
+
+  test("sets generationInterrupted when the stream ends without a finish reason", () => {
+    render(
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+    );
+
+    const useAIChatMock = useAIChat as any;
+    const onFinish = useAIChatMock.mock.calls[0][0].onFinish;
+
+    act(() => {
+      onFinish({ message: {}, finishReason: "unknown", usage: {} });
+    });
+
+    expect(screen.getByTestId("interrupted").textContent).toBe("true");
+  });
+
+  test("does not set generationInterrupted on a normal finish", () => {
+    render(
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+    );
+
+    const useAIChatMock = useAIChat as any;
+    const onFinish = useAIChatMock.mock.calls[0][0].onFinish;
+
+    act(() => {
+      onFinish({ message: {}, finishReason: "stop", usage: {} });
+    });
+
+    expect(screen.getByTestId("interrupted").textContent).toBe("false");
   });
 
   test("tracks anonymous work when no project ID", async () => {

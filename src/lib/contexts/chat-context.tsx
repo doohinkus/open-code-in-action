@@ -32,6 +32,7 @@ interface ChatContextType {
   stop: () => void;
   requestFix: (errorText: string) => void;
   generationTimedOut: boolean;
+  generationInterrupted: boolean;
 }
 
 const STALL_TIMEOUT_MS = 130_000;
@@ -70,16 +71,23 @@ export function ChatProvider({
     onToolCall: ({ toolCall }) => {
       handleToolCall(toolCall);
     },
+    onFinish: (message, options) => {
+      const event = message as unknown as { finishReason?: string };
+      const finishReason = event?.finishReason ?? options?.finishReason;
+      setGenerationInterrupted(finishReason === "unknown");
+    },
   });
 
   const fixAttemptCount = useRef(0);
   const prevStatusRef = useRef(status);
   const [generationTimedOut, setGenerationTimedOut] = useState(false);
+  const [generationInterrupted, setGenerationInterrupted] = useState(false);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
       fixAttemptCount.current = 0;
       setGenerationTimedOut(false);
+      setGenerationInterrupted(false);
       setIsFixingErrors(false);
       originalHandleSubmit(e);
     },
@@ -118,7 +126,7 @@ export function ChatProvider({
     prevStatusRef.current = status;
 
     if (!wasStreaming || !isNowReady) return;
-    if (generationTimedOut) {
+    if (generationTimedOut || generationInterrupted) {
       setIsFixingErrors(false);
       return;
     }
@@ -137,7 +145,7 @@ export function ChatProvider({
     } else {
       setIsFixingErrors(false);
     }
-  }, [status, validateCurrentFiles, setIsFixingErrors, append, generationTimedOut]);
+  }, [status, validateCurrentFiles, setIsFixingErrors, append, generationTimedOut, generationInterrupted]);
 
   // Track anonymous work
   useEffect(() => {
@@ -161,6 +169,7 @@ export function ChatProvider({
         stop,
         requestFix,
         generationTimedOut,
+        generationInterrupted,
       }}
     >
       {children}

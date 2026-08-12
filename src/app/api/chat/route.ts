@@ -55,6 +55,25 @@ function isUsingAnthropic(): boolean {
          !!(process.env.ANTHROPIC_API_KEY?.trim() && process.env.ANTHROPIC_API_KEY?.trim() !== "your-api-key-here");
 }
 
+// Stream errors can be Error instances or plain provider objects (e.g.
+// { error: { type, message } }). Produce a readable message so the client
+// can surface the real cause instead of the SDK's masked default.
+function describeError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const nested = record.error as Record<string, unknown> | undefined;
+    const message = record.message ?? nested?.message ?? nested?.type;
+    if (typeof message === "string" && message) return message;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      // fall through to the generic string below
+    }
+  }
+  return String(error ?? "An error occurred.");
+}
+
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "http://localhost:3001",
@@ -224,7 +243,7 @@ export async function POST(req: Request) {
     onError: (err: any) => {
       logger.error("chat.stream.error", {
         requestId,
-        error: err instanceof Error ? err.message : String(err),
+        error: describeError(err),
       });
       Sentry.captureException(err, { tags: { requestId } });
       span.setAttribute("finishReason", "error");
@@ -299,7 +318,10 @@ export async function POST(req: Request) {
     },
   });
 
-  const aiResponse = result.toDataStreamResponse({ sendReasoning: true });
+  const aiResponse = result.toDataStreamResponse({
+    sendReasoning: true,
+    getErrorMessage: describeError,
+  });
 
   // Add CORS headers for credentialed requests
   const origin = req.headers.get("origin") || "";
