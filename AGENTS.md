@@ -23,8 +23,10 @@
 - No API key needed: `MockLanguageModel` in `src/lib/provider.ts` returns canned components (4-step limit, counter/form/card)
 - Provider priority (highest first): Google Gemini (`GOOGLE_API_KEY`) → OpenAI-compatible (`OPENAI_COMPATIBLE_BASE_URL`/`OPENAI_COMPATIBLE_MODEL`) → Anthropic Claude (`ANTHROPIC_API_KEY`) → Mock fallback
 - Chat API route: `src/app/api/chat/route.ts` — uses `ai` SDK `streamText` with tools; rate-limited to 30 requests/min/IP; `maxDuration = 120` for Vercel serverless
-- Mock provider uses `maxSteps=4`; real providers use `maxSteps=5` (`route.ts:215`)
-- OpenAI-compatible provider sends `providerOptions["opencode-compatible"] = { reasoningEffort: "low" }` (`route.ts:222`)
+- Mock provider uses `maxSteps=4`; real providers use `maxSteps=5`; test-connection requests use `maxSteps=1`, `maxTokens=64` (`route.ts:314`)
+- OpenAI-compatible provider sends `providerOptions["opencode-compatible"] = { reasoningEffort: "low" }` (`route.ts:322`)
+- **Payload reduction** (to cut provider token usage): full history kept for persistence as `originalMessages`; the model gets a compacted copy via `prepareModelMessages` (`src/lib/message-compaction.ts`) — history capped at 12 messages, non-last assistant messages collapsed to ≤300-char text placeholders, `reasoning` parts stripped
+- **VFS caching**: server keeps an in-memory VFS cache (10-min TTL, 100 entries) keyed by `project:${projectId}` or `anon:${sessionKey}`; clients omit `files` unless the revision is dirty and transparently retry on HTTP `428 VFS_RESYNC_REQUIRED` (`chat-context.tsx`)
 - Stream errors are surfaced to the client via `getErrorMessage` (`describeError` in `route.ts`); the AI SDK's default masks them as "An error occurred." — `mapErrorMessage` in `ChatInterface.tsx` shows the real message unless it's exactly that mask
 - AI tools: `str_replace_editor` (view/create/replace/insert) and `file_manager` (rename/delete) — operate on VirtualFileSystem
 - System prompt: `src/lib/prompts/generation.tsx` — requires `/App.jsx` entrypoint, `@/` import alias, Tailwind CSS

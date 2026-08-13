@@ -117,9 +117,9 @@ export function GenerationActivityLog() {
         ref={scrollRef}
         className="max-h-48 overflow-y-auto space-y-1.5 pr-1"
       >
-        {activities.map((activity) => (
+        {activities.map((activity, index) => (
           <div
-            key={activity.id}
+            key={`${activity.id}-${index}`}
             className="flex items-center gap-2 px-2.5 py-1.5 bg-white/60 rounded-md border border-gray-100"
           >
             {activity.status === "done" ? (

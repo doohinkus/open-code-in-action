@@ -77,6 +77,7 @@ export function ChatInterface() {
         body: JSON.stringify({
           messages: [{ role: "user", content: "Reply with only the word OK" }],
           files: {},
+          test: true,
         }),
       });
       if (!res.ok) {

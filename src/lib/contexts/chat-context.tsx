@@ -12,7 +12,7 @@ import {
 import { useChat as useAIChat } from "@ai-sdk/react";
 import { Message } from "ai";
 import { useFileSystem } from "./file-system-context";
-import { setHasAnonWork } from "@/lib/anon-work-tracker";
+import { setHasAnonWork, getOrCreateAnonSessionKey } from "@/lib/anon-work-tracker";
 
 interface ChatContextProps {
   projectId?: string;
@@ -49,7 +49,60 @@ export function ChatProvider({
     handleToolCall,
     validateCurrentFiles,
     setIsFixingErrors,
+    vfsRevision,
   } = useFileSystem();
+
+  const vfsRevisionRef = useRef(vfsRevision);
+  vfsRevisionRef.current = vfsRevision;
+  // The revision the server last acknowledged. Starts at -1 so the first
+  // request always ships the full filesystem payload.
+  const lastSyncedRevisionRef = useRef(-1);
+  const anonSessionKeyRef = useRef<string | null>(null);
+
+  const sessionKey = projectId ?? anonSessionKeyRef.current ?? getOrCreateAnonSessionKey();
+  if (!projectId) anonSessionKeyRef.current = sessionKey;
+
+  // Build a reduced request body: ship the full filesystem only when the
+  // server cache is stale (revision mismatch). Messages go through the SDK.
+  const experimental_prepareRequestBody = ({
+    id,
+    messages,
+    requestData,
+    requestBody,
+  }: any) => {
+    const isDirty = vfsRevisionRef.current !== lastSyncedRevisionRef.current;
+    return {
+      ...(requestBody as object),
+      id,
+      messages,
+      ...(requestData !== undefined && { data: requestData }),
+      projectId,
+      sessionKey,
+      vfsRevision: vfsRevisionRef.current,
+      ...(isDirty && { files: fileSystem.serialize() }),
+    };
+  };
+
+  // Transparently resend the full filesystem when the server asks for a
+  // resync (cache miss after a cold start / TTL expiry), and track the last
+  // acknowledged revision so we stop shipping files once the server is warm.
+  const fetchWithVfsResync: typeof fetch = async (input, init) => {
+    const response = await globalThis.fetch(input, init);
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+    const sentRevision = body?.vfsRevision;
+    if (response.status === 428 && body && sentRevision !== undefined) {
+      const retried = await globalThis.fetch(input, {
+        ...init,
+        body: JSON.stringify({ ...body, files: fileSystem.serialize() }),
+      });
+      lastSyncedRevisionRef.current = sentRevision;
+      return retried;
+    }
+    if (response.ok && sentRevision !== undefined) {
+      lastSyncedRevisionRef.current = sentRevision;
+    }
+    return response;
+  };
 
   const {
     messages,
@@ -64,10 +117,8 @@ export function ChatProvider({
   } = useAIChat({
     api: "/api/chat",
     initialMessages,
-    body: {
-      files: fileSystem.serialize(),
-      projectId,
-    },
+    fetch: fetchWithVfsResync,
+    experimental_prepareRequestBody,
     onToolCall: ({ toolCall }) => {
       handleToolCall(toolCall);
     },
@@ -132,7 +183,7 @@ export function ChatProvider({
     }
 
     const errors = validateCurrentFiles();
-    if (errors.length > 0 && fixAttemptCount.current < 2) {
+    if (errors.length > 0 && fixAttemptCount.current < 1) {
       fixAttemptCount.current++;
       setIsFixingErrors(true);
       const errorList = errors

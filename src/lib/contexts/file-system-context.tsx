@@ -26,6 +26,7 @@ interface FileSystemContextType {
   getFileContent: (path: string) => string | null;
   getAllFiles: () => Map<string, string>;
   refreshTrigger: number;
+  vfsRevision: number;
   handleToolCall: (toolCall: ToolCall) => void;
   reset: () => void;
   syntaxErrors: Array<{ path: string; error: string }>;
@@ -57,6 +58,7 @@ export function FileSystemProvider({
   });
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [vfsRevision, setVfsRevision] = useState(0);
   const [syntaxErrors, setSyntaxErrors] = useState<
     Array<{ path: string; error: string }>
   >([]);
@@ -64,6 +66,7 @@ export function FileSystemProvider({
 
   const triggerRefresh = useCallback(() => {
     setRefreshTrigger((prev) => prev + 1);
+    setVfsRevision((prev) => prev + 1);
   }, []);
 
   useEffect(() => {
@@ -243,6 +246,7 @@ export function FileSystemProvider({
         getFileContent,
         getAllFiles,
         refreshTrigger,
+        vfsRevision,
         handleToolCall,
         reset,
         syntaxErrors,
