@@ -26,30 +26,33 @@ jobs:
 
       - run: npm run build
 
-  e2e-a11y:
-    name: E2E & A11y
-    needs: lint-test-build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "25"
-          cache: "npm"
-
-      - run: npm ci
-
-      - run: npx prisma generate
-
-      - run: npx prisma migrate dev --name init
-
-      - run: npx playwright install chromium --with-deps
-
-      - run: npx playwright test
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: playwright-report/
+  # e2e-a11y: disabled until CI infra is restored. Job regressed on main in
+  # 7696b1f (Postgres service + Neon Auth env removed); it would also need a
+  # web server to boot. Re-enable after fixing the job setup.
+  # e2e-a11y:
+  #   name: E2E & A11y
+  #   needs: lint-test-build
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "25"
+  #         cache: "npm"
+  #
+  #     - run: npm ci
+  #
+  #     - run: npx prisma generate
+  #
+  #     - run: npx prisma migrate dev --name init
+  #
+  #     - run: npx playwright install chromium --with-deps
+  #
+  #     - run: npx playwright test
+  #
+  #     - uses: actions/upload-artifact@v4
+  #       if: always()
+  #       with:
+  #         name: playwright-report
+  #         path: playwright-report/
