@@ -1,6 +1,7 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, act, cleanup } from "@testing-library/react";
 import { ChatProvider, useChat } from "../chat-context";
+import { ToastProvider } from "@/components/ui/toast";
 import { useFileSystem } from "../file-system-context";
 import { useChat as useAIChat } from "@ai-sdk/react";
 import * as anonTracker from "@/lib/anon-work-tracker";
@@ -87,9 +88,11 @@ describe("ChatContext", () => {
 
   test("renders with default values", () => {
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     expect(screen.getByTestId("messages").textContent).toBe("0");
@@ -109,9 +112,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider projectId="test-project" initialMessages={initialMessages}>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     expect(useAIChat).toHaveBeenCalledWith({
@@ -128,9 +133,11 @@ describe("ChatContext", () => {
 
   test("sets generationInterrupted when the stream ends without a finish reason", () => {
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     const useAIChatMock = useAIChat as any;
@@ -145,9 +152,11 @@ describe("ChatContext", () => {
 
   test("does not set generationInterrupted on a normal finish", () => {
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     const useAIChatMock = useAIChat as any;
@@ -169,9 +178,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     await waitFor(() => {
@@ -191,9 +202,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider projectId="test-project">
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -213,9 +226,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     expect(screen.getByTestId("status").textContent).toBe("loading");
@@ -230,9 +245,11 @@ describe("ChatContext", () => {
 
   test("includes the stored model in the request body", () => {
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     const useAIChatMock = useAIChat as any;
@@ -258,9 +275,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     const toolCall = { toolName: "test", args: {} };
@@ -280,9 +299,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     act(() => {
@@ -305,9 +326,11 @@ describe("ChatContext", () => {
     });
 
     const { rerender } = render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     (useAIChat as any).mockReturnValue({
@@ -317,9 +340,11 @@ describe("ChatContext", () => {
     });
 
     rerender(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     expect(mockAppend).toHaveBeenCalledWith({
@@ -338,9 +363,11 @@ describe("ChatContext", () => {
     });
 
     const { rerender } = render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     (useAIChat as any).mockReturnValue({
@@ -350,9 +377,11 @@ describe("ChatContext", () => {
     });
 
     rerender(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     expect(mockAppend).not.toHaveBeenCalled();
