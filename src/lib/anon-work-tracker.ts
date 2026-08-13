@@ -1,6 +1,22 @@
 // Simple utility to track if anonymous user has created work
 const STORAGE_KEY = "uigen_has_anon_work";
 const DATA_KEY = "uigen_anon_data";
+const SESSION_KEY = "uigen_session_key";
+
+// Stable per-browser-session identifier for anonymous users. Used as the
+// server-side filesystem cache key so unauthenticated work stays isolated.
+export function getOrCreateAnonSessionKey(): string {
+  if (typeof window === "undefined") return "anon-unknown";
+  let key = sessionStorage.getItem(SESSION_KEY);
+  if (!key) {
+    key =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? `anon-${crypto.randomUUID()}`
+        : `anon-${Math.random().toString(36).slice(2)}`;
+    sessionStorage.setItem(SESSION_KEY, key);
+  }
+  return key;
+}
 
 export function setHasAnonWork(messages: any[], fileSystemData: any) {
   if (typeof window === "undefined") return;

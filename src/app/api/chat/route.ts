@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getLanguageModel } from "@/lib/provider";
 import { generationPrompt } from "@/lib/prompts/generation";
+import { prepareModelMessages } from "@/lib/message-compaction";
 import { logger, getRequestId, hashIp } from "@/lib/observability/logger";
 
 const MAX_MESSAGE_COUNT = 200;
@@ -15,6 +16,16 @@ const MAX_MESSAGE_LENGTH = 50_000;
 const MAX_TOTAL_MESSAGES_LENGTH = 500_000;
 const MAX_FILES_COUNT = 500;
 const MAX_FILE_SIZE = 100_000;
+
+// Server-side virtual filesystem cache so clients don't resend every file
+// with each request. Best-effort (in-memory): a cache miss triggers a client
+// resync (HTTP 428), after which the client retries with the full payload.
+const VFS_CACHE_TTL_MS = 10 * 60 * 1000;
+const VFS_CACHE_MAX_ENTRIES = 100;
+const vfsCache = new Map<
+  string,
+  { revision: number; fileSystem: VirtualFileSystem; expiresAt: number }
+>();
 
 const ipRequestCounts = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -38,6 +49,62 @@ function checkRateLimit(ip: string): boolean {
     return false;
   }
   return true;
+}
+
+function pruneVfsCache(): void {
+  const now = Date.now();
+  for (const [key, entry] of vfsCache) {
+    if (entry.expiresAt <= now) vfsCache.delete(key);
+  }
+  if (vfsCache.size > VFS_CACHE_MAX_ENTRIES) {
+    const sorted = [...vfsCache.entries()].sort(
+      (a, b) => a[1].expiresAt - b[1].expiresAt
+    );
+    for (let i = 0; i < vfsCache.size - VFS_CACHE_MAX_ENTRIES; i++) {
+      vfsCache.delete(sorted[i][0]);
+    }
+  }
+}
+
+type VfsResolution =
+  | { fileSystem: VirtualFileSystem }
+  | { resync: true };
+
+// Use a cached virtual filesystem when the client omits files (the common
+// case after the first request). Missing/stale caches return resync so the
+// client re-sends the full payload.
+function resolveFileSystem(
+  files: Record<string, FileNode> | undefined,
+  cacheKey: string | null,
+  vfsRevision: number | undefined
+): VfsResolution {
+  if (files !== undefined) {
+    const fs = new VirtualFileSystem();
+    fs.deserializeFromNodes(files);
+    if (cacheKey) {
+      vfsCache.set(cacheKey, {
+        revision: vfsRevision ?? 0,
+        fileSystem: fs,
+        expiresAt: Date.now() + VFS_CACHE_TTL_MS,
+      });
+      pruneVfsCache();
+    }
+    return { fileSystem: fs };
+  }
+
+  const cached = cacheKey ? vfsCache.get(cacheKey) : undefined;
+  if (
+    cached &&
+    cached.expiresAt > Date.now() &&
+    cached.revision === (vfsRevision ?? 0)
+  ) {
+    // Clone so tool calls during this request don't mutate the shared cache.
+    const fs = new VirtualFileSystem();
+    fs.deserializeFromNodes(cached.fileSystem.serialize());
+    return { fileSystem: fs };
+  }
+
+  return { resync: true };
 }
 
 function hasRealProvider(): boolean {
@@ -92,7 +159,7 @@ function checkOrigin(req: Request): boolean {
 
 function validateInput(
   messages: any[],
-  files: Record<string, FileNode>
+  files: Record<string, FileNode> | undefined
 ): string | null {
   if (!Array.isArray(messages)) return "messages must be an array";
   if (messages.length > MAX_MESSAGE_COUNT) {
@@ -111,14 +178,17 @@ function validateInput(
     }
   }
 
-  if (typeof files !== "object" || files === null) return "files must be an object";
-  const fileKeys = Object.keys(files);
-  if (fileKeys.length > MAX_FILES_COUNT) {
-    return `files count exceeds limit of ${MAX_FILES_COUNT}`;
-  }
-  for (const [path, node] of Object.entries(files)) {
-    if (node.content && node.content.length > MAX_FILE_SIZE) {
-      return `file ${path} exceeds maximum size of ${MAX_FILE_SIZE}`;
+  // Files are optional: they are omitted once the server has a cached VFS.
+  if (files !== undefined) {
+    if (typeof files !== "object" || files === null) return "files must be an object";
+    const fileKeys = Object.keys(files);
+    if (fileKeys.length > MAX_FILES_COUNT) {
+      return `files count exceeds limit of ${MAX_FILES_COUNT}`;
+    }
+    for (const [path, node] of Object.entries(files)) {
+      if (node.content && node.content.length > MAX_FILE_SIZE) {
+        return `file ${path} exceeds maximum size of ${MAX_FILE_SIZE}`;
+      }
     }
   }
 
@@ -174,8 +244,17 @@ export async function POST(req: Request) {
     messages,
     files,
     projectId,
-  }: { messages: any[]; files: Record<string, FileNode>; projectId?: string } =
-    await req.json();
+    sessionKey,
+    vfsRevision,
+    test,
+  }: {
+    messages: any[];
+    files?: Record<string, FileNode>;
+    projectId?: string;
+    sessionKey?: string;
+    vfsRevision?: number;
+    test?: boolean;
+  } = await req.json();
 
   const validationError = validateInput(messages, files);
   if (validationError) {
@@ -200,19 +279,40 @@ export async function POST(req: Request) {
     );
   }
 
-  messages.unshift({
+  // Keep the full, unmodified history for persistence; build a reduced copy
+  // for the model so old code and reasoning tokens aren't re-sent.
+  const originalMessages: any[] = messages;
+  const modelMessages: any[] = prepareModelMessages(messages);
+
+  modelMessages.unshift({
     role: "system",
     content: generationPrompt,
     ...(isUsingAnthropic() ? { providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } } } : {}),
   });
 
-  // Reconstruct the VirtualFileSystem from serialized data
-  const fileSystem = new VirtualFileSystem();
-  fileSystem.deserializeFromNodes(files);
+  // Reconstruct the VirtualFileSystem, preferring the server-side cache when
+  // the client omits files. A cache miss asks the client to resync (428).
+  const cacheKey = projectId
+    ? `project:${projectId}`
+    : sessionKey
+      ? `anon:${sessionKey}`
+      : null;
+  const vfsResolution = resolveFileSystem(files, cacheKey, vfsRevision);
+  if ("resync" in vfsResolution) {
+    logger.info("chat.request.vfs_resync", { requestId, cacheKey });
+    return Response.json(
+      { error: "Filesystem resync required", code: "VFS_RESYNC_REQUIRED" },
+      { status: 428 }
+    );
+  }
+  const fileSystem = vfsResolution.fileSystem;
 
   const model = getLanguageModel();
+  // Test-connection requests are minimal: one model call, tiny output.
+  const isTestRequest = test === true;
   // Use fewer steps for mock provider to prevent repetition
-  const maxSteps = hasRealProvider() ? 5 : 4;
+  const maxSteps = isTestRequest ? 1 : hasRealProvider() ? 5 : 4;
+  const maxTokens = isTestRequest ? 64 : 10_000;
 
   const reasoningOptions: Record<string, any> = {};
   if (
@@ -236,8 +336,8 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model,
-    messages,
-    maxTokens: 10_000,
+    messages: modelMessages,
+    maxTokens,
     maxSteps,
     ...(Object.keys(reasoningOptions).length > 0 && { providerOptions: reasoningOptions }),
     onError: (err: any) => {
@@ -289,7 +389,7 @@ export async function POST(req: Request) {
           const responseMessages = response.messages || [];
           // Combine original messages with response messages
           const allMessages = appendResponseMessages({
-            messages: [...messages.filter((m) => m.role !== "system")],
+            messages: originalMessages,
             responseMessages,
           });
 

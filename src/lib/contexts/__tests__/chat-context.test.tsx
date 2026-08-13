@@ -16,6 +16,7 @@ vi.mock("@ai-sdk/react", () => ({
 
 vi.mock("@/lib/anon-work-tracker", () => ({
   setHasAnonWork: vi.fn(),
+  getOrCreateAnonSessionKey: vi.fn(() => "anon-test-key"),
 }));
 
 // Helper component to access chat context
@@ -69,6 +70,7 @@ describe("ChatContext", () => {
       handleToolCall: mockHandleToolCall,
       validateCurrentFiles: mockValidateCurrentFiles,
       setIsFixingErrors: mockSetIsFixingErrors,
+      vfsRevision: 0,
     });
 
     (useAIChat as any).mockReturnValue(mockUseAIChat);
@@ -111,10 +113,8 @@ describe("ChatContext", () => {
     expect(useAIChat).toHaveBeenCalledWith({
       api: "/api/chat",
       initialMessages,
-      body: {
-        files: mockFileSystem.serialize(),
-        projectId: "test-project",
-      },
+      fetch: expect.any(Function),
+      experimental_prepareRequestBody: expect.any(Function),
       onToolCall: expect.any(Function),
       onFinish: expect.any(Function),
     });
