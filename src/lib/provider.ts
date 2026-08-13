@@ -509,7 +509,7 @@ export default function App() {
   }
 }
 
-export function getLanguageModel() {
+export function getLanguageModel(modelId?: string) {
   if (process.env.FORCE_MOCK_PROVIDER?.trim() === "1") {
     console.log(
       "FORCE_MOCK_PROVIDER=1 is set. Using the mock provider for deterministic tests."
@@ -526,7 +526,8 @@ export function getLanguageModel() {
   }
 
   const openaiCompatibleBaseURL = process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
-  const openaiCompatibleModel = process.env.OPENAI_COMPATIBLE_MODEL?.trim();
+  const openaiCompatibleModel =
+    modelId?.trim() || process.env.OPENAI_COMPATIBLE_MODEL?.trim();
 
   if (openaiCompatibleBaseURL && openaiCompatibleModel) {
     const openaiCompatibleApiKey = process.env.OPENAI_COMPATIBLE_API_KEY?.trim();

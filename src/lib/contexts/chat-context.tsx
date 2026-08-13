@@ -13,6 +13,7 @@ import { useChat as useAIChat } from "@ai-sdk/react";
 import { Message } from "ai";
 import { useFileSystem } from "./file-system-context";
 import { setHasAnonWork, getOrCreateAnonSessionKey } from "@/lib/anon-work-tracker";
+import { getStoredModel } from "@/lib/model-selector";
 
 interface ChatContextProps {
   projectId?: string;
@@ -78,6 +79,7 @@ export function ChatProvider({
       ...(requestData !== undefined && { data: requestData }),
       projectId,
       sessionKey,
+      model: getStoredModel(),
       vfsRevision: vfsRevisionRef.current,
       ...(isDirty && { files: fileSystem.serialize() }),
     };

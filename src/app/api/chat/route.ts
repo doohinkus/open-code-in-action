@@ -10,6 +10,7 @@ import { getLanguageModel } from "@/lib/provider";
 import { generationPrompt } from "@/lib/prompts/generation";
 import { prepareModelMessages } from "@/lib/message-compaction";
 import { logger, getRequestId, hashIp } from "@/lib/observability/logger";
+import { isAllowedModel } from "@/lib/models";
 
 const MAX_MESSAGE_COUNT = 200;
 const MAX_MESSAGE_LENGTH = 50_000;
@@ -247,6 +248,7 @@ export async function POST(req: Request) {
     sessionKey,
     vfsRevision,
     test,
+    model,
   }: {
     messages: any[];
     files?: Record<string, FileNode>;
@@ -254,6 +256,7 @@ export async function POST(req: Request) {
     sessionKey?: string;
     vfsRevision?: number;
     test?: boolean;
+    model?: string;
   } = await req.json();
 
   const validationError = validateInput(messages, files);
@@ -307,7 +310,19 @@ export async function POST(req: Request) {
   }
   const fileSystem = vfsResolution.fileSystem;
 
-  const model = getLanguageModel();
+  // Client may request a specific model (e.g. a free Zen model selected in
+  // the UI). Unknown models fall back to the server default rather than
+  // erroring, so stale selections don't break requests.
+  const requestedModel = model && isAllowedModel(model) ? model : undefined;
+  if (model && !requestedModel) {
+    logger.warn("chat.request.unknown_model", {
+      requestId,
+      model,
+    });
+  }
+  const activeModelId = requestedModel ?? process.env.OPENAI_COMPATIBLE_MODEL?.trim();
+
+  const languageModel = getLanguageModel(requestedModel);
   // Test-connection requests are minimal: one model call, tiny output.
   const isTestRequest = test === true;
   // Use fewer steps for mock provider to prevent repetition
@@ -329,13 +344,14 @@ export async function POST(req: Request) {
       attributes: {
         provider: hasRealProvider() ? "real" : "mock",
         projectId: projectId ?? "anonymous",
+        ...(activeModelId && { model: activeModelId }),
       },
     },
     (span, finish) => ({ span, finish })
   );
 
   const result = streamText({
-    model,
+    model: languageModel,
     messages: modelMessages,
     maxTokens,
     maxSteps,
@@ -369,6 +385,7 @@ export async function POST(req: Request) {
         toolCalls: toolCallCount,
         promptTokens: usage?.promptTokens ?? 0,
         completionTokens: usage?.completionTokens ?? 0,
+        ...(activeModelId && { model: activeModelId }),
       });
       Sentry.setMeasurement("latency_ms", durationMs, "millisecond", span);
       finishSpan();
@@ -383,6 +400,7 @@ export async function POST(req: Request) {
         steps: steps.length,
         toolCalls: toolCallCount,
         projectId: projectId ?? null,
+        ...(activeModelId && { model: activeModelId }),
       });
 
       // Save to project if projectId is provided (auth already verified above)

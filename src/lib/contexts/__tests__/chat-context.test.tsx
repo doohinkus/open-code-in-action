@@ -19,6 +19,10 @@ vi.mock("@/lib/anon-work-tracker", () => ({
   getOrCreateAnonSessionKey: vi.fn(() => "anon-test-key"),
 }));
 
+vi.mock("@/lib/model-selector", () => ({
+  getStoredModel: vi.fn(() => "deepseek-v4-flash-free"),
+}));
+
 // Helper component to access chat context
 function TestComponent() {
   const chat = useChat();
@@ -222,6 +226,27 @@ describe("ChatContext", () => {
 
     expect(textarea).toBeDefined();
     expect(form).toBeDefined();
+  });
+
+  test("includes the stored model in the request body", () => {
+    render(
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+    );
+
+    const useAIChatMock = useAIChat as any;
+    const prepare =
+      useAIChatMock.mock.calls[0][0].experimental_prepareRequestBody;
+
+    const body = prepare({
+      id: "req-1",
+      messages: [{ role: "user", content: "hi" }],
+      requestData: undefined,
+      requestBody: {},
+    });
+
+    expect(body.model).toBe("deepseek-v4-flash-free");
   });
 
   test("handles tool calls", () => {

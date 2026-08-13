@@ -49,6 +49,14 @@ vi.mock("../MessageInput", () => ({
   ),
 }));
 
+vi.mock("../ModelSelector", () => ({
+  ModelSelector: () => <div data-testid="model-selector" />,
+}));
+
+vi.mock("@/lib/model-selector", () => ({
+  getStoredModel: vi.fn(() => "deepseek-v4-flash-free"),
+}));
+
 const mockUseChat = {
   messages: [],
   input: "",
@@ -300,10 +308,16 @@ describe("mapErrorMessage", () => {
     );
   });
 
-  test("maps FreeUsageLimit/quota errors to the credits message", () => {
+  test("maps FreeUsageLimit/free-tier errors to the switch-models hint", () => {
     expect(mapErrorMessage("FreeUsageLimit: You've reached the free usage limit.")).toBe(
-      "AI provider account has no credits or has hit its usage limit. Please add a payment method or try again later."
+      "This model hit its free-tier limit. Try switching to another free model above, or try again later."
     );
+    expect(mapErrorMessage('{"error":{"type":"FreeUsageLimitError"}}')).toBe(
+      "This model hit its free-tier limit. Try switching to another free model above, or try again later."
+    );
+  });
+
+  test("maps quota/credits errors to the credits message", () => {
     expect(mapErrorMessage("insufficient credits for this request")).toBe(
       "AI provider account has no credits or has hit its usage limit. Please add a payment method or try again later."
     );

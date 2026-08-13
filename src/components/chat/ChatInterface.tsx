@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
+import { ModelSelector } from "./ModelSelector";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useChat } from "@/lib/contexts/chat-context";
 import { useToast } from "@/components/ui/toast";
 import { RotateCcw, FlaskConical, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { getStoredModel } from "@/lib/model-selector";
 
 export function mapErrorMessage(raw: string): string {
   let serverMessage: string | null = null;
@@ -22,6 +24,9 @@ export function mapErrorMessage(raw: string): string {
   }
 
   const text = serverMessage || raw;
+  if (/FreeUsageLimit|free usage|free tier/i.test(text)) {
+    return "This model hit its free-tier limit. Try switching to another free model above, or try again later.";
+  }
   if (/too many|rate limit/i.test(text)) {
     return "Too many requests. Please wait a moment and try again.";
   }
@@ -78,6 +83,7 @@ export function ChatInterface() {
           messages: [{ role: "user", content: "Reply with only the word OK" }],
           files: {},
           test: true,
+          model: getStoredModel(),
         }),
       });
       if (!res.ok) {
@@ -166,6 +172,9 @@ export function ChatInterface() {
             &ldquo;continue&rdquo; to keep going, or try again.
           </div>
         )}
+        <div className="mb-2">
+          <ModelSelector />
+        </div>
         <MessageInput
           input={input}
           handleInputChange={handleInputChange}
