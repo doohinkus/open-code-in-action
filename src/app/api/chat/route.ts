@@ -339,6 +339,9 @@ export async function POST(req: Request) {
     messages: modelMessages,
     maxTokens,
     maxSteps,
+    // Fail fast on provider errors (e.g. rate limits) instead of the SDK's
+    // default 3 attempts, which multiply requests against the provider's quota.
+    maxRetries: 0,
     ...(Object.keys(reasoningOptions).length > 0 && { providerOptions: reasoningOptions }),
     onError: (err: any) => {
       logger.error("chat.stream.error", {
