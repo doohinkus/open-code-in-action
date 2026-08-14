@@ -5,7 +5,7 @@ import {
   LanguageModelV1Message,
 } from "@ai-sdk/provider";
 import { createReasoningNormalizingFetch } from "./reasoning-normalizer";
-import { DEFAULT_MODEL, isAllowedModel } from "./models";
+import { DEFAULT_MODEL, resolveFreeModel, ZEN_FREE_MODELS } from "./models";
 
 export class MockLanguageModel implements LanguageModelV1 {
   readonly specificationVersion = "v1" as const;
@@ -525,19 +525,24 @@ export function getLanguageModel(modelId?: string): LanguageModelV1 {
     return new MockLanguageModel("mock-" + DEFAULT_MODEL);
   }
 
-  const requestedModel =
-    modelId?.trim() || process.env.OPENAI_COMPATIBLE_MODEL?.trim() || DEFAULT_MODEL;
-
-  // Only free models (ZEN_FREE_MODELS) are allowed. A paid/unknown model id
-  // silently falls back to the default so the provider never bills users.
-  const resolvedModel = isAllowedModel(requestedModel) ? requestedModel : DEFAULT_MODEL;
-  if (resolvedModel !== requestedModel) {
+  const envModel = process.env.OPENAI_COMPATIBLE_MODEL?.trim();
+  const fallback = resolveFreeModel(envModel, DEFAULT_MODEL);
+  if (envModel && envModel !== fallback) {
     console.log(
-      `Model "${requestedModel}" is not in the free allowlist (ZEN_FREE_MODELS). ` +
-        `Falling back to "${DEFAULT_MODEL}".`
+      `Model "${envModel}" is not in the free allowlist (ZEN_FREE_MODELS). ` +
+        `Falling back to "${fallback}".`
     );
   }
+  const requestedModel = resolveFreeModel(modelId, fallback);
 
+  return buildZenModel(requestedModel);
+}
+
+function buildZenModel(modelId: string): LanguageModelV1 {
+  const openaiCompatibleBaseURL = process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
+  if (!openaiCompatibleBaseURL) {
+    throw new Error("OPENAI_COMPATIBLE_BASE_URL is not set");
+  }
   const openaiCompatibleApiKey = process.env.OPENAI_COMPATIBLE_API_KEY?.trim();
   const provider = createOpenAICompatible({
     name: "opencode-compatible",
@@ -545,12 +550,12 @@ export function getLanguageModel(modelId?: string): LanguageModelV1 {
     ...(openaiCompatibleApiKey ? { apiKey: openaiCompatibleApiKey } : {}),
     fetch: createReasoningNormalizingFetch(),
   });
-  return provider.chatModel(resolvedModel);
+  return provider.chatModel(modelId);
 }
 
 // Provider errors surface as APICallError (an Error subclass with a
 // statusCode) or as plain provider objects; normalize both so we can detect
-// rate-limit responses and fall back to the mock provider.
+// rate-limit responses and rotate to another free model.
 export function isRateLimitError(error: unknown): boolean {
   if (error && typeof error === "object") {
     const record = error as { statusCode?: unknown };
@@ -563,19 +568,48 @@ export function isRateLimitError(error: unknown): boolean {
   return /rate limit|rate_limit|429|quota|too many requests|insufficient_quota/i.test(message);
 }
 
+// Beyond rate limits, Zen's free endpoints also flake with transient 5xx
+// failures (e.g. "Endpoint is unavailable", 503). Treat those as retryable too
+// so the chain rotates past a down/temp-unavailable free model instead of
+// erroring the turn while other free models still work.
+export function isRetryableUpstreamError(error: unknown): boolean {
+  if (isRateLimitError(error)) return true;
+  if (error && typeof error === "object") {
+    const record = error as { statusCode?: unknown };
+    if (typeof record.statusCode === "number" && record.statusCode >= 500) return true;
+  }
+  const message =
+    error instanceof Error
+      ? error.message
+      : String((error as { message?: unknown } | undefined)?.message ?? error ?? "");
+  return /unavailable|overloaded|server error|503|502|504/i.test(message);
+}
+
 /**
- * Wraps a real provider model so a rate-limited turn transparently falls back
- * to a fallback model (the canned mock). Non-rate-limit errors propagate.
+ * Wraps a real provider model so a rate-limited or temporarily-unavailable turn
+ * transparently rotates through the remaining free models before finally
+ * falling back to the canned mock. Other errors propagate immediately.
  *
- * For streaming, fallback only kicks in when the primary stream errors before
- * producing any content (text/tool/finish parts) — the normal shape of a 429.
- * Once real content is flowing, errors are passed through untouched.
+ * Zen's free tier rate-limits per-model, so trying each free model in turn
+ * keeps real generation working even when one model's quota is exhausted.
+ *
+ * For streaming, rotation only kicks in when a stream errors before producing
+ * any content (text/tool/finish parts) — the normal shape of a 429/5xx. Once
+ * real content is flowing, errors are passed through untouched.
  */
 export function createRateLimitFallbackModel(
   primary: LanguageModelV1,
-  fallback: LanguageModelV1
+  fallbacks: LanguageModelV1[]
 ): LanguageModelV1 {
   if (primary.provider === "mock") return primary;
+  const chain = [primary, ...fallbacks];
+
+  const logRotation = (from: LanguageModelV1, to: LanguageModelV1) => {
+    console.log(
+      `Model "${from.provider}:${from.modelId}" failed; ` +
+        `trying "${to.provider}:${to.modelId}".`
+    );
+  };
 
   return {
     specificationVersion: "v1",
@@ -585,105 +619,130 @@ export function createRateLimitFallbackModel(
     supportsStructuredOutputs: primary.supportsStructuredOutputs,
 
     async doGenerate(options) {
-      try {
-        return await primary.doGenerate(options);
-      } catch (error) {
-        if (isRateLimitError(error)) {
-          console.log(
-            `Provider "${primary.provider}" hit a rate limit; falling back to the mock provider for this turn.`
-          );
-          return await fallback.doGenerate(options);
+      let lastError: unknown = null;
+      for (let i = 0; i < chain.length; i++) {
+        try {
+          return await chain[i].doGenerate(options);
+        } catch (error) {
+          if (!isRetryableUpstreamError(error)) throw error;
+          lastError = error;
+          if (i + 1 < chain.length) logRotation(chain[i], chain[i + 1]);
         }
-        throw error;
       }
+      throw lastError;
     },
 
     async doStream(options) {
-      // A 429 usually surfaces as a rejection of doStream() itself (the HTTP
-      // call fails before any chunk is produced). Fall back immediately.
-      let primaryResult: Awaited<ReturnType<LanguageModelV1["doStream"]>>;
-      try {
-        primaryResult = await primary.doStream(options);
-      } catch (error) {
-        if (isRateLimitError(error)) {
-          console.log(
-            `Provider "${primary.provider}" hit a rate limit; falling back to the mock provider for this turn.`
-          );
-          return await fallback.doStream(options);
+      const startModelStream = async (
+        index: number
+      ): Promise<Awaited<ReturnType<LanguageModelV1["doStream"]>>> => {
+        // A 429 usually surfaces as a rejection of doStream() itself (the HTTP
+        // call fails before any chunk is produced). Rotate immediately.
+        let result: Awaited<ReturnType<LanguageModelV1["doStream"]>>;
+        try {
+          result = await chain[index].doStream(options);
+        } catch (error) {
+          if (isRetryableUpstreamError(error) && index + 1 < chain.length) {
+            logRotation(chain[index], chain[index + 1]);
+            return startModelStream(index + 1);
+          }
+          throw error;
         }
-        throw error;
-      }
-      const primaryReader = primaryResult.stream.getReader();
 
-      const stream = new ReadableStream<LanguageModelV1StreamPart>({
-        async start(controller) {
-          let contentStarted = false;
+        const reader = result.stream.getReader();
 
-          const pumpFallback = async () => {
-            try {
-              const fallbackResult = await fallback.doStream(options);
-              const fallbackReader = fallbackResult.stream.getReader();
-              for (;;) {
-                const chunk = await fallbackReader.read();
-                if (chunk.done) break;
-                controller.enqueue(chunk.value);
-              }
-              controller.close();
-            } catch (error) {
-              controller.error(error);
-            }
-          };
+        const stream = new ReadableStream<LanguageModelV1StreamPart>({
+          async start(controller) {
+            let contentStarted = false;
 
-          const pump = async (): Promise<void> => {
-            try {
-              const { done, value } = await primaryReader.read();
-              if (done) {
+            const pumpNext = async () => {
+              const next = await startModelStream(index + 1);
+              const nextReader = next.stream.getReader();
+              try {
+                for (;;) {
+                  const chunk = await nextReader.read();
+                  if (chunk.done) break;
+                  controller.enqueue(chunk.value);
+                }
                 controller.close();
-                return;
+              } catch (error) {
+                controller.error(error);
               }
+            };
 
-              if (value.type === "error") {
-                if (!contentStarted && isRateLimitError(value.error)) {
-                  return pumpFallback();
+            const pump = async (): Promise<void> => {
+              try {
+                const { done, value } = await reader.read();
+                if (done) {
+                  controller.close();
+                  return;
+                }
+
+                if (value.type === "error") {
+                  if (
+                    !contentStarted &&
+                    isRetryableUpstreamError(value.error) &&
+                    index + 1 < chain.length
+                  ) {
+                    logRotation(chain[index], chain[index + 1]);
+                    return pumpNext();
+                  }
+                  controller.enqueue(value);
+                  return pump();
+                }
+
+                if (
+                  value.type === "text-delta" ||
+                  value.type === "tool-call" ||
+                  value.type === "finish"
+                ) {
+                  contentStarted = true;
                 }
                 controller.enqueue(value);
-                return pump();
+                await pump();
+              } catch (error) {
+                if (
+                  !contentStarted &&
+                  isRetryableUpstreamError(error) &&
+                  index + 1 < chain.length
+                ) {
+                  logRotation(chain[index], chain[index + 1]);
+                  return pumpNext();
+                }
+                controller.error(error);
               }
+            };
 
-              if (
-                value.type === "text-delta" ||
-                value.type === "tool-call" ||
-                value.type === "finish"
-              ) {
-                contentStarted = true;
-              }
-              controller.enqueue(value);
-              await pump();
-            } catch (error) {
-              if (!contentStarted && isRateLimitError(error)) {
-                return pumpFallback();
-              }
-              controller.error(error);
-            }
-          };
+            await pump();
+          },
+        });
 
-          await pump();
-        },
-      });
-
-      return {
-        stream,
-        warnings: primaryResult.warnings,
-        rawCall: primaryResult.rawCall,
-        rawResponse: primaryResult.rawResponse,
+        return {
+          stream,
+          warnings: result.warnings,
+          rawCall: result.rawCall,
+          rawResponse: result.rawResponse,
+        };
       };
+
+      return startModelStream(0);
     },
   };
 }
 
-// The model used by the chat route: a free Zen model (or mock) that falls back
-// to the canned mock when the provider rate-limits the request.
+// The model used by the chat route. Zen's free tier rate-limits per model (and
+// free endpoints also flake with 5xx), so the primary free model is backed by
+// the remaining free models (ZEN_FREE_MODELS order) with the canned mock as the
+// last resort — real generation keeps working unless every free model fails.
 export function buildLanguageModel(modelId?: string): LanguageModelV1 {
   const primary = getLanguageModel(modelId);
-  return createRateLimitFallbackModel(primary, new MockLanguageModel("mock-" + DEFAULT_MODEL));
+  if (primary.provider === "mock") return primary;
+
+  const requested = primary.modelId;
+  const otherFreeIds = ZEN_FREE_MODELS.map((m) => m.id).filter((id) => id !== requested);
+
+  const freeChain = otherFreeIds.map((id) => buildZenModel(id));
+  const mockFallback = new MockLanguageModel("mock-" + DEFAULT_MODEL);
+
+  return createRateLimitFallbackModel(primary, [...freeChain, mockFallback]);
 }

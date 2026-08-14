@@ -202,7 +202,7 @@ describe("createRateLimitFallbackModel", () => {
 
   test("returns the mock primary unchanged", () => {
     const mock = new MockLanguageModel("mock-x");
-    expect(createRateLimitFallbackModel(mock, mock)).toBe(mock);
+    expect(createRateLimitFallbackModel(mock, [mock])).toBe(mock);
   });
 
   test("doGenerate returns the fallback result on a rate-limit error", async () => {
@@ -218,9 +218,43 @@ describe("createRateLimitFallbackModel", () => {
       rawCall: { rawPrompt: [], rawSettings: {} },
     }));
 
-    const wrapped = createRateLimitFallbackModel(primary, fallback);
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
     const result = await wrapped.doGenerate(GENERATE_OPTIONS as any);
     expect(result.text).toBe("fallback output");
+  });
+
+  test("rotates through fallbacks until one succeeds", async () => {
+    const rateLimited = () => {
+      throw new Error("Rate limit exceeded. Please try again later.");
+    };
+    const primary = fakeGenerateModel(rateLimited);
+    const second = fakeGenerateModel(rateLimited);
+    const third = fakeGenerateModel(() => ({
+      text: "third model output",
+      toolCalls: [],
+      finishReason: "stop" as const,
+      usage: { promptTokens: 1, completionTokens: 1 },
+      warnings: [],
+      rawCall: { rawPrompt: [], rawSettings: {} },
+    }));
+
+    const wrapped = createRateLimitFallbackModel(primary, [second, third]);
+    const result = await wrapped.doGenerate(GENERATE_OPTIONS as any);
+    expect(result.text).toBe("third model output");
+  });
+
+  test("rejects when every model in the chain is rate-limited", async () => {
+    const primary = fakeGenerateModel(() => {
+      throw new Error("Rate limit exceeded. Please try again later.");
+    });
+    const second = fakeGenerateModel(() => {
+      throw new Error("http status code 429");
+    });
+
+    const wrapped = createRateLimitFallbackModel(primary, [second]);
+    await expect(wrapped.doGenerate(GENERATE_OPTIONS as any)).rejects.toThrow(
+      "http status code 429"
+    );
   });
 
   test("doGenerate returns the primary result on success", async () => {
@@ -236,7 +270,7 @@ describe("createRateLimitFallbackModel", () => {
       throw new Error("fallback should not be called");
     });
 
-    const wrapped = createRateLimitFallbackModel(primary, fallback);
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
     const result = await wrapped.doGenerate(GENERATE_OPTIONS as any);
     expect(result.text).toBe("primary output");
   });
@@ -247,7 +281,7 @@ describe("createRateLimitFallbackModel", () => {
     });
     const fallback = fakeGenerateModel(() => ({ text: "fallback" }));
 
-    const wrapped = createRateLimitFallbackModel(primary, fallback);
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
     await expect(wrapped.doGenerate(GENERATE_OPTIONS as any)).rejects.toThrow("Bad gateway");
   });
 
@@ -272,10 +306,76 @@ describe("createRateLimitFallbackModel", () => {
       },
     ]);
 
-    const wrapped = createRateLimitFallbackModel(primary, fallback);
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
     const parts = await collectStreamParts(wrapped);
     expect(parts.map((p) => p.type)).toEqual(["text-delta", "finish"]);
     expect(parts[0]).toEqual({ type: "text-delta", textDelta: "ok" });
+  });
+
+  test("doGenerate rotates past a transient 503 upstream failure", async () => {
+    const primary = fakeGenerateModel(() => {
+      throw Object.assign(new Error("Endpoint is unavailable."), { statusCode: 503 });
+    });
+    const fallback = fakeGenerateModel(() => ({ text: "recovered" }));
+
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
+    const result = await wrapped.doGenerate(GENERATE_OPTIONS as any);
+    expect(result.text).toBe("recovered");
+  });
+
+  test("doGenerate propagates non-retryable upstream errors", async () => {
+    const primary = fakeGenerateModel(() => {
+      throw Object.assign(new Error("Invalid API key"), { statusCode: 401 });
+    });
+    const fallback = fakeGenerateModel(() => ({ text: "should not run" }));
+
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
+    await expect(wrapped.doGenerate(GENERATE_OPTIONS as any)).rejects.toThrow("Invalid API key");
+  });
+
+  test("doStream rotates past a transient 503 when doStream() rejects", async () => {
+    const primary = {
+      specificationVersion: "v1",
+      provider: "test-provider",
+      modelId: "test-model",
+      async doGenerate() {
+        throw new Error("doGenerate not implemented");
+      },
+      async doStream() {
+        throw Object.assign(new Error("Endpoint is unavailable."), { statusCode: 503 });
+      },
+    } as unknown as LanguageModelV1;
+    const fallback = fakeStreamModel([
+      { type: "text-delta", textDelta: "recovered" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      },
+    ]);
+
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
+    const parts = await collectStreamParts(wrapped);
+    expect(parts.map((p) => p.type)).toEqual(["text-delta", "finish"]);
+    expect(parts[0]).toEqual({ type: "text-delta", textDelta: "recovered" });
+  });
+
+  test("doStream rotates through models that reject with rate limits", async () => {
+    const primary = fakeStreamModel([], new Error("Rate limit exceeded"));
+    const second = fakeStreamModel([], new Error("429 Too Many Requests"));
+    const third = fakeStreamModel([
+      { type: "text-delta", textDelta: "third" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      },
+    ]);
+
+    const wrapped = createRateLimitFallbackModel(primary, [second, third]);
+    const parts = await collectStreamParts(wrapped);
+    expect(parts.map((p) => p.type)).toEqual(["text-delta", "finish"]);
+    expect(parts[0]).toEqual({ type: "text-delta", textDelta: "third" });
   });
 
   test("doStream falls back when the stream rejects with a rate limit before content", async () => {
@@ -289,7 +389,7 @@ describe("createRateLimitFallbackModel", () => {
       },
     ]);
 
-    const wrapped = createRateLimitFallbackModel(primary, fallback);
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
     const parts = await collectStreamParts(wrapped);
     expect(parts.map((p) => p.type)).toEqual(["text-delta", "finish"]);
     expect(parts[0]).toEqual({ type: "text-delta", textDelta: "ok" });
@@ -301,7 +401,7 @@ describe("createRateLimitFallbackModel", () => {
     ]);
     const fallback = fakeStreamModel([{ type: "text-delta", textDelta: "ok" }]);
 
-    const wrapped = createRateLimitFallbackModel(primary, fallback);
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
     const parts = await collectStreamParts(wrapped);
     expect(parts).toEqual([{ type: "text-delta", textDelta: "ok" }]);
   });
@@ -313,14 +413,14 @@ describe("createRateLimitFallbackModel", () => {
     ]);
     const fallback = fakeStreamModel([{ type: "text-delta", textDelta: "should not appear" }]);
 
-    const wrapped = createRateLimitFallbackModel(primary, fallback);
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
     const parts = await collectStreamParts(wrapped);
     expect(parts.map((p) => p.type)).toEqual(["text-delta", "error"]);
   });
 
   test("doStream propagates non-rate-limit stream errors", async () => {
     const primary = fakeStreamModel([], new Error("Bad gateway"));
-    const wrapped = createRateLimitFallbackModel(primary, fakeStreamModel([]));
+    const wrapped = createRateLimitFallbackModel(primary, [fakeStreamModel([])]);
 
     await expect(collectStreamParts(wrapped)).rejects.toThrow("Bad gateway");
   });
