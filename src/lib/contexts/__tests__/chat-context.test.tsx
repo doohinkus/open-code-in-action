@@ -1,6 +1,7 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, act, cleanup } from "@testing-library/react";
 import { ChatProvider, useChat } from "../chat-context";
+import { ToastProvider } from "@/components/ui/toast";
 import { useFileSystem } from "../file-system-context";
 import { useChat as useAIChat } from "@ai-sdk/react";
 import * as anonTracker from "@/lib/anon-work-tracker";
@@ -17,6 +18,10 @@ vi.mock("@ai-sdk/react", () => ({
 vi.mock("@/lib/anon-work-tracker", () => ({
   setHasAnonWork: vi.fn(),
   getOrCreateAnonSessionKey: vi.fn(() => "anon-test-key"),
+}));
+
+vi.mock("@/lib/model-selector", () => ({
+  getStoredModel: vi.fn(() => "deepseek-v4-flash-free"),
 }));
 
 // Helper component to access chat context
@@ -79,13 +84,16 @@ describe("ChatContext", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   test("renders with default values", () => {
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     expect(screen.getByTestId("messages").textContent).toBe("0");
@@ -105,9 +113,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider projectId="test-project" initialMessages={initialMessages}>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     expect(useAIChat).toHaveBeenCalledWith({
@@ -124,9 +134,11 @@ describe("ChatContext", () => {
 
   test("sets generationInterrupted when the stream ends without a finish reason", () => {
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     const useAIChatMock = useAIChat as any;
@@ -141,9 +153,11 @@ describe("ChatContext", () => {
 
   test("does not set generationInterrupted on a normal finish", () => {
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     const useAIChatMock = useAIChat as any;
@@ -165,9 +179,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     await waitFor(() => {
@@ -187,9 +203,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider projectId="test-project">
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -209,9 +227,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     expect(screen.getByTestId("status").textContent).toBe("loading");
@@ -224,6 +244,100 @@ describe("ChatContext", () => {
     expect(form).toBeDefined();
   });
 
+  test("includes the stored model in the request body", () => {
+    render(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    const useAIChatMock = useAIChat as any;
+    const prepare =
+      useAIChatMock.mock.calls[0][0].experimental_prepareRequestBody;
+
+    const body = prepare({
+      id: "req-1",
+      messages: [{ role: "user", content: "hi" }],
+      requestData: undefined,
+      requestBody: {},
+    });
+
+    expect(body.model).toBe("deepseek-v4-flash-free");
+  });
+
+  function renderAndCaptureVfsFetch() {
+    let fetchFn: any;
+    let prepareFn: any;
+
+    (useAIChat as any).mockImplementation((config: any) => {
+      fetchFn = config.fetch;
+      prepareFn = config.experimental_prepareRequestBody;
+      return mockUseAIChat;
+    });
+
+    render(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    return {
+      fetchFn,
+      buildBody: () =>
+        prepareFn({
+          id: "req-1",
+          messages: [{ role: "user", content: "hi" }],
+          requestData: undefined,
+          requestBody: {},
+        }),
+    };
+  }
+
+  test("ships the full filesystem on the first request (revision mismatch)", () => {
+    const { buildBody } = renderAndCaptureVfsFetch();
+
+    const body = buildBody();
+    expect(body.files).toBeDefined();
+    expect(body.vfsRevision).toBe(0);
+  });
+
+  test("marks the revision synced only after a successful resync retry", async () => {
+    const globalFetch = vi.fn()
+      .mockResolvedValueOnce(new Response("resync", { status: 428 }))
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+    vi.stubGlobal("fetch", globalFetch);
+
+    const { fetchFn, buildBody } = renderAndCaptureVfsFetch();
+    await fetchFn("/api/chat", { body: JSON.stringify(buildBody()) });
+
+    expect(globalFetch).toHaveBeenCalledTimes(2);
+    const retryBody = JSON.parse((globalFetch.mock.calls[1][1] as any).body);
+    expect(retryBody.files).toBeDefined();
+
+    // After the successful resync, subsequent requests omit files.
+    expect(buildBody().files).toBeUndefined();
+  });
+
+  test("does not mark the revision synced when the resync retry fails", async () => {
+    const globalFetch = vi.fn()
+      .mockResolvedValueOnce(new Response("resync", { status: 428 }))
+      .mockResolvedValueOnce(new Response("boom", { status: 500 }));
+    vi.stubGlobal("fetch", globalFetch);
+
+    const { fetchFn, buildBody } = renderAndCaptureVfsFetch();
+    await fetchFn("/api/chat", { body: JSON.stringify(buildBody()) });
+
+    expect(globalFetch).toHaveBeenCalledTimes(2);
+
+    // The retry failed, so the revision must NOT be acknowledged: the next
+    // request still ships the full filesystem.
+    expect(buildBody().files).toBeDefined();
+  });
+
   test("handles tool calls", () => {
     let onToolCallHandler: any;
 
@@ -233,9 +347,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     const toolCall = { toolName: "test", args: {} };
@@ -255,9 +371,11 @@ describe("ChatContext", () => {
     });
 
     render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     act(() => {
@@ -280,9 +398,11 @@ describe("ChatContext", () => {
     });
 
     const { rerender } = render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     (useAIChat as any).mockReturnValue({
@@ -292,9 +412,11 @@ describe("ChatContext", () => {
     });
 
     rerender(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     expect(mockAppend).toHaveBeenCalledWith({
@@ -313,9 +435,11 @@ describe("ChatContext", () => {
     });
 
     const { rerender } = render(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     (useAIChat as any).mockReturnValue({
@@ -325,9 +449,11 @@ describe("ChatContext", () => {
     });
 
     rerender(
+      <ToastProvider>
       <ChatProvider>
         <TestComponent />
       </ChatProvider>
+      </ToastProvider>
     );
 
     expect(mockAppend).not.toHaveBeenCalled();

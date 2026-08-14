@@ -5,6 +5,7 @@ import { getShareData } from "@/lib/share";
 import { siteName, siteTagline } from "@/lib/og-image";
 import { getSiteUrl } from "@/lib/site-url";
 import { SharedPreview } from "@/components/share/SharedPreview";
+import { ShareActions } from "@/components/share/ShareActions";
 
 export const dynamic = "force-dynamic";
 
@@ -59,13 +60,14 @@ export default async function SharePage({ params }: SharePageProps) {
 
   return (
     <div className="h-dvh flex flex-col bg-neutral-50">
-      <header className="h-12 flex items-center justify-center border-b border-neutral-200/60 bg-white px-4 flex-shrink-0">
+      <header className="h-12 flex items-center justify-between border-b border-neutral-200/60 bg-white px-4 flex-shrink-0">
         <Link
           href="/"
           className="text-sm text-neutral-500 hover:text-neutral-800 transition-colors"
         >
           Built with React Component Generator
         </Link>
+        <ShareActions files={share.files} />
       </header>
       <main className="flex-1 min-h-0 p-4">
         <SharedPreview files={share.files} name={share.name} />

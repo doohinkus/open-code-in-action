@@ -69,10 +69,11 @@ export async function upsertShare(input: ShareInput & { userId?: string }): Prom
     });
 
     if (existing) {
-      // If the existing share is attached to a project, only its owner may update it.
-      if (existing.projectId && input.userId) {
-        const ownsProject = await shareOwnerProjectId(existing.projectId, input.userId);
-        if (!ownsProject) {
+      // If the existing share is attached to a project, only its owner may
+      // update it. Anonymous callers (no userId) are always denied, since
+      // possession of the URL token alone is not proof of ownership.
+      if (existing.projectId) {
+        if (!input.userId || !(await shareOwnerProjectId(existing.projectId, input.userId))) {
           throw new Error("Cannot update a share owned by another user");
         }
       }
@@ -107,14 +108,20 @@ export async function upsertShare(input: ShareInput & { userId?: string }): Prom
     }
   }
 
-  // 3. Otherwise create a new share.
+  // 3. Otherwise create a new share. Only the project owner may attach a
+  // share to a project (prevents binding others' projects to attacker-issued
+  // tokens); anonymous users get a project-less share.
+  const canAttachProject = input.projectId
+    ? !!input.userId && (await shareOwnerProjectId(input.projectId, input.userId))
+    : false;
+
   const token = generateShareToken();
   await prisma.share.create({
     data: {
       token,
       name,
       data,
-      ...(input.projectId ? { projectId: input.projectId } : {}),
+      ...(canAttachProject ? { projectId: input.projectId } : {}),
     },
   });
   return { token, created: true };

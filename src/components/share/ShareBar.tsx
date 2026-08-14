@@ -35,7 +35,7 @@ function filesHash(files: Map<string, string>): string {
 }
 
 export function ShareBar() {
-  const { getAllFiles, refreshTrigger, isFixingErrors } = useFileSystem();
+  const { getAllFiles, isFixingErrors } = useFileSystem();
   const { status, projectId } = useChat();
   const { toast } = useToast();
 
@@ -46,7 +46,7 @@ export function ShareBar() {
 
   const tokenRef = useRef<string | null>(null);
   const lastHashRef = useRef<string | null>(null);
-  const hasSharedOnceRef = useRef(false);
+  const prevStatusRef = useRef(status);
 
   useEffect(() => {
     tokenRef.current = readStoredToken(projectId);
@@ -89,7 +89,6 @@ export function ShareBar() {
         tokenRef.current = token;
         if (token) storeToken(projectId, token);
         lastHashRef.current = hash;
-        hasSharedOnceRef.current = true;
         setShareUrl(url);
       } catch (err) {
         setFailed(true);
@@ -101,7 +100,10 @@ export function ShareBar() {
   );
 
   useEffect(() => {
-    if (status === "streaming" || status === "submitted" || status === "error") {
+    const wasGenerating = prevStatusRef.current === "streaming" || prevStatusRef.current === "submitted";
+    prevStatusRef.current = status;
+
+    if (status !== "ready" || !wasGenerating) {
       return;
     }
     if (isFixingErrors) return;
@@ -112,16 +114,13 @@ export function ShareBar() {
       return;
     }
 
-    const hash = filesHash(files);
-    if (hash === lastHashRef.current && hasSharedOnceRef.current) return;
-
     const timer = setTimeout(() => {
       publishShare(projectId);
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, refreshTrigger, getAllFiles, projectId, isFixingErrors, publishShare]);
+  }, [status, isFixingErrors, getAllFiles, projectId, publishShare]);
 
   const handleCopy = async () => {
     if (!shareUrl) return;

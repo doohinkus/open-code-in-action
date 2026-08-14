@@ -100,10 +100,14 @@ function isLocalImport(imp: string): boolean {
   return imp.startsWith(".") || imp.startsWith("/") || imp.startsWith("@/");
 }
 
-function formatNamedBindings(bindings: Map<string, string>): string {
-  return [...bindings.entries()]
-    .map(([exported, alias]) => exported === alias ? exported : `${exported} as ${alias}`)
-    .join(', ');
+function formatNamedBindings(bindings: Map<string, Set<string>>): string {
+  const parts: string[] = [];
+  for (const [exported, aliases] of bindings) {
+    for (const alias of aliases) {
+      parts.push(exported === alias ? exported : `${exported} as ${alias}`);
+    }
+  }
+  return parts.join(", ");
 }
 
 function isCdnImport(imp: string): boolean {
@@ -119,11 +123,27 @@ interface FileExport {
 function analyzeExports(code: string): FileExport {
   const info: FileExport = { hasDefault: false, named: [] };
 
+  // Check for export default async function/class Name (and anonymous async)
+  const asyncDefaultMatch = code.match(
+    /export\s+default\s+async\s+(?:function|class)\b(?:\s+(\w+))?/
+  );
+  if (asyncDefaultMatch) {
+    info.hasDefault = true;
+    info.defaultExpr = asyncDefaultMatch[1] ?? "__uigenDefault";
+  }
+
   // Check for export default function/class Name
   const defaultFuncMatch = code.match(/export\s+default\s+(function|class)\s+(\w+)/);
   if (defaultFuncMatch) {
     info.hasDefault = true;
     info.defaultExpr = defaultFuncMatch[2];
+  }
+
+  // Check for anonymous export default function/class
+  const anonymousFuncMatch = code.match(/export\s+default\s+(?:async\s+)?(function|class)\s*\(/);
+  if (anonymousFuncMatch) {
+    info.hasDefault = true;
+    info.defaultExpr = "__uigenDefault";
   }
 
   // Check for export default const Name =
@@ -133,11 +153,14 @@ function analyzeExports(code: string): FileExport {
     info.defaultExpr = defaultConstMatch[2];
   }
 
-  // Check for export default <expr> (where expr is a reference, not declaration)
-  const defaultRefMatch = code.match(/export\s+default\s+(?!function|class|const|let|var)(\w+)/);
+  // Check for export default <expr> (any other default export: identifier
+  // references, arrows, objects, etc.). The bundler rewrites these into a
+  // synthetic `const __uigenDefault = ...`, so the expression name always
+  // resolves to __uigenDefault.
+  const defaultRefMatch = code.match(/export\s+default\s+(?!function|class|const|let|var)([\s\S]*?);?\s*$/);
   if (defaultRefMatch) {
     info.hasDefault = true;
-    info.defaultExpr = defaultRefMatch[1];
+    info.defaultExpr = "__uigenDefault";
   }
 
   // Named exports: export function X, export const X, export class X
@@ -213,7 +236,7 @@ export function createBundleFromFiles(files: Map<string, string>): {
   //   → `import React, { useState } from 'react'` (single import, no conflict)
   const mergedImports = new Map<string, {
     defaultBinding: string | null;
-    namedBindings: Map<string, string>;
+    namedBindings: Map<string, Set<string>>;
     namespaceBinding: string | null;
   }>();
   const sideEffectImports = new Set<string>();
@@ -245,7 +268,15 @@ export function createBundleFromFiles(files: Map<string, string>): {
           const parts = member.split(/\s+as\s+/);
           const exported = parts[0].trim();
           const alias = parts[1]?.trim() || exported;
-          merged.namedBindings.set(exported, alias);
+          // Keep every alias for an exported name: file A may import
+          // `{ Button }` while file B imports `{ Button as Btn }`, and both
+          // bindings must survive the merge.
+          let aliases = merged.namedBindings.get(exported);
+          if (!aliases) {
+            aliases = new Set<string>();
+            merged.namedBindings.set(exported, aliases);
+          }
+          aliases.add(alias);
         }
       } else if (defaultOnlyMatch) {
         merged.defaultBinding = defaultOnlyMatch[1];
@@ -309,10 +340,25 @@ export function createBundleFromFiles(files: Map<string, string>): {
     // Strip all `export` keywords from declarations
     // export default function X -> function X
     rewritten = rewritten.replace(/export\s+default\s+(function|class)\s+(\w+)/g, "$1 $2");
+    // export default async function X -> async function X (named only)
+    rewritten = rewritten.replace(/export\s+default\s+async\s+(function|class)\s+(\w+)/g, "async $1 $2");
+    // export default function/class (anonymous) -> const __uigenDefault = function/class
+    rewritten = rewritten.replace(
+      /export\s+default\s+async\s+(function|class)\s*\(/g,
+      "const __uigenDefault = async $1("
+    );
+    rewritten = rewritten.replace(
+      /export\s+default\s+(function|class)\s*\(/g,
+      "const __uigenDefault = $1("
+    );
     // export default const/let/var X = -> const/let/var X =
     rewritten = rewritten.replace(/export\s+default\s+(const|let|var)\s+(\w+)\s*=/g, "$1 $2 =");
-    // export default <expr> (standalone expression/identifier) -> just the expr
-    rewritten = rewritten.replace(/export\s+default\s+(?!function|class|const|let|var)\s*([\s\S]*?);?\s*$/gm, "$1");
+    // export default <expr> (any other default: identifier refs, arrows,
+    // objects, async arrows, etc.) -> const __uigenDefault = <expr>;
+    rewritten = rewritten.replace(
+      /export\s+default\s+(?!function|class|const|let|var)\s*([\s\S]*?);?\s*$/gm,
+      "const __uigenDefault = $1;"
+    );
     // export function X -> function X
     rewritten = rewritten.replace(/export\s+(function|class)\s+(\w+)/g, "$1 $2");
     // export const/let/var X -> const/let/var X
@@ -389,6 +435,22 @@ export function createImportMap(files: Map<string, string>): {
       /import\s+(?:{[^}]+}|[^,\s]+)?\s*(?:,\s*{[^}]+})?\s+from\s+['"]([^'"]+)['"]/g;
     let match;
     while ((match = importRegex.exec(content)) !== null) {
+      const imp = match[1];
+      if (isCdnImport(imp) && !imp.endsWith(".css")) {
+        const baseName = imp.split("/")[0].startsWith("@")
+          ? imp.split("/").slice(0, 2).join("/")
+          : imp.split("/")[0];
+        if (!allThirdPartyImports.has(baseName)) {
+          allThirdPartyImports.add(baseName);
+          imports[imp] = `https://esm.sh/${imp}`;
+        }
+      }
+    }
+
+    // Side-effect imports (no `from` clause) also need import-map entries,
+    // e.g. `import 'confetti'`.
+    const sideEffectRegex = /import\s+['"]([^'"]+)['"]/g;
+    while ((match = sideEffectRegex.exec(content)) !== null) {
       const imp = match[1];
       if (isCdnImport(imp) && !imp.endsWith(".css")) {
         const baseName = imp.split("/")[0].startsWith("@")

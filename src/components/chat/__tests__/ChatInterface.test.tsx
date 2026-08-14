@@ -49,6 +49,14 @@ vi.mock("../MessageInput", () => ({
   ),
 }));
 
+vi.mock("../ModelSelector", () => ({
+  ModelSelector: () => <div data-testid="model-selector" />,
+}));
+
+vi.mock("@/lib/model-selector", () => ({
+  getStoredModel: vi.fn(() => "deepseek-v4-flash-free"),
+}));
+
 const mockUseChat = {
   messages: [],
   input: "",
@@ -247,52 +255,6 @@ test("shows a stop button while streaming and stops on click", async () => {
   expect(mockStop).toHaveBeenCalled();
 });
 
-test("maps server error JSON body to a friendly toast", async () => {
-  const { rerender } = render(
-    <ToastProvider>
-      <ChatInterface />
-    </ToastProvider>
-  );
-
-  (useChat as any).mockReturnValue({
-    ...mockUseChat,
-    status: "error",
-    error: new Error('{"error":"Too many requests. Please try again later."}'),
-  });
-
-  rerender(
-    <ToastProvider>
-      <ChatInterface />
-    </ToastProvider>
-  );
-
-  await waitFor(() => {
-    expect(
-      screen.getByText("Too many requests. Please wait a moment and try again.")
-    ).toBeDefined();
-  });
-});
-
-test("shows a timeout toast when generation timed out", async () => {
-  (useChat as any).mockReturnValue({
-    ...mockUseChat,
-    status: "ready",
-    generationTimedOut: true,
-  });
-
-  render(
-    <ToastProvider>
-      <ChatInterface />
-    </ToastProvider>
-  );
-
-  await waitFor(() => {
-    expect(
-      screen.getByText("Generation timed out. Please try again.")
-    ).toBeDefined();
-  });
-});
-
 describe("mapErrorMessage", () => {
   test("maps rate limit errors to a friendly message", () => {
     expect(mapErrorMessage("Rate limit exceeded")).toBe(
@@ -300,10 +262,16 @@ describe("mapErrorMessage", () => {
     );
   });
 
-  test("maps FreeUsageLimit/quota errors to the credits message", () => {
+  test("maps FreeUsageLimit/free-tier errors to the switch-models hint", () => {
     expect(mapErrorMessage("FreeUsageLimit: You've reached the free usage limit.")).toBe(
-      "AI provider account has no credits or has hit its usage limit. Please add a payment method or try again later."
+      "This model hit its free-tier limit. Try switching to another free model above, or try again later."
     );
+    expect(mapErrorMessage('{"error":{"type":"FreeUsageLimitError"}}')).toBe(
+      "This model hit its free-tier limit. Try switching to another free model above, or try again later."
+    );
+  });
+
+  test("maps quota/credits errors to the credits message", () => {
     expect(mapErrorMessage("insufficient credits for this request")).toBe(
       "AI provider account has no credits or has hit its usage limit. Please add a payment method or try again later."
     );

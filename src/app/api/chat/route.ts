@@ -6,10 +6,15 @@ import { buildStrReplaceTool } from "@/lib/tools/str-replace";
 import { buildFileManagerTool } from "@/lib/tools/file-manager";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { getLanguageModel } from "@/lib/provider";
+import { buildLanguageModel } from "@/lib/provider";
 import { generationPrompt } from "@/lib/prompts/generation";
 import { prepareModelMessages } from "@/lib/message-compaction";
 import { logger, getRequestId, hashIp } from "@/lib/observability/logger";
+import { isAllowedModel } from "@/lib/models";
+import {
+  isAllowedOrigin,
+  allowedOriginFor,
+} from "@/lib/origins";
 
 const MAX_MESSAGE_COUNT = 200;
 const MAX_MESSAGE_LENGTH = 50_000;
@@ -32,13 +37,18 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
 
 function getClientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return req.headers.get("x-real-ip") || "unknown";
+  // Prefer the proxy-set x-real-ip over the client-influencable X-Forwarded-For.
+  return req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
+  // Opportunistically prune expired entries so the map doesn't grow unbounded.
+  if (ipRequestCounts.size > 1000) {
+    for (const [key, entry] of ipRequestCounts) {
+      if (entry.resetAt <= now) ipRequestCounts.delete(key);
+    }
+  }
   const entry = ipRequestCounts.get(ip);
   if (!entry || now > entry.resetAt) {
     ipRequestCounts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
@@ -111,15 +121,9 @@ function hasRealProvider(): boolean {
   if (process.env.FORCE_MOCK_PROVIDER?.trim() === "1") {
     return false;
   }
-  return !!(process.env.GOOGLE_API_KEY?.trim()) ||
-         !!(process.env.ANTHROPIC_API_KEY?.trim() && process.env.ANTHROPIC_API_KEY?.trim() !== "your-api-key-here") ||
-         !!(process.env.OPENAI_COMPATIBLE_BASE_URL?.trim() && process.env.OPENAI_COMPATIBLE_MODEL?.trim());
-}
-
-function isUsingAnthropic(): boolean {
-  return !process.env.GOOGLE_API_KEY?.trim() &&
-         !process.env.OPENAI_COMPATIBLE_BASE_URL?.trim() &&
-         !!(process.env.ANTHROPIC_API_KEY?.trim() && process.env.ANTHROPIC_API_KEY?.trim() !== "your-api-key-here");
+  // Only the OpenCode Zen free endpoint is supported; the default free model
+  // applies when OPENAI_COMPATIBLE_MODEL is unset or non-free.
+  return !!process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
 }
 
 // Stream errors can be Error instances or plain provider objects (e.g.
@@ -141,20 +145,20 @@ function describeError(error: unknown): string {
   return String(error ?? "An error occurred.");
 }
 
-const ALLOWED_ORIGINS = [
-  "http://localhost:3000",
-  "http://localhost:3001",
-  "https://open-code-in-action.vercel.app",
-];
-
 function checkOrigin(req: Request): boolean {
-  const origin = req.headers.get("origin") || "";
+  const originHeader = req.headers.get("origin") || "";
+  if (originHeader) {
+    return isAllowedOrigin(originHeader);
+  }
   const referer = req.headers.get("referer") || "";
-  const urlToCheck = origin || referer || "";
-  if (!urlToCheck) return false;
-  // Allow all Vercel preview deployments
-  if (urlToCheck.endsWith(".vercel.app")) return true;
-  return ALLOWED_ORIGINS.some((allowed) => urlToCheck.startsWith(allowed));
+  if (referer) {
+    try {
+      return isAllowedOrigin(new URL(referer).origin);
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 function validateInput(
@@ -197,8 +201,7 @@ function validateInput(
 
 export async function OPTIONS(req: Request) {
   const origin = req.headers.get("origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.find((o) => origin.startsWith(o)) ||
-    (origin.endsWith(".vercel.app") ? origin : ALLOWED_ORIGINS[0]);
+  const allowedOrigin = allowedOriginFor(origin);
 
   return new Response(null, {
     status: 204,
@@ -209,6 +212,42 @@ export async function OPTIONS(req: Request) {
       "Access-Control-Max-Age": "86400",
     },
   });
+}
+
+// Persist a turn's messages and files with an optimistic-concurrency guard
+// (version compare-and-swap) so concurrent turns for the same project don't
+// silently overwrite each other. Returns "conflict" when the row's version
+// moved since the request started; the caller can rebase and retry.
+async function persistProjectTurn(
+  projectId: string,
+  userId: string,
+  expectedVersion: number,
+  messagesJson: string,
+  dataJson: string,
+  requestId: string
+): Promise<"ok" | "conflict" | "error"> {
+  try {
+    const result = await prisma.project.updateMany({
+      where: { id: projectId, userId, version: expectedVersion },
+      data: {
+        messages: messagesJson,
+        data: dataJson,
+        version: { increment: 1 },
+      },
+    });
+    return result.count === 0 ? "conflict" : "ok";
+  } catch (error) {
+    logger.error("chat.project.save_failed", {
+      requestId,
+      projectId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    Sentry.captureException(error, {
+      tags: { requestId },
+      extra: { projectId },
+    });
+    return "error";
+  }
 }
 
 export async function POST(req: Request) {
@@ -247,6 +286,7 @@ export async function POST(req: Request) {
     sessionKey,
     vfsRevision,
     test,
+    model,
   }: {
     messages: any[];
     files?: Record<string, FileNode>;
@@ -254,6 +294,7 @@ export async function POST(req: Request) {
     sessionKey?: string;
     vfsRevision?: number;
     test?: boolean;
+    model?: string;
   } = await req.json();
 
   const validationError = validateInput(messages, files);
@@ -263,6 +304,22 @@ export async function POST(req: Request) {
       reason: validationError,
     });
     return Response.json({ error: validationError }, { status: 400 });
+  }
+
+  // Validate the client-supplied anonymous session key. It is used as part of
+  // the VFS cache key, so reject malformed/oversized values instead of
+  // letting an attacker stash arbitrary data under a cache entry.
+  if (sessionKey !== undefined && (typeof sessionKey !== "string" || !/^anon-[A-Za-z0-9-]{8,64}$/.test(sessionKey))) {
+    logger.warn("chat.request.invalid_session_key", { requestId });
+    return Response.json({ error: "Invalid session key" }, { status: 400 });
+  }
+
+  // vfsRevision is a client-reported counter that selects which cached
+  // filesystem the server should serve. Reject anything that isn't a
+  // non-negative integer.
+  if (vfsRevision !== undefined && (typeof vfsRevision !== "number" || !Number.isInteger(vfsRevision) || vfsRevision < 0)) {
+    logger.warn("chat.request.invalid_vfs_revision", { requestId });
+    return Response.json({ error: "Invalid vfsRevision" }, { status: 400 });
   }
 
   let sessionUserId: string | null = null;
@@ -279,6 +336,25 @@ export async function POST(req: Request) {
     );
   }
 
+  // Verify the caller actually owns the project and capture its version for
+  // optimistic-concurrency on the save. This also prevents reading another
+  // user's cached filesystem via a guessed projectId.
+  let projectVersion = 0;
+  if (projectId && sessionUserId) {
+    const owned = await prisma.project.findFirst({
+      where: { id: projectId, userId: sessionUserId },
+      select: { id: true, version: true },
+    });
+    if (!owned) {
+      logger.warn("chat.request.project_forbidden", { requestId, projectId });
+      return Response.json(
+        { error: "Project not found or access denied" },
+        { status: 404 }
+      );
+    }
+    projectVersion = owned.version;
+  }
+
   // Keep the full, unmodified history for persistence; build a reduced copy
   // for the model so old code and reasoning tokens aren't re-sent.
   const originalMessages: any[] = messages;
@@ -287,13 +363,14 @@ export async function POST(req: Request) {
   modelMessages.unshift({
     role: "system",
     content: generationPrompt,
-    ...(isUsingAnthropic() ? { providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } } } : {}),
   });
 
   // Reconstruct the VirtualFileSystem, preferring the server-side cache when
   // the client omits files. A cache miss asks the client to resync (428).
+  // Project cache keys are scoped by userId so one user can never read or
+  // poison another user's cached filesystem.
   const cacheKey = projectId
-    ? `project:${projectId}`
+    ? `project:${sessionUserId}:${projectId}`
     : sessionKey
       ? `anon:${sessionKey}`
       : null;
@@ -307,7 +384,19 @@ export async function POST(req: Request) {
   }
   const fileSystem = vfsResolution.fileSystem;
 
-  const model = getLanguageModel();
+  // Client may request a specific model (e.g. a free Zen model selected in
+  // the UI). Unknown models fall back to the server default rather than
+  // erroring, so stale selections don't break requests.
+  const requestedModel = model && isAllowedModel(model) ? model : undefined;
+  if (model && !requestedModel) {
+    logger.warn("chat.request.unknown_model", {
+      requestId,
+      model,
+    });
+  }
+  const languageModel = buildLanguageModel(requestedModel);
+  const activeModelId = languageModel.modelId;
+
   // Test-connection requests are minimal: one model call, tiny output.
   const isTestRequest = test === true;
   // Use fewer steps for mock provider to prevent repetition
@@ -315,10 +404,7 @@ export async function POST(req: Request) {
   const maxTokens = isTestRequest ? 64 : 10_000;
 
   const reasoningOptions: Record<string, any> = {};
-  if (
-    process.env.OPENAI_COMPATIBLE_BASE_URL?.trim() &&
-    process.env.OPENAI_COMPATIBLE_MODEL?.trim()
-  ) {
+  if (process.env.OPENAI_COMPATIBLE_BASE_URL?.trim()) {
     reasoningOptions["opencode-compatible"] = { reasoningEffort: "low" };
   }
 
@@ -329,13 +415,14 @@ export async function POST(req: Request) {
       attributes: {
         provider: hasRealProvider() ? "real" : "mock",
         projectId: projectId ?? "anonymous",
+        ...(activeModelId && { model: activeModelId }),
       },
     },
     (span, finish) => ({ span, finish })
   );
 
   const result = streamText({
-    model,
+    model: languageModel,
     messages: modelMessages,
     maxTokens,
     maxSteps,
@@ -369,6 +456,7 @@ export async function POST(req: Request) {
         toolCalls: toolCallCount,
         promptTokens: usage?.promptTokens ?? 0,
         completionTokens: usage?.completionTokens ?? 0,
+        ...(activeModelId && { model: activeModelId }),
       });
       Sentry.setMeasurement("latency_ms", durationMs, "millisecond", span);
       finishSpan();
@@ -383,10 +471,11 @@ export async function POST(req: Request) {
         steps: steps.length,
         toolCalls: toolCallCount,
         projectId: projectId ?? null,
+        ...(activeModelId && { model: activeModelId }),
       });
 
       // Save to project if projectId is provided (auth already verified above)
-      if (projectId) {
+      if (projectId && sessionUserId) {
         try {
           // Get the messages from the response
           const responseMessages = response.messages || [];
@@ -396,16 +485,56 @@ export async function POST(req: Request) {
             responseMessages,
           });
 
-          await prisma.project.update({
-            where: {
-              id: projectId,
-              userId: sessionUserId!,
-            },
-            data: {
-              messages: JSON.stringify(allMessages),
-              data: JSON.stringify(fileSystem.serialize()),
-            },
-          });
+          let outcome = await persistProjectTurn(
+            projectId,
+            sessionUserId,
+            projectVersion,
+            JSON.stringify(allMessages),
+            JSON.stringify(fileSystem.serialize()),
+            requestId
+          );
+
+          if (outcome === "conflict") {
+            // A concurrent turn for this project committed first. Re-read the
+            // current row and re-base this turn's response messages on top of
+            // it, keeping the already-committed file state (this turn's file
+            // edits were made against stale state).
+            const current = await prisma.project.findUnique({
+              where: { id: projectId, userId: sessionUserId },
+              select: { messages: true, data: true, version: true },
+            });
+
+            if (current) {
+              let currentMessages: any[] = [];
+              try {
+                const parsed = JSON.parse(current.messages);
+                if (Array.isArray(parsed)) currentMessages = parsed;
+              } catch {
+                currentMessages = [];
+              }
+
+              const rebased = appendResponseMessages({
+                messages: currentMessages,
+                responseMessages,
+              });
+
+              outcome = await persistProjectTurn(
+                projectId,
+                sessionUserId,
+                current.version,
+                JSON.stringify(rebased),
+                current.data,
+                requestId
+              );
+
+              if (outcome === "ok") {
+                logger.warn("chat.project.save_rebased", {
+                  requestId,
+                  projectId,
+                });
+              }
+            }
+          }
         } catch (error) {
           logger.error("chat.project.save_failed", {
             requestId,
@@ -428,8 +557,7 @@ export async function POST(req: Request) {
 
   // Add CORS headers for credentialed requests
   const origin = req.headers.get("origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.find((o) => origin.startsWith(o)) ||
-    (origin.endsWith(".vercel.app") ? origin : ALLOWED_ORIGINS[0]);
+  const allowedOrigin = allowedOriginFor(origin);
 
   const responseHeaders = new Headers(aiResponse.headers);
   responseHeaders.set("Access-Control-Allow-Origin", allowedOrigin);

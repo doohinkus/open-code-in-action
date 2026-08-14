@@ -13,6 +13,9 @@ import { useChat as useAIChat } from "@ai-sdk/react";
 import { Message } from "ai";
 import { useFileSystem } from "./file-system-context";
 import { setHasAnonWork, getOrCreateAnonSessionKey } from "@/lib/anon-work-tracker";
+import { getStoredModel } from "@/lib/model-selector";
+import { useToast } from "@/components/ui/toast";
+import { mapErrorMessage } from "@/lib/chat-errors";
 
 interface ChatContextProps {
   projectId?: string;
@@ -78,6 +81,7 @@ export function ChatProvider({
       ...(requestData !== undefined && { data: requestData }),
       projectId,
       sessionKey,
+      model: getStoredModel(),
       vfsRevision: vfsRevisionRef.current,
       ...(isDirty && { files: fileSystem.serialize() }),
     };
@@ -95,7 +99,12 @@ export function ChatProvider({
         ...init,
         body: JSON.stringify({ ...body, files: fileSystem.serialize() }),
       });
-      lastSyncedRevisionRef.current = sentRevision;
+      // Only acknowledge the revision once the resync request actually
+      // succeeded; otherwise the next request will ship the full payload
+      // again (and avoid marking a failed retry as clean).
+      if (retried.ok && sentRevision !== undefined) {
+        lastSyncedRevisionRef.current = sentRevision;
+      }
       return retried;
     }
     if (response.ok && sentRevision !== undefined) {
@@ -133,6 +142,24 @@ export function ChatProvider({
   const prevStatusRef = useRef(status);
   const [generationTimedOut, setGenerationTimedOut] = useState(false);
   const [generationInterrupted, setGenerationInterrupted] = useState(false);
+  const { toast } = useToast();
+  const prevErrorStatusRef = useRef(status);
+
+  // Surface stream errors and timeouts as toasts regardless of which tab is
+  // mounted (ChatInterface unmounts on mobile when the user is auto-switched
+  // to the Preview tab mid-generation).
+  useEffect(() => {
+    if (prevErrorStatusRef.current !== "error" && status === "error" && error) {
+      toast(mapErrorMessage(error.message), "error");
+    }
+    prevErrorStatusRef.current = status;
+  }, [status, error, toast]);
+
+  useEffect(() => {
+    if (generationTimedOut) {
+      toast("Generation timed out. Please try again.", "error");
+    }
+  }, [generationTimedOut, toast]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {

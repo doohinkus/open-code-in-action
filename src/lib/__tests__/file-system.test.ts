@@ -675,3 +675,53 @@ test("rename handles empty directories", () => {
   expect(fs.exists("/moved-empty-dir")).toBe(true);
   expect(fs.getNode("/moved-empty-dir")?.type).toBe("directory");
 });
+
+test("normalizePath resolves .. segments correctly", () => {
+  const fs = new VirtualFileSystem();
+
+  fs.createFile("/a/../b.txt", "content");
+  expect(fs.exists("/b.txt")).toBe(true);
+  expect(fs.exists("/a/b.txt")).toBe(false);
+
+  fs.createFile("/c/../d.txt", "content");
+  expect(fs.exists("/d.txt")).toBe(true);
+
+  fs.createFile("/a/../../e.txt", "content");
+  expect(fs.exists("/e.txt")).toBe(true);
+  expect(fs.exists("/a/e.txt")).toBe(false);
+});
+
+test("normalizePath collapses .. that escape the root to root", () => {
+  const fs = new VirtualFileSystem();
+
+  fs.createFile("/../x.txt", "content");
+  expect(fs.exists("/x.txt")).toBe(true);
+
+  fs.createFile("/a/..", "content");
+  expect(fs.exists("/")).toBe(true);
+});
+
+test("rename into its own subtree is rejected without crashing", () => {
+  const fs = new VirtualFileSystem();
+  fs.createDirectory("/a");
+  fs.createFile("/a/b.txt", "content");
+
+  expect(() => fs.rename("/a", "/a/renamed")).not.toThrow();
+  const result = fs.rename("/a", "/a/renamed");
+  expect(result).toBe(false);
+  expect(fs.exists("/a")).toBe(true);
+  expect(fs.exists("/a/b.txt")).toBe(true);
+
+  expect(() => fs.rename("/a", "/a/sub")).not.toThrow();
+  expect(fs.rename("/a", "/a/sub")).toBe(false);
+});
+
+test("rename /src into /src/components is rejected without stack overflow", () => {
+  const fs = new VirtualFileSystem();
+  fs.createDirectory("/src");
+  fs.createFile("/src/App.jsx", "content");
+
+  expect(() => fs.rename("/src", "/src/components")).not.toThrow();
+  expect(fs.rename("/src", "/src/components")).toBe(false);
+  expect(fs.exists("/src/App.jsx")).toBe(true);
+});

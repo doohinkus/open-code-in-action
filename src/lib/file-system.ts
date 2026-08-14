@@ -31,12 +31,13 @@ export class VirtualFileSystem {
     }
     // Normalize multiple slashes
     path = path.replace(/\/+/g, "/");
-    // Resolve .. segments to prevent path traversal
+    // Resolve .. segments. Parent of root is root, so popping an empty
+    // resolved array (or the leading "/" segment) safely stays at "/".
     const parts = path.split("/");
     const resolved: string[] = [];
     for (const part of parts) {
       if (part === "..") {
-        if (resolved.length > 1) resolved.pop();
+        resolved.pop();
       } else if (part !== "." && part !== "") {
         resolved.push(part);
       }
@@ -198,6 +199,12 @@ export class VirtualFileSystem {
       return false;
     }
 
+    // Moving a directory into its own subtree would create a self-referential
+    // tree and make updateChildrenPaths recurse forever — reject it.
+    if (normalizedNew === normalizedOld || normalizedNew.startsWith(normalizedOld + "/")) {
+      return false;
+    }
+
     // Get parent of source
     const oldParent = this.getParentNode(normalizedOld);
     if (!oldParent || oldParent.type !== "directory") {
@@ -241,14 +248,16 @@ export class VirtualFileSystem {
 
     // If it's a directory, update all children paths recursively
     if (sourceNode.type === "directory" && sourceNode.children) {
-      this.updateChildrenPaths(sourceNode);
+      this.updateChildrenPaths(sourceNode, new Set());
     }
 
     return true;
   }
 
-  private updateChildrenPaths(node: FileNode): void {
+  private updateChildrenPaths(node: FileNode, visited: Set<FileNode>): void {
     if (node.type === "directory" && node.children) {
+      if (visited.has(node)) return;
+      visited.add(node);
       for (const [_, child] of node.children) {
         const oldChildPath = child.path;
         child.path = node.path + "/" + child.name;
@@ -259,7 +268,7 @@ export class VirtualFileSystem {
 
         // Recursively update children if it's a directory
         if (child.type === "directory") {
-          this.updateChildrenPaths(child);
+          this.updateChildrenPaths(child, visited);
         }
       }
     }

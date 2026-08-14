@@ -1,7 +1,7 @@
 /**
  * Custom fetch wrapper that normalizes reasoning field names.
  *
- * Some OpenAI-compatible providers (e.g. OpenCode Zen / big-pickle) return
+ * Some OpenAI-compatible providers (e.g. OpenCode Zen free models) return
  * `reasoning` in their responses, but the `@ai-sdk/openai-compatible` SDK
  * only looks for `reasoning_content`. This wrapper renames the field so the
  * SDK can pick up reasoning/thinking tokens.
