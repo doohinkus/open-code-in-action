@@ -99,7 +99,12 @@ export function ChatProvider({
         ...init,
         body: JSON.stringify({ ...body, files: fileSystem.serialize() }),
       });
-      lastSyncedRevisionRef.current = sentRevision;
+      // Only acknowledge the revision once the resync request actually
+      // succeeded; otherwise the next request will ship the full payload
+      // again (and avoid marking a failed retry as clean).
+      if (retried.ok && sentRevision !== undefined) {
+        lastSyncedRevisionRef.current = sentRevision;
+      }
       return retried;
     }
     if (response.ok && sentRevision !== undefined) {

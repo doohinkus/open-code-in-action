@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { logger, getRequestId, hashIp } from "@/lib/observability/logger";
+import { isAllowedOrigin } from "@/lib/origins";
 import {
   parseShareFiles,
   validateShareInput,
@@ -15,13 +16,18 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
 
 function getClientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return req.headers.get("x-real-ip") || "unknown";
+  // Prefer the proxy-set x-real-ip over the client-influencable X-Forwarded-For.
+  return req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
+  // Opportunistically prune expired entries so the map doesn't grow unbounded.
+  if (ipShareCounts.size > 1000) {
+    for (const [key, entry] of ipShareCounts) {
+      if (entry.resetAt <= now) ipShareCounts.delete(key);
+    }
+  }
   const entry = ipShareCounts.get(ip);
   if (!entry || now > entry.resetAt) {
     ipShareCounts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
@@ -31,25 +37,19 @@ function checkRateLimit(ip: string): boolean {
   return entry.count <= RATE_LIMIT_MAX_REQUESTS;
 }
 
-function isAllowedOrigin(req: Request): boolean {
+function isAllowedOriginForRequest(req: Request): boolean {
   const origin = req.headers.get("origin");
+  // Share creation is token-based and intentionally open to anonymous,
+  // non-browser clients (curl, OG scrapers), so a missing Origin is allowed.
   if (!origin) return true;
-
-  try {
-    const originHost = new URL(origin).host;
-    const requestHost =
-      req.headers.get("x-forwarded-host") || new URL(req.url).host;
-    return originHost === requestHost || originHost.endsWith(".vercel.app");
-  } catch {
-    return false;
-  }
+  return isAllowedOrigin(origin);
 }
 
 export async function POST(req: Request) {
   const requestId = getRequestId(req);
   const ipHash = hashIp(getClientIp(req));
 
-  if (!isAllowedOrigin(req)) {
+  if (!isAllowedOriginForRequest(req)) {
     return NextResponse.json(
       { error: "Request blocked. Please try again." },
       { status: 403 }
@@ -106,7 +106,7 @@ export async function POST(req: Request) {
     const origin = new URL(req.url).origin;
     logger.info("share.upserted", {
       requestId,
-      token: result.token,
+      tokenPrefix: result.token.slice(0, 8),
       created: result.created,
       userId: session?.userId ?? null,
       ipHash,

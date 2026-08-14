@@ -2167,8 +2167,18 @@ export namespace Prisma {
 
   export type AggregateProject = {
     _count: ProjectCountAggregateOutputType | null
+    _avg: ProjectAvgAggregateOutputType | null
+    _sum: ProjectSumAggregateOutputType | null
     _min: ProjectMinAggregateOutputType | null
     _max: ProjectMaxAggregateOutputType | null
+  }
+
+  export type ProjectAvgAggregateOutputType = {
+    version: number | null
+  }
+
+  export type ProjectSumAggregateOutputType = {
+    version: number | null
   }
 
   export type ProjectMinAggregateOutputType = {
@@ -2177,6 +2187,7 @@ export namespace Prisma {
     userId: string | null
     messages: string | null
     data: string | null
+    version: number | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -2187,6 +2198,7 @@ export namespace Prisma {
     userId: string | null
     messages: string | null
     data: string | null
+    version: number | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -2197,11 +2209,20 @@ export namespace Prisma {
     userId: number
     messages: number
     data: number
+    version: number
     createdAt: number
     updatedAt: number
     _all: number
   }
 
+
+  export type ProjectAvgAggregateInputType = {
+    version?: true
+  }
+
+  export type ProjectSumAggregateInputType = {
+    version?: true
+  }
 
   export type ProjectMinAggregateInputType = {
     id?: true
@@ -2209,6 +2230,7 @@ export namespace Prisma {
     userId?: true
     messages?: true
     data?: true
+    version?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -2219,6 +2241,7 @@ export namespace Prisma {
     userId?: true
     messages?: true
     data?: true
+    version?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -2229,6 +2252,7 @@ export namespace Prisma {
     userId?: true
     messages?: true
     data?: true
+    version?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -2272,6 +2296,18 @@ export namespace Prisma {
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
+     * Select which fields to average
+    **/
+    _avg?: ProjectAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: ProjectSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
      * Select which fields to find the minimum value
     **/
     _min?: ProjectMinAggregateInputType
@@ -2302,6 +2338,8 @@ export namespace Prisma {
     take?: number
     skip?: number
     _count?: ProjectCountAggregateInputType | true
+    _avg?: ProjectAvgAggregateInputType
+    _sum?: ProjectSumAggregateInputType
     _min?: ProjectMinAggregateInputType
     _max?: ProjectMaxAggregateInputType
   }
@@ -2312,9 +2350,12 @@ export namespace Prisma {
     userId: string | null
     messages: string
     data: string
+    version: number
     createdAt: Date
     updatedAt: Date
     _count: ProjectCountAggregateOutputType | null
+    _avg: ProjectAvgAggregateOutputType | null
+    _sum: ProjectSumAggregateOutputType | null
     _min: ProjectMinAggregateOutputType | null
     _max: ProjectMaxAggregateOutputType | null
   }
@@ -2339,6 +2380,7 @@ export namespace Prisma {
     userId?: boolean
     messages?: boolean
     data?: boolean
+    version?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     user?: boolean | Project$userArgs<ExtArgs>
@@ -2352,6 +2394,7 @@ export namespace Prisma {
     userId?: boolean
     messages?: boolean
     data?: boolean
+    version?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     user?: boolean | Project$userArgs<ExtArgs>
@@ -2363,6 +2406,7 @@ export namespace Prisma {
     userId?: boolean
     messages?: boolean
     data?: boolean
+    version?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     user?: boolean | Project$userArgs<ExtArgs>
@@ -2374,11 +2418,12 @@ export namespace Prisma {
     userId?: boolean
     messages?: boolean
     data?: boolean
+    version?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type ProjectOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "name" | "userId" | "messages" | "data" | "createdAt" | "updatedAt", ExtArgs["result"]["project"]>
+  export type ProjectOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "name" | "userId" | "messages" | "data" | "version" | "createdAt" | "updatedAt", ExtArgs["result"]["project"]>
   export type ProjectInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     user?: boolean | Project$userArgs<ExtArgs>
     shares?: boolean | Project$sharesArgs<ExtArgs>
@@ -2403,6 +2448,7 @@ export namespace Prisma {
       userId: string | null
       messages: string
       data: string
+      version: number
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["project"]>
@@ -2835,6 +2881,7 @@ export namespace Prisma {
     readonly userId: FieldRef<"Project", 'String'>
     readonly messages: FieldRef<"Project", 'String'>
     readonly data: FieldRef<"Project", 'String'>
+    readonly version: FieldRef<"Project", 'Int'>
     readonly createdAt: FieldRef<"Project", 'DateTime'>
     readonly updatedAt: FieldRef<"Project", 'DateTime'>
   }
@@ -4427,6 +4474,7 @@ export namespace Prisma {
     userId: 'userId',
     messages: 'messages',
     data: 'data',
+    version: 'version',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -4516,6 +4564,20 @@ export namespace Prisma {
    */
   export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int[]'>
     
+
+
+  /**
+   * Reference to a field of type 'Float'
+   */
+  export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
+    
+
+
+  /**
+   * Reference to a field of type 'Float[]'
+   */
+  export type ListFloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float[]'>
+    
   /**
    * Deep Input Types
    */
@@ -4580,6 +4642,7 @@ export namespace Prisma {
     userId?: StringNullableFilter<"Project"> | string | null
     messages?: StringFilter<"Project"> | string
     data?: StringFilter<"Project"> | string
+    version?: IntFilter<"Project"> | number
     createdAt?: DateTimeFilter<"Project"> | Date | string
     updatedAt?: DateTimeFilter<"Project"> | Date | string
     user?: XOR<UserNullableScalarRelationFilter, UserWhereInput> | null
@@ -4592,6 +4655,7 @@ export namespace Prisma {
     userId?: SortOrderInput | SortOrder
     messages?: SortOrder
     data?: SortOrder
+    version?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     user?: UserOrderByWithRelationInput
@@ -4607,6 +4671,7 @@ export namespace Prisma {
     userId?: StringNullableFilter<"Project"> | string | null
     messages?: StringFilter<"Project"> | string
     data?: StringFilter<"Project"> | string
+    version?: IntFilter<"Project"> | number
     createdAt?: DateTimeFilter<"Project"> | Date | string
     updatedAt?: DateTimeFilter<"Project"> | Date | string
     user?: XOR<UserNullableScalarRelationFilter, UserWhereInput> | null
@@ -4619,11 +4684,14 @@ export namespace Prisma {
     userId?: SortOrderInput | SortOrder
     messages?: SortOrder
     data?: SortOrder
+    version?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: ProjectCountOrderByAggregateInput
+    _avg?: ProjectAvgOrderByAggregateInput
     _max?: ProjectMaxOrderByAggregateInput
     _min?: ProjectMinOrderByAggregateInput
+    _sum?: ProjectSumOrderByAggregateInput
   }
 
   export type ProjectScalarWhereWithAggregatesInput = {
@@ -4635,6 +4703,7 @@ export namespace Prisma {
     userId?: StringNullableWithAggregatesFilter<"Project"> | string | null
     messages?: StringWithAggregatesFilter<"Project"> | string
     data?: StringWithAggregatesFilter<"Project"> | string
+    version?: IntWithAggregatesFilter<"Project"> | number
     createdAt?: DateTimeWithAggregatesFilter<"Project"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Project"> | Date | string
   }
@@ -4762,6 +4831,7 @@ export namespace Prisma {
     name: string
     messages?: string
     data?: string
+    version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
     user?: UserCreateNestedOneWithoutProjectsInput
@@ -4774,6 +4844,7 @@ export namespace Prisma {
     userId?: string | null
     messages?: string
     data?: string
+    version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
     shares?: ShareUncheckedCreateNestedManyWithoutProjectInput
@@ -4784,6 +4855,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     messages?: StringFieldUpdateOperationsInput | string
     data?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     user?: UserUpdateOneWithoutProjectsNestedInput
@@ -4796,6 +4868,7 @@ export namespace Prisma {
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     messages?: StringFieldUpdateOperationsInput | string
     data?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     shares?: ShareUncheckedUpdateManyWithoutProjectNestedInput
@@ -4807,6 +4880,7 @@ export namespace Prisma {
     userId?: string | null
     messages?: string
     data?: string
+    version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -4816,6 +4890,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     messages?: StringFieldUpdateOperationsInput | string
     data?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -4826,6 +4901,7 @@ export namespace Prisma {
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     messages?: StringFieldUpdateOperationsInput | string
     data?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5003,6 +5079,17 @@ export namespace Prisma {
     not?: NestedStringNullableFilter<$PrismaModel> | string | null
   }
 
+  export type IntFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel>
+    in?: number[] | ListIntFieldRefInput<$PrismaModel>
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntFilter<$PrismaModel> | number
+  }
+
   export type UserNullableScalarRelationFilter = {
     is?: UserWhereInput | null
     isNot?: UserWhereInput | null
@@ -5029,8 +5116,13 @@ export namespace Prisma {
     userId?: SortOrder
     messages?: SortOrder
     data?: SortOrder
+    version?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+
+  export type ProjectAvgOrderByAggregateInput = {
+    version?: SortOrder
   }
 
   export type ProjectMaxOrderByAggregateInput = {
@@ -5039,6 +5131,7 @@ export namespace Prisma {
     userId?: SortOrder
     messages?: SortOrder
     data?: SortOrder
+    version?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -5049,8 +5142,13 @@ export namespace Prisma {
     userId?: SortOrder
     messages?: SortOrder
     data?: SortOrder
+    version?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+
+  export type ProjectSumOrderByAggregateInput = {
+    version?: SortOrder
   }
 
   export type StringNullableWithAggregatesFilter<$PrismaModel = never> = {
@@ -5069,6 +5167,22 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedStringNullableFilter<$PrismaModel>
     _max?: NestedStringNullableFilter<$PrismaModel>
+  }
+
+  export type IntWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel>
+    in?: number[] | ListIntFieldRefInput<$PrismaModel>
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntWithAggregatesFilter<$PrismaModel> | number
+    _count?: NestedIntFilter<$PrismaModel>
+    _avg?: NestedFloatFilter<$PrismaModel>
+    _sum?: NestedIntFilter<$PrismaModel>
+    _min?: NestedIntFilter<$PrismaModel>
+    _max?: NestedIntFilter<$PrismaModel>
   }
 
   export type ProjectNullableScalarRelationFilter = {
@@ -5174,6 +5288,14 @@ export namespace Prisma {
     connectOrCreate?: ShareCreateOrConnectWithoutProjectInput | ShareCreateOrConnectWithoutProjectInput[]
     createMany?: ShareCreateManyProjectInputEnvelope
     connect?: ShareWhereUniqueInput | ShareWhereUniqueInput[]
+  }
+
+  export type IntFieldUpdateOperationsInput = {
+    set?: number
+    increment?: number
+    decrement?: number
+    multiply?: number
+    divide?: number
   }
 
   export type UserUpdateOneWithoutProjectsNestedInput = {
@@ -5343,11 +5465,39 @@ export namespace Prisma {
     not?: NestedIntNullableFilter<$PrismaModel> | number | null
   }
 
+  export type NestedIntWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel>
+    in?: number[] | ListIntFieldRefInput<$PrismaModel>
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntWithAggregatesFilter<$PrismaModel> | number
+    _count?: NestedIntFilter<$PrismaModel>
+    _avg?: NestedFloatFilter<$PrismaModel>
+    _sum?: NestedIntFilter<$PrismaModel>
+    _min?: NestedIntFilter<$PrismaModel>
+    _max?: NestedIntFilter<$PrismaModel>
+  }
+
+  export type NestedFloatFilter<$PrismaModel = never> = {
+    equals?: number | FloatFieldRefInput<$PrismaModel>
+    in?: number[] | ListFloatFieldRefInput<$PrismaModel>
+    notIn?: number[] | ListFloatFieldRefInput<$PrismaModel>
+    lt?: number | FloatFieldRefInput<$PrismaModel>
+    lte?: number | FloatFieldRefInput<$PrismaModel>
+    gt?: number | FloatFieldRefInput<$PrismaModel>
+    gte?: number | FloatFieldRefInput<$PrismaModel>
+    not?: NestedFloatFilter<$PrismaModel> | number
+  }
+
   export type ProjectCreateWithoutUserInput = {
     id?: string
     name: string
     messages?: string
     data?: string
+    version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
     shares?: ShareCreateNestedManyWithoutProjectInput
@@ -5358,6 +5508,7 @@ export namespace Prisma {
     name: string
     messages?: string
     data?: string
+    version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
     shares?: ShareUncheckedCreateNestedManyWithoutProjectInput
@@ -5398,6 +5549,7 @@ export namespace Prisma {
     userId?: StringNullableFilter<"Project"> | string | null
     messages?: StringFilter<"Project"> | string
     data?: StringFilter<"Project"> | string
+    version?: IntFilter<"Project"> | number
     createdAt?: DateTimeFilter<"Project"> | Date | string
     updatedAt?: DateTimeFilter<"Project"> | Date | string
   }
@@ -5508,6 +5660,7 @@ export namespace Prisma {
     name: string
     messages?: string
     data?: string
+    version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
     user?: UserCreateNestedOneWithoutProjectsInput
@@ -5519,6 +5672,7 @@ export namespace Prisma {
     userId?: string | null
     messages?: string
     data?: string
+    version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -5544,6 +5698,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     messages?: StringFieldUpdateOperationsInput | string
     data?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     user?: UserUpdateOneWithoutProjectsNestedInput
@@ -5555,6 +5710,7 @@ export namespace Prisma {
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     messages?: StringFieldUpdateOperationsInput | string
     data?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5564,6 +5720,7 @@ export namespace Prisma {
     name: string
     messages?: string
     data?: string
+    version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -5573,6 +5730,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     messages?: StringFieldUpdateOperationsInput | string
     data?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     shares?: ShareUpdateManyWithoutProjectNestedInput
@@ -5583,6 +5741,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     messages?: StringFieldUpdateOperationsInput | string
     data?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     shares?: ShareUncheckedUpdateManyWithoutProjectNestedInput
@@ -5593,6 +5752,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     messages?: StringFieldUpdateOperationsInput | string
     data?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }

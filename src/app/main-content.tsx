@@ -100,8 +100,8 @@ export function MainContent({ user, project }: MainContentProps) {
 
   if (!mounted) {
     return (
-      <FileSystemProvider initialData={project?.data}>
-        <ChatProvider projectId={project?.id} initialMessages={project?.messages}>
+      <FileSystemProvider key={project?.id ?? "anon"} initialData={project?.data}>
+        <ChatProvider key={project?.id ?? "anon"} projectId={project?.id} initialMessages={project?.messages}>
           <LoadingScreen />
         </ChatProvider>
       </FileSystemProvider>
@@ -109,8 +109,8 @@ export function MainContent({ user, project }: MainContentProps) {
   }
 
   return (
-    <FileSystemProvider initialData={project?.data}>
-      <ChatProvider projectId={project?.id} initialMessages={project?.messages}>
+    <FileSystemProvider key={project?.id ?? "anon"} initialData={project?.data}>
+      <ChatProvider key={project?.id ?? "anon"} projectId={project?.id} initialMessages={project?.messages}>
         <AppShell user={user} project={project} />
       </ChatProvider>
     </FileSystemProvider>

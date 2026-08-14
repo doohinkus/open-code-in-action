@@ -84,6 +84,7 @@ describe("ChatContext", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   test("renders with default values", () => {
@@ -264,6 +265,77 @@ describe("ChatContext", () => {
     });
 
     expect(body.model).toBe("deepseek-v4-flash-free");
+  });
+
+  function renderAndCaptureVfsFetch() {
+    let fetchFn: any;
+    let prepareFn: any;
+
+    (useAIChat as any).mockImplementation((config: any) => {
+      fetchFn = config.fetch;
+      prepareFn = config.experimental_prepareRequestBody;
+      return mockUseAIChat;
+    });
+
+    render(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    return {
+      fetchFn,
+      buildBody: () =>
+        prepareFn({
+          id: "req-1",
+          messages: [{ role: "user", content: "hi" }],
+          requestData: undefined,
+          requestBody: {},
+        }),
+    };
+  }
+
+  test("ships the full filesystem on the first request (revision mismatch)", () => {
+    const { buildBody } = renderAndCaptureVfsFetch();
+
+    const body = buildBody();
+    expect(body.files).toBeDefined();
+    expect(body.vfsRevision).toBe(0);
+  });
+
+  test("marks the revision synced only after a successful resync retry", async () => {
+    const globalFetch = vi.fn()
+      .mockResolvedValueOnce(new Response("resync", { status: 428 }))
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+    vi.stubGlobal("fetch", globalFetch);
+
+    const { fetchFn, buildBody } = renderAndCaptureVfsFetch();
+    await fetchFn("/api/chat", { body: JSON.stringify(buildBody()) });
+
+    expect(globalFetch).toHaveBeenCalledTimes(2);
+    const retryBody = JSON.parse((globalFetch.mock.calls[1][1] as any).body);
+    expect(retryBody.files).toBeDefined();
+
+    // After the successful resync, subsequent requests omit files.
+    expect(buildBody().files).toBeUndefined();
+  });
+
+  test("does not mark the revision synced when the resync retry fails", async () => {
+    const globalFetch = vi.fn()
+      .mockResolvedValueOnce(new Response("resync", { status: 428 }))
+      .mockResolvedValueOnce(new Response("boom", { status: 500 }));
+    vi.stubGlobal("fetch", globalFetch);
+
+    const { fetchFn, buildBody } = renderAndCaptureVfsFetch();
+    await fetchFn("/api/chat", { body: JSON.stringify(buildBody()) });
+
+    expect(globalFetch).toHaveBeenCalledTimes(2);
+
+    // The retry failed, so the revision must NOT be acknowledged: the next
+    // request still ships the full filesystem.
+    expect(buildBody().files).toBeDefined();
   });
 
   test("handles tool calls", () => {
