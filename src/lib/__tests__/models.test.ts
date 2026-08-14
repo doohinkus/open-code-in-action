@@ -32,7 +32,15 @@ describe("models", () => {
   });
 
   test("resolves names for known and unknown models", () => {
-    expect(modelName("laguna-s-2.1-free")).toBe("Laguna S 2.1 Free");
+    expect(modelName("hy3-free")).toBe("Hy3 Free");
     expect(modelName("unknown-model")).toBe("unknown-model");
+  });
+
+  test("includes exactly the allowed free models in order", () => {
+    expect(ZEN_FREE_MODELS.map((m) => m.id)).toEqual([
+      "deepseek-v4-flash-free",
+      "nemotron-3-ultra-free",
+      "hy3-free",
+    ]);
   });
 });

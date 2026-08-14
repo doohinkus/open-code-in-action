@@ -52,16 +52,16 @@ describe("getLanguageModel", () => {
     process.env.OPENAI_COMPATIBLE_MODEL = "deepseek-v4-flash-free";
     process.env.OPENAI_COMPATIBLE_API_KEY = "sk-test";
 
-    const model = getLanguageModel("laguna-s-2.1-free");
-    expect(model.modelId).toBe("laguna-s-2.1-free");
+    const model = getLanguageModel("nemotron-3-ultra-free");
+    expect(model.modelId).toBe("nemotron-3-ultra-free");
   });
 
   test("trims whitespace around the requested model id", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
     process.env.OPENAI_COMPATIBLE_MODEL = "deepseek-v4-flash-free";
 
-    const model = getLanguageModel("  big-pickle  ");
-    expect(model.modelId).toBe("big-pickle");
+    const model = getLanguageModel("  hy3-free  ");
+    expect(model.modelId).toBe("hy3-free");
   });
 
   test("falls back to the env default for an empty override", () => {
@@ -100,13 +100,13 @@ describe("getLanguageModel", () => {
     process.env.FORCE_MOCK_PROVIDER = "1";
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
 
-    const model = getLanguageModel("laguna-s-2.1-free");
+    const model = getLanguageModel("hy3-free");
     expect(model).toBeInstanceOf(MockLanguageModel);
     expect(model.modelId).toBe("mock-" + DEFAULT_MODEL);
   });
 
   test("returns the mock provider when no Zen endpoint is configured", () => {
-    const model = getLanguageModel("laguna-s-2.1-free");
+    const model = getLanguageModel("hy3-free");
     expect(model).toBeInstanceOf(MockLanguageModel);
     expect(model.modelId).toBe("mock-" + DEFAULT_MODEL);
   });
@@ -429,11 +429,11 @@ describe("createRateLimitFallbackModel", () => {
 describe("buildLanguageModel", () => {
   test("returns a wrapped real provider when Zen is configured", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "big-pickle";
+    process.env.OPENAI_COMPATIBLE_MODEL = "nemotron-3-ultra-free";
 
     const model = buildLanguageModel();
     expect(model.provider).toBe("opencode-compatible.chat");
-    expect(model.modelId).toBe("big-pickle");
+    expect(model.modelId).toBe("nemotron-3-ultra-free");
   });
 
   test("returns the mock provider when Zen is not configured", () => {
