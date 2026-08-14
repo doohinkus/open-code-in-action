@@ -39,6 +39,16 @@ interface ChatContextType {
 }
 
 const STALL_TIMEOUT_MS = 130_000;
+// After this long of a single generation, nudge the user to stop or simplify.
+const RESOURCE_WARNING_TIMEOUT_MS = 35_000;
+
+// Zen's free tier dies mid-stream with an idle timeout (e.g. "Streaming
+// response failed: [504] Upstream idle timeout exceeded") or ends the stream
+// with no finish reason. Both are transient — one automatic retry usually
+// succeeds once the rate-limit window resets or the chain rotates models.
+function isProviderTimeoutError(raw: string): boolean {
+  return /upstream idle|idle timeout|\[504\]|timed out|finishReason.{0,20}unknown|"unknown"/i.test(raw);
+}
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
@@ -142,6 +152,20 @@ export function ChatProvider({
   const prevStatusRef = useRef(status);
   const [generationTimedOut, setGenerationTimedOut] = useState(false);
   const [generationInterrupted, setGenerationInterrupted] = useState(false);
+  // reload from useChat is recreated on every render (its useCallback deps
+  // change with each throttled stream update), so keep the latest in a ref.
+  // Scheduling the auto-retry timer through a ref avoids the effect's own
+  // cleanup cancelling it on unrelated re-renders.
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
+  // One transparent retry per user turn when the free provider times out
+  // mid-stream; the user can still retry manually afterwards.
+  const autoRetriedRef = useRef(false);
+  // True when the user (or the stall watchdog) stopped generation explicitly —
+  // never auto-retry after an explicit stop.
+  const userStoppedRef = useRef(false);
+  // True once the "long generation" warning toast has fired this turn.
+  const resourceWarnedRef = useRef(false);
   const { toast } = useToast();
   const prevErrorStatusRef = useRef(status);
 
@@ -161,9 +185,44 @@ export function ChatProvider({
     }
   }, [generationTimedOut, toast]);
 
+  // Transparently retry once when the provider errors out mid-stream with an
+  // idle timeout / 504. reload() drops the last (partial) assistant message
+  // and re-sends the last user message, so this is equivalent to a manual
+  // retry — it just happens automatically. deps are deliberately limited to
+  // [status, error] so unrelated re-renders can't cancel the pending timer.
+  useEffect(() => {
+    if (status !== "error" || !error || autoRetriedRef.current) return;
+    if (userStoppedRef.current || !isProviderTimeoutError(error.message)) return;
+    autoRetriedRef.current = true;
+    const timer = setTimeout(() => {
+      reloadRef.current();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [status, error]);
+
+  // Same recovery for streams that end with finishReason "unknown" (the Zen
+  // connection drops without an explicit error part).
+  useEffect(() => {
+    if (!generationInterrupted || autoRetriedRef.current) return;
+    if (userStoppedRef.current || generationTimedOut) return;
+    autoRetriedRef.current = true;
+    const timer = setTimeout(() => {
+      reloadRef.current();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [generationInterrupted, generationTimedOut]);
+
+  const handleStop = useCallback(() => {
+    userStoppedRef.current = true;
+    stop();
+  }, [stop]);
+
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
       fixAttemptCount.current = 0;
+      autoRetriedRef.current = false;
+      userStoppedRef.current = false;
+      resourceWarnedRef.current = false;
       setGenerationTimedOut(false);
       setGenerationInterrupted(false);
       setIsFixingErrors(false);
@@ -178,12 +237,32 @@ export function ChatProvider({
     if (status !== "submitted" && status !== "streaming") return;
 
     const timer = setTimeout(() => {
-      stop();
+      handleStop();
       setGenerationTimedOut(true);
     }, STALL_TIMEOUT_MS);
 
     return () => clearTimeout(timer);
-  }, [status, messages, stop]);
+  }, [status, messages, handleStop]);
+
+  // Resource-usage warning: after RESOURCE_WARNING_TIMEOUT_MS of a generation,
+  // nudge the user to stop or simplify. Fires once per turn and is NOT reset
+  // by stream activity, so long real-provider generations get a heads-up while
+  // it's still easy to cancel.
+  useEffect(() => {
+    if (status !== "submitted" && status !== "streaming") return;
+
+    const timer = setTimeout(() => {
+      if (resourceWarnedRef.current) return;
+      resourceWarnedRef.current = true;
+      toast(
+        "This component is using lots of AI resources—consider using the red stop button and simplifying.",
+        "info",
+        8000
+      );
+    }, RESOURCE_WARNING_TIMEOUT_MS);
+
+    return () => clearTimeout(timer);
+  }, [status, toast]);
 
   const requestFix = useCallback(
     (errorText: string) => {
@@ -244,7 +323,7 @@ export function ChatProvider({
         error,
         reload,
         append,
-        stop,
+        stop: handleStop,
         requestFix,
         generationTimedOut,
         generationInterrupted,

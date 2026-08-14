@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   createImportMap,
   createPreviewHTML,
+  isFullScreenComponent,
 } from "@/lib/transform/jsx-transformer";
 import { Loader2 } from "lucide-react";
 
@@ -50,13 +51,17 @@ export function SharedPreview({ files }: SharedPreviewProps) {
     try {
       const { importMap, styles, errors, bundleCode } = createImportMap(fileMap);
       const nonce = crypto.randomUUID();
+      // Don't force-centering on full-screen components: it would shrink
+      // their root so the background no longer spans the full width.
+      const centerComponent = !isFullScreenComponent(fileMap.get(entry) ?? "");
       const previewHTML = createPreviewHTML(
         entry,
         importMap,
         styles,
         errors,
         bundleCode,
-        nonce
+        nonce,
+        centerComponent
       );
 
       if (iframeRef.current) {

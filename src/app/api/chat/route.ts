@@ -399,12 +399,19 @@ export async function POST(req: Request) {
 
   // Test-connection requests are minimal: one model call, tiny output.
   const isTestRequest = test === true;
-  // Use fewer steps for mock provider to prevent repetition
-  const maxSteps = isTestRequest ? 1 : hasRealProvider() ? 5 : 4;
-  const maxTokens = isTestRequest ? 64 : 10_000;
+  // Real providers get 10 steps so multi-file apps (games, dashboards) can be
+  // assembled in one turn without being cut off mid-build. The mock gets fewer
+  // steps to prevent its canned 4-step sequence from repeating.
+  const maxSteps = isTestRequest ? 1 : hasRealProvider() ? 10 : 4;
+  // Cap per-call output so a single step can't run away; test requests stay
+  // tiny. 8k is plenty for a full component/game step while keeping the
+  // reasoning preamble bounded.
+  const maxTokens = isTestRequest ? 64 : 8_000;
 
   const reasoningOptions: Record<string, any> = {};
   if (process.env.OPENAI_COMPATIBLE_BASE_URL?.trim()) {
+    // Keep reasoning cheap on the free tier: long thinking windows are what
+    // trip Zen's ~2-minute upstream idle timeout (504) mid-stream.
     reasoningOptions["opencode-compatible"] = { reasoningEffort: "low" };
   }
 

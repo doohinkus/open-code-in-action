@@ -24,6 +24,9 @@ export function mapErrorMessage(raw: string): string {
   if (/origin|blocked|forbidden/i.test(text)) {
     return "Request blocked. Please try again.";
   }
+  if (/upstream idle|idle timeout|\[504\]/i.test(text)) {
+    return "The AI provider timed out while streaming. Try again or switch models.";
+  }
   if (/abort|timed out|timeout/i.test(text)) {
     return "Generation timed out. Please try again.";
   }

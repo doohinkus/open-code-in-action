@@ -289,6 +289,12 @@ describe("mapErrorMessage", () => {
     );
   });
 
+  test("maps the Zen 504 idle timeout to the switch-models hint", () => {
+    expect(
+      mapErrorMessage('{"error":"Streaming response failed: [504] Upstream idle timeout exceeded"}')
+    ).toBe("The AI provider timed out while streaming. Try again or switch models.");
+  });
+
   test("uses the generic fallback for the SDK-masked error", () => {
     expect(mapErrorMessage("An error occurred.")).toBe(
       "Something went wrong. Please try again."
