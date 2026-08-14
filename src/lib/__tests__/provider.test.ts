@@ -5,6 +5,7 @@ import {
   MockLanguageModel,
   createRateLimitFallbackModel,
   isRateLimitError,
+  isRetryableUpstreamError,
 } from "@/lib/provider";
 import { DEFAULT_MODEL } from "@/lib/models";
 
@@ -137,6 +138,32 @@ describe("isRateLimitError", () => {
     expect(isRateLimitError(new Error("Internal server error"))).toBe(false);
     expect(isRateLimitError({ statusCode: 500, message: "boom" })).toBe(false);
     expect(isRateLimitError("just a string")).toBe(false);
+  });
+
+  test("matches rate limits nested in plain provider error objects", () => {
+    expect(
+      isRateLimitError({ error: "Rate limit exceeded. Please try again later." })
+    ).toBe(true);
+    expect(isRateLimitError({ error: { message: "insufficient_quota" } })).toBe(true);
+  });
+});
+
+describe("isRetryableUpstreamError", () => {
+  test("matches the plain Zen 504 idle-timeout provider object", () => {
+    const error = {
+      error: "Streaming response failed: [504] Upstream idle timeout exceeded",
+    };
+    expect(isRetryableUpstreamError(error)).toBe(true);
+  });
+
+  test("matches nested 5xx provider error objects", () => {
+    expect(isRetryableUpstreamError({ error: { type: "server_error" } })).toBe(true);
+    expect(isRetryableUpstreamError({ statusCode: 503 })).toBe(true);
+  });
+
+  test("ignores unrelated provider objects", () => {
+    expect(isRetryableUpstreamError({ error: "Invalid API key" })).toBe(false);
+    expect(isRetryableUpstreamError({ error: "content_filter" })).toBe(false);
   });
 });
 
@@ -406,16 +433,90 @@ describe("createRateLimitFallbackModel", () => {
     expect(parts).toEqual([{ type: "text-delta", textDelta: "ok" }]);
   });
 
-  test("doStream keeps the primary stream once content is flowing", async () => {
+  test("doStream rotates past a retryable error even after plain text", async () => {
+    // Text alone doesn't mutate the VFS, so a mid-stream 504 after a text
+    // lead-in can still rotate to the next model.
     const primary = fakeStreamModel([
-      { type: "text-delta", textDelta: "hi" },
+      { type: "text-delta", textDelta: "Let me create that" },
+      { type: "error", error: new Error("Rate limit exceeded") },
+    ]);
+    const fallback = fakeStreamModel([
+      { type: "text-delta", textDelta: "recovered" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      },
+    ]);
+
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
+    const parts = await collectStreamParts(wrapped);
+    expect(parts.map((p) => p.type)).toEqual(["text-delta", "text-delta", "finish"]);
+  });
+
+  test("doStream keeps the primary stream once a tool call has started", async () => {
+    const primary = fakeStreamModel([
+      { type: "tool-call", toolCallType: "function", toolCallId: "c1", toolName: "x", args: "{}" },
       { type: "error", error: new Error("Rate limit exceeded") },
     ]);
     const fallback = fakeStreamModel([{ type: "text-delta", textDelta: "should not appear" }]);
 
     const wrapped = createRateLimitFallbackModel(primary, [fallback]);
     const parts = await collectStreamParts(wrapped);
-    expect(parts.map((p) => p.type)).toEqual(["text-delta", "error"]);
+    expect(parts.map((p) => p.type)).toEqual(["tool-call", "error"]);
+  });
+
+  test("doStream rotates past a plain-object 504 that arrives mid-reasoning", async () => {
+    // Zen's idle timeout surfaces as { error: "Streaming response failed:
+    // [504] Upstream idle timeout exceeded" } — a plain object, not an Error.
+    // Reasoning deltas alone must not commit the stream to the model.
+    const primary = fakeStreamModel([
+      { type: "reasoning", textDelta: "The user wants a 3D game..." },
+      { type: "error", error: { error: "Streaming response failed: [504] Upstream idle timeout exceeded" } },
+    ]);
+    const fallback = fakeStreamModel([
+      { type: "reasoning", textDelta: "new plan " },
+      { type: "text-delta", textDelta: "recovered" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      },
+    ]);
+
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
+    const parts = await collectStreamParts(wrapped);
+    expect(parts.map((p) => p.type)).toEqual([
+      "reasoning",
+      "reasoning",
+      "text-delta",
+      "finish",
+    ]);
+    expect(parts[3]).toEqual({
+      type: "finish",
+      finishReason: "stop",
+      usage: { promptTokens: 1, completionTokens: 1 },
+    });
+  });
+
+  test("doStream rotates past a plain-object 504 that arrives after text", async () => {
+    const primary = fakeStreamModel([
+      { type: "text-delta", textDelta: "here is content" },
+      { type: "error", error: { error: "Streaming response failed: [504] Upstream idle timeout exceeded" } },
+    ]);
+    const fallback = fakeStreamModel([
+      { type: "text-delta", textDelta: "recovered" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      },
+    ]);
+
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
+    const parts = await collectStreamParts(wrapped);
+    expect(parts.map((p) => p.type)).toEqual(["text-delta", "text-delta", "finish"]);
+    expect((parts[2] as { finishReason?: string }).finishReason).toBe("stop");
   });
 
   test("doStream propagates non-rate-limit stream errors", async () => {
@@ -423,6 +524,67 @@ describe("createRateLimitFallbackModel", () => {
     const wrapped = createRateLimitFallbackModel(primary, [fakeStreamModel([])]);
 
     await expect(collectStreamParts(wrapped)).rejects.toThrow("Bad gateway");
+  });
+
+  test("skips previously-failed models on later streamText steps", async () => {
+    // streamText calls doStream once per step with the same wrapper. Once a
+    // free model fails with a retryable error, later steps must skip it and
+    // start from a working model (the mock) instead of re-trying it.
+    const callCounts: Record<string, number> = { p: 0, s: 0, t: 0 };
+
+    function failingModel(label: string): LanguageModelV1 {
+      return {
+        specificationVersion: "v1",
+        provider: "p",
+        modelId: label,
+        async doGenerate() {
+          throw new Error("n/a");
+        },
+        async doStream() {
+          callCounts[label]++;
+          const stream = new ReadableStream<LanguageModelV1StreamPart>({
+            async start(controller) {
+              controller.enqueue({
+                type: "error",
+                error: {
+                  error: "Streaming response failed: [504] Upstream idle timeout exceeded",
+                },
+              });
+            },
+          });
+          return {
+            stream,
+            warnings: [],
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            rawResponse: { headers: {} },
+          };
+        },
+      } as unknown as LanguageModelV1;
+    }
+
+    const primary = failingModel("p");
+    const second = failingModel("s");
+    const third = failingModel("t");
+    const mock = fakeStreamModel([
+      { type: "text-delta", textDelta: "ok" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      },
+    ]);
+
+    const wrapped = createRateLimitFallbackModel(primary, [second, third, mock]);
+
+    // Step 1: rotates through all three failed models and lands on the mock.
+    const firstParts = await collectStreamParts(wrapped);
+    expect(firstParts.map((p) => p.type)).toEqual(["text-delta", "finish"]);
+    expect(callCounts).toEqual({ p: 1, s: 1, t: 1 });
+
+    // Step 2: must NOT re-try the failed models — start straight at the mock.
+    const secondParts = await collectStreamParts(wrapped);
+    expect(secondParts.map((p) => p.type)).toEqual(["text-delta", "finish"]);
+    expect(callCounts).toEqual({ p: 1, s: 1, t: 1 });
   });
 });
 
@@ -440,5 +602,58 @@ describe("buildLanguageModel", () => {
     const model = buildLanguageModel();
     expect(model.provider).toBe("mock");
     expect(model.modelId).toBe("mock-" + DEFAULT_MODEL);
+  });
+});
+
+describe("MockLanguageModel fallback message mode", () => {
+  test("streams the limitation message and creates a message App.jsx", async () => {
+    const mock = new MockLanguageModel("mock-fallback", true);
+
+    const parts = await collectStreamParts(mock);
+    const types = parts.map((p) => p.type);
+    // The mock streams the message one character at a time, so many
+    // text-deltas, then the tool call and finish.
+    expect(types[types.length - 2]).toBe("tool-call");
+    expect(types[types.length - 1]).toBe("finish");
+    expect(
+      types.every((t) => t === "text-delta" || t === "tool-call" || t === "finish")
+    ).toBe(true);
+
+    const text = parts
+      .filter((p) => p.type === "text-delta")
+      .map((p) => (p as { textDelta: string }).textDelta)
+      .join("");
+    expect(text).toContain("free tier models");
+
+    const toolCall = parts.find((p) => p.type === "tool-call") as {
+      toolName: string;
+      args: string;
+    };
+    expect(toolCall.toolName).toBe("str_replace_editor");
+    const args = JSON.parse(toolCall.args);
+    expect(args.command).toBe("create");
+    expect(args.path).toBe("/App.jsx");
+    expect(args.file_text).toContain("Unable to complete component");
+  });
+
+  test("stops without further edits once the message App.jsx is created", async () => {
+    const mock = new MockLanguageModel("mock-fallback", true);
+    const prompt = [
+      {
+        role: "tool" as const,
+        content: [{ type: "text" as const, text: "File created: /App.jsx" }],
+      },
+    ];
+
+    const result = await mock.doStream({ prompt, mode: { type: "regular" } } as any);
+    const reader = result.stream.getReader();
+    const streamed: Array<{ type: string; finishReason?: string }> = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      streamed.push(value);
+    }
+    expect(streamed.map((p) => p.type)).toEqual(["finish"]);
+    expect(streamed[0].finishReason).toBe("stop");
   });
 });

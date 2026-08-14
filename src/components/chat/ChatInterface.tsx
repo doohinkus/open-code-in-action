@@ -110,9 +110,18 @@ export function ChatInterface() {
           </div>
         )}
         {generationInterrupted && (
-          <div className="mb-3 px-3 py-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg">
-            Generation was interrupted and may be incomplete. Say
-            &ldquo;continue&rdquo; to keep going, or try again.
+          <div className="mb-3 flex items-center justify-between gap-2 px-3 py-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg">
+            <span>
+              Generation was interrupted and may be incomplete. Say
+              &ldquo;continue&rdquo; to keep going.
+            </span>
+            <button
+              onClick={() => reload()}
+              className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1 text-xs font-medium text-amber-700 bg-white border border-amber-300 hover:bg-amber-100 rounded-lg transition-colors"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Retry
+            </button>
           </div>
         )}
         <div className="mb-2">

@@ -5,6 +5,7 @@ import {
   createImportMap,
   createPreviewHTML,
   createBundleFromFiles,
+  isFullScreenComponent,
 } from "../jsx-transformer";
 import * as Babel from "@babel/standalone";
 
@@ -194,6 +195,39 @@ test("createPreviewHTML generates valid HTML", () => {
 test("createPreviewHTML includes Tailwind CSS", () => {
   const html = createPreviewHTML("/App.jsx", "{}");
   expect(html).toContain("https://cdn.tailwindcss.com");
+});
+
+test("createPreviewHTML centers generated components in the viewport", () => {
+  const html = createPreviewHTML("/App.jsx", "{}");
+  // #root fills the viewport and uses flex to center small components both
+  // horizontally and vertically (full-screen min-h-screen apps are unaffected).
+  const rootCss = html.slice(html.indexOf("#root"), html.indexOf(".error-boundary"));
+  expect(rootCss).toContain("width: 100vw;");
+  expect(rootCss).toContain("height: 100vh;");
+  expect(rootCss).toContain("display: flex;");
+  expect(rootCss).toContain("align-items: center;");
+  expect(rootCss).toContain("justify-content: center;");
+});
+
+test("createPreviewHTML skips flex centering for full-screen components", () => {
+  const html = createPreviewHTML("/App.jsx", "{}", "", [], undefined, undefined, false);
+  const rootCss = html.slice(html.indexOf("#root"), html.indexOf(".error-boundary"));
+  expect(rootCss).toContain("width: 100vw;");
+  expect(rootCss).toContain("height: 100vh;");
+  expect(rootCss).not.toContain("display: flex;");
+});
+
+test("isFullScreenComponent detects viewport-filling roots", () => {
+  expect(isFullScreenComponent(`export default function App() {
+    return <div className="min-h-screen bg-gray-50">hi</div>;
+  }`)).toBe(true);
+  expect(isFullScreenComponent(`export default function App() {
+    return <main className="h-dvh flex items-center justify-center">hi</main>;
+  }`)).toBe(true);
+  expect(isFullScreenComponent(`export default function App() {
+    return <div className="max-w-md mx-auto p-6">small card</div>;
+  }`)).toBe(false);
+  expect(isFullScreenComponent("")).toBe(false);
 });
 
 test("createPreviewHTML includes error boundary when bundleCode is provided", () => {

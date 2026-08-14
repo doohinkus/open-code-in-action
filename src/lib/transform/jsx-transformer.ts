@@ -489,14 +489,36 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#039;");
 }
 
+// Markers that indicate a component intends to fill the whole viewport with
+// its own background/layout. Such components must keep block layout so the
+// background spans the full width; centering is applied only to smaller ones.
+const FULL_SCREEN_RE =
+  /\b(?:min-h-screen|h-screen|min-h-dvh|h-dvh|min-h-\[100vh\]|w-screen|min-w-screen)\b/;
+
+export function isFullScreenComponent(content: string): boolean {
+  return FULL_SCREEN_RE.test(content);
+}
+
 export function createPreviewHTML(
   entryPoint: string,
   importMap: string,
   styles: string = "",
   errors: Array<{ path: string; error: string }> = [],
   bundleCode?: string,
-  nonce?: string
+  nonce?: string,
+  centerComponent: boolean = true
 ): string {
+  // Centering must not shrink a component that already fills the viewport:
+  // a full-screen root (min-h-screen + background) relies on block layout to
+  // span the whole width. Only apply flex centering to components that don't.
+  const rootCentering = centerComponent
+    ? `      /* Center generated components in the viewport. */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -514,7 +536,7 @@ export function createPreviewHTML(
     #root {
       width: 100vw;
       height: 100vh;
-    }
+${rootCentering}    }
     .error-boundary {
       color: red;
       padding: 1rem;

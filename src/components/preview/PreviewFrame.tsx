@@ -7,6 +7,7 @@ import { useChat } from "@/lib/contexts/chat-context";
 import {
   createImportMap,
   createPreviewHTML,
+  isFullScreenComponent,
 } from "@/lib/transform/jsx-transformer";
 import { AlertCircle, Loader2, Wand2 } from "lucide-react";
 import { GenerationActivityLog } from "./GenerationActivityLog";
@@ -121,7 +122,20 @@ export function PreviewFrame() {
           }
 
           const nonce = crypto.randomUUID();
-          const previewHTML = createPreviewHTML(foundEntryPoint, importMap, styles, errors, bundleCode, nonce);
+          // Don't force-centering on full-screen components: it would shrink
+          // their root so the background no longer spans the full width.
+          const centerComponent = !isFullScreenComponent(
+            files.get(foundEntryPoint) ?? ""
+          );
+          const previewHTML = createPreviewHTML(
+            foundEntryPoint,
+            importMap,
+            styles,
+            errors,
+            bundleCode,
+            nonce,
+            centerComponent
+          );
 
           if (iframeRef.current) {
             const iframe = iframeRef.current;

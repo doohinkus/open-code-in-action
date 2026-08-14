@@ -38,6 +38,9 @@ function TestComponent() {
       <form data-testid="form" onSubmit={chat.handleSubmit}>
         <button type="submit">Submit</button>
       </form>
+      <button type="button" data-testid="stop" onClick={() => chat.stop()}>
+        Stop
+      </button>
       <div data-testid="status">{chat.status}</div>
       <div data-testid="interrupted">
         {chat.generationInterrupted ? "true" : "false"}
@@ -65,6 +68,7 @@ describe("ChatContext", () => {
     status: "idle",
     stop: vi.fn(),
     append: vi.fn(),
+    reload: vi.fn(),
   };
 
   beforeEach(() => {
@@ -457,5 +461,165 @@ describe("ChatContext", () => {
     );
 
     expect(mockAppend).not.toHaveBeenCalled();
+  });
+
+  test("auto-retries once when the provider times out mid-stream", () => {
+    vi.useFakeTimers();
+    const mockReload = vi.fn();
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "error",
+      error: new Error(
+        '{"error":"Streaming response failed: [504] Upstream idle timeout exceeded"}'
+      ),
+      reload: mockReload,
+    });
+
+    render(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(900);
+    });
+
+    expect(mockReload).toHaveBeenCalledTimes(1);
+
+    // A second failure must NOT auto-retry again.
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(mockReload).toHaveBeenCalledTimes(1);
+  });
+
+  test("auto-retries once when the stream ends with finishReason unknown", () => {
+    vi.useFakeTimers();
+    const mockReload = vi.fn();
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      reload: mockReload,
+    });
+
+    render(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    const useAIChatMock = useAIChat as any;
+    const onFinish = useAIChatMock.mock.calls[0][0].onFinish;
+
+    act(() => {
+      onFinish({ message: {}, finishReason: "unknown", usage: {} });
+    });
+    act(() => {
+      vi.advanceTimersByTime(900);
+    });
+
+    expect(mockReload).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not auto-retry after an explicit stop", () => {
+    vi.useFakeTimers();
+    const mockReload = vi.fn();
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "streaming",
+      reload: mockReload,
+    });
+
+    const { rerender } = render(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    // User presses Stop while generating.
+    act(() => {
+      screen.getByTestId("stop").click();
+    });
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "error",
+      error: new Error(
+        '{"error":"Streaming response failed: [504] Upstream idle timeout exceeded"}'
+      ),
+      reload: mockReload,
+    });
+
+    rerender(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    expect(mockReload).not.toHaveBeenCalled();
+  });
+
+  test("warns about AI resource usage after 35s of generation", () => {
+    vi.useFakeTimers();
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "streaming",
+    });
+
+    render(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    expect(screen.queryByText(/using lots of AI resources/i)).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(40_000);
+    });
+
+    // Shown exactly once.
+    expect(screen.getAllByText(/using lots of AI resources/i)).toHaveLength(1);
+  });
+
+  test("does not warn for a quick generation", () => {
+    vi.useFakeTimers();
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "streaming",
+    });
+
+    render(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(screen.queryByText(/using lots of AI resources/i)).toBeNull();
   });
 });

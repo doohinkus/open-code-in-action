@@ -12,9 +12,14 @@ export class MockLanguageModel implements LanguageModelV1 {
   readonly provider = "mock";
   readonly modelId: string;
   readonly defaultObjectGenerationMode = "tool" as const;
+  // When true (used as the last-resort fallback for a failed free-tier turn),
+  // the mock explains the limitation instead of emitting a canned component
+  // that ignores the user's actual request.
+  private readonly fallbackMessageMode: boolean;
 
-  constructor(modelId: string) {
+  constructor(modelId: string, fallbackMessageMode = false) {
     this.modelId = modelId;
+    this.fallbackMessageMode = fallbackMessageMode;
   }
 
   private async delay(ms: number) {
@@ -54,10 +59,78 @@ export class MockLanguageModel implements LanguageModelV1 {
     return null;
   }
 
+  private readonly fallbackMessageText =
+    "Unable to complete the component. This application runs on free tier models " +
+    "which have computation and usage limitations, and the AI provider was " +
+    "rate-limited or timed out. Please try again later or switch to a different free model.";
+
+  private getFallbackMessageCode(): string {
+    return `export default function App() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8">
+      <div className="max-w-md w-full bg-white rounded-xl shadow-md border border-gray-200 p-8 text-center">
+        <h1 className="text-lg font-semibold text-gray-800 mb-3">Unable to complete component</h1>
+        <p className="text-sm text-gray-600 leading-relaxed">
+          This application runs on free tier models which have computation and usage limitations.
+          The AI provider was rate-limited or timed out. Please try again later or switch models.
+        </p>
+      </div>
+    </div>
+  );
+}`;
+  }
+
   private async *generateMockStream(
     messages: LanguageModelV1Message[],
     userPrompt: string
   ): AsyncGenerator<LanguageModelV1StreamPart> {
+    // Fallback mode: every real free model failed (rate limit / 504 idle
+    // timeout). Show an explanatory message instead of pretending to build the
+    // requested component.
+    if (this.fallbackMessageMode) {
+      const toolMessageCount = messages.filter((m) => m.role === "tool").length;
+
+      if (toolMessageCount === 0) {
+        for (const char of this.fallbackMessageText) {
+          yield { type: "text-delta", textDelta: char };
+          await this.delay(15);
+        }
+
+        yield {
+          type: "tool-call",
+          toolCallType: "function",
+          toolCallId: "call_fallback",
+          toolName: "str_replace_editor",
+          args: JSON.stringify({
+            command: "create",
+            path: "/App.jsx",
+            file_text: this.getFallbackMessageCode(),
+          }),
+        };
+
+        yield {
+          type: "finish",
+          finishReason: "tool-calls",
+          usage: {
+            promptTokens: 50,
+            completionTokens: 30,
+          },
+        };
+        return;
+      }
+
+      // The /App.jsx message was already created — stop without further edits.
+      yield {
+        type: "finish",
+        finishReason: "stop",
+        usage: {
+          promptTokens: 50,
+          completionTokens: 5,
+        },
+      };
+      return;
+    }
+
     // Count tool messages to determine which step we're on
     const toolMessageCount = messages.filter((m) => m.role === "tool").length;
 
@@ -371,7 +444,7 @@ export default Counter;`;
       case "card":
         return '      <div className="p-6">';
       default:
-        return "  const increment = () => setCount(count + 1);";
+        return "  const increment = () => {\n    setCount(count + 1);\n  };";
     }
   }
 
@@ -382,7 +455,7 @@ export default Counter;`;
       case "card":
         return '      <div className="p-6 hover:bg-gray-50 transition-colors">';
       default:
-        return "  const increment = () => setCount(prev => prev + 1);";
+        return "  const increment = () => {\n    setCount(prev => prev + 1);\n  };";
     }
   }
 
@@ -553,18 +626,39 @@ function buildZenModel(modelId: string): LanguageModelV1 {
   return provider.chatModel(modelId);
 }
 
-// Provider errors surface as APICallError (an Error subclass with a
-// statusCode) or as plain provider objects; normalize both so we can detect
-// rate-limit responses and rotate to another free model.
+// Provider errors surface in several shapes: APICallError (an Error subclass
+// with a statusCode), Error instances, or plain provider objects. The plain
+// objects are often `{ error: "..." }` or `{ error: { message/type } }` (e.g.
+// Zen's "Streaming response failed: [504] Upstream idle timeout exceeded"),
+// so String(error) alone yields "[object Object]" and hides the message.
+// Normalize all of these so rate-limit/5xx detection can actually see the text.
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message || String(error);
+  if (error && typeof error === "object") {
+    const record = error as { message?: unknown; error?: unknown };
+    if (typeof record.message === "string" && record.message) return record.message;
+    const nested = record.error;
+    if (typeof nested === "string" && nested) return nested;
+    if (nested && typeof nested === "object") {
+      const inner = nested as { message?: unknown; type?: unknown };
+      if (typeof inner.message === "string" && inner.message) return inner.message;
+      if (typeof inner.type === "string" && inner.type) return inner.type;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      // fall through to the generic string below
+    }
+  }
+  return String(error ?? "");
+}
+
 export function isRateLimitError(error: unknown): boolean {
   if (error && typeof error === "object") {
     const record = error as { statusCode?: unknown };
     if (record.statusCode === 429) return true;
   }
-  const message =
-    error instanceof Error
-      ? error.message
-      : String((error as { message?: unknown } | undefined)?.message ?? error ?? "");
+  const message = errorMessage(error);
   return /rate limit|rate_limit|429|quota|too many requests|insufficient_quota/i.test(message);
 }
 
@@ -578,11 +672,8 @@ export function isRetryableUpstreamError(error: unknown): boolean {
     const record = error as { statusCode?: unknown };
     if (typeof record.statusCode === "number" && record.statusCode >= 500) return true;
   }
-  const message =
-    error instanceof Error
-      ? error.message
-      : String((error as { message?: unknown } | undefined)?.message ?? error ?? "");
-  return /unavailable|overloaded|server error|503|502|504/i.test(message);
+  const message = errorMessage(error);
+  return /unavailable|overloaded|server error|server_error|503|502|504|idle timeout|timed out/i.test(message);
 }
 
 /**
@@ -593,9 +684,16 @@ export function isRetryableUpstreamError(error: unknown): boolean {
  * Zen's free tier rate-limits per-model, so trying each free model in turn
  * keeps real generation working even when one model's quota is exhausted.
  *
- * For streaming, rotation only kicks in when a stream errors before producing
- * any content (text/tool/finish parts) — the normal shape of a 429/5xx. Once
- * real content is flowing, errors are passed through untouched.
+ * For streaming, rotation only kicks in when a stream errors before a tool
+ * call has started (or finishes) — the normal shape of a 429/5xx / Zen's 504
+ * idle timeout. Once a tool call is streaming, errors are passed through
+ * untouched.
+ *
+ * streamText calls doStream once per generation step, so the wrapper also
+ * remembers which models already failed with a retryable error this turn.
+ * Later steps skip the throttled free models and jump straight to a model
+ * that can actually respond (e.g. the mock fallback), instead of re-trying
+ * rate-limited models every step.
  */
 export function createRateLimitFallbackModel(
   primary: LanguageModelV1,
@@ -611,6 +709,28 @@ export function createRateLimitFallbackModel(
     );
   };
 
+  // Indices of models already rejected with a retryable (rate-limit/5xx/504)
+  // error this turn. Scoped to this wrapper instance, so state persists across
+  // streamText steps within one request but never bleeds across requests.
+  const failedIndices = new Set<number>();
+
+  // The first chain index that hasn't failed yet. Since the mock fallback is
+  // last and never fails, this always resolves.
+  const firstUsableIndex = (): number => {
+    for (let i = 0; i < chain.length; i++) {
+      if (!failedIndices.has(i)) return i;
+    }
+    return chain.length - 1;
+  };
+
+  // The next chain index after `after` that hasn't failed yet, or -1.
+  const nextUsableIndex = (after: number): number => {
+    for (let i = after + 1; i < chain.length; i++) {
+      if (!failedIndices.has(i)) return i;
+    }
+    return -1;
+  };
+
   return {
     specificationVersion: "v1",
     provider: primary.provider,
@@ -620,13 +740,16 @@ export function createRateLimitFallbackModel(
 
     async doGenerate(options) {
       let lastError: unknown = null;
-      for (let i = 0; i < chain.length; i++) {
+      for (let i = firstUsableIndex(); i < chain.length; i++) {
+        if (failedIndices.has(i)) continue;
         try {
           return await chain[i].doGenerate(options);
         } catch (error) {
           if (!isRetryableUpstreamError(error)) throw error;
+          failedIndices.add(i);
           lastError = error;
-          if (i + 1 < chain.length) logRotation(chain[i], chain[i + 1]);
+          const next = nextUsableIndex(i);
+          if (next !== -1) logRotation(chain[i], chain[next]);
         }
       }
       throw lastError;
@@ -642,9 +765,13 @@ export function createRateLimitFallbackModel(
         try {
           result = await chain[index].doStream(options);
         } catch (error) {
-          if (isRetryableUpstreamError(error) && index + 1 < chain.length) {
-            logRotation(chain[index], chain[index + 1]);
-            return startModelStream(index + 1);
+          if (isRetryableUpstreamError(error)) {
+            failedIndices.add(index);
+            const next = nextUsableIndex(index);
+            if (next !== -1) {
+              logRotation(chain[index], chain[next]);
+              return startModelStream(next);
+            }
           }
           throw error;
         }
@@ -656,8 +783,13 @@ export function createRateLimitFallbackModel(
             let contentStarted = false;
 
             const pumpNext = async () => {
-              const next = await startModelStream(index + 1);
-              const nextReader = next.stream.getReader();
+              const next = nextUsableIndex(index);
+              if (next === -1) {
+                controller.error(new Error("All AI provider models failed"));
+                return;
+              }
+              const nextStream = await startModelStream(next);
+              const nextReader = nextStream.stream.getReader();
               try {
                 for (;;) {
                   const chunk = await nextReader.read();
@@ -679,21 +811,27 @@ export function createRateLimitFallbackModel(
                 }
 
                 if (value.type === "error") {
-                  if (
-                    !contentStarted &&
-                    isRetryableUpstreamError(value.error) &&
-                    index + 1 < chain.length
-                  ) {
-                    logRotation(chain[index], chain[index + 1]);
-                    return pumpNext();
+                  if (!contentStarted && isRetryableUpstreamError(value.error)) {
+                    failedIndices.add(index);
+                    if (nextUsableIndex(index) !== -1) {
+                      logRotation(chain[index], chain[nextUsableIndex(index)]);
+                      return pumpNext();
+                    }
                   }
                   controller.enqueue(value);
                   return pump();
                 }
 
+                // The stream is only "committed" once a tool call starts
+                // streaming (or the stream finishes). Reasoning deltas and
+                // plain text are deliberately NOT committed content: a free
+                // model that dies mid-generation (e.g. Zen's 504 idle
+                // timeout) can still rotate to the next model instead of
+                // failing the whole turn. Rotating before any tool call is
+                // safe — no tool has executed, so the VFS is untouched.
                 if (
-                  value.type === "text-delta" ||
                   value.type === "tool-call" ||
+                  value.type === "tool-call-delta" ||
                   value.type === "finish"
                 ) {
                   contentStarted = true;
@@ -701,13 +839,12 @@ export function createRateLimitFallbackModel(
                 controller.enqueue(value);
                 await pump();
               } catch (error) {
-                if (
-                  !contentStarted &&
-                  isRetryableUpstreamError(error) &&
-                  index + 1 < chain.length
-                ) {
-                  logRotation(chain[index], chain[index + 1]);
-                  return pumpNext();
+                if (!contentStarted && isRetryableUpstreamError(error)) {
+                  failedIndices.add(index);
+                  if (nextUsableIndex(index) !== -1) {
+                    logRotation(chain[index], chain[nextUsableIndex(index)]);
+                    return pumpNext();
+                  }
                 }
                 controller.error(error);
               }
@@ -725,7 +862,7 @@ export function createRateLimitFallbackModel(
         };
       };
 
-      return startModelStream(0);
+      return startModelStream(firstUsableIndex());
     },
   };
 }
@@ -742,7 +879,9 @@ export function buildLanguageModel(modelId?: string): LanguageModelV1 {
   const otherFreeIds = ZEN_FREE_MODELS.map((m) => m.id).filter((id) => id !== requested);
 
   const freeChain = otherFreeIds.map((id) => buildZenModel(id));
-  const mockFallback = new MockLanguageModel("mock-" + DEFAULT_MODEL);
+  // Last resort: explain the free-tier limitation rather than emitting a
+  // canned counter that ignores the user's request.
+  const mockFallback = new MockLanguageModel("mock-" + DEFAULT_MODEL, true);
 
   return createRateLimitFallbackModel(primary, [...freeChain, mockFallback]);
 }
