@@ -6,7 +6,7 @@ import { buildStrReplaceTool } from "@/lib/tools/str-replace";
 import { buildFileManagerTool } from "@/lib/tools/file-manager";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { getLanguageModel } from "@/lib/provider";
+import { buildLanguageModel } from "@/lib/provider";
 import { generationPrompt } from "@/lib/prompts/generation";
 import { prepareModelMessages } from "@/lib/message-compaction";
 import { logger, getRequestId, hashIp } from "@/lib/observability/logger";
@@ -121,15 +121,9 @@ function hasRealProvider(): boolean {
   if (process.env.FORCE_MOCK_PROVIDER?.trim() === "1") {
     return false;
   }
-  return !!(process.env.GOOGLE_API_KEY?.trim()) ||
-         !!(process.env.ANTHROPIC_API_KEY?.trim() && process.env.ANTHROPIC_API_KEY?.trim() !== "your-api-key-here") ||
-         !!(process.env.OPENAI_COMPATIBLE_BASE_URL?.trim() && process.env.OPENAI_COMPATIBLE_MODEL?.trim());
-}
-
-function isUsingAnthropic(): boolean {
-  return !process.env.GOOGLE_API_KEY?.trim() &&
-         !process.env.OPENAI_COMPATIBLE_BASE_URL?.trim() &&
-         !!(process.env.ANTHROPIC_API_KEY?.trim() && process.env.ANTHROPIC_API_KEY?.trim() !== "your-api-key-here");
+  // Only the OpenCode Zen free endpoint is supported; the default free model
+  // applies when OPENAI_COMPATIBLE_MODEL is unset or non-free.
+  return !!process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
 }
 
 // Stream errors can be Error instances or plain provider objects (e.g.
@@ -369,7 +363,6 @@ export async function POST(req: Request) {
   modelMessages.unshift({
     role: "system",
     content: generationPrompt,
-    ...(isUsingAnthropic() ? { providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } } } : {}),
   });
 
   // Reconstruct the VirtualFileSystem, preferring the server-side cache when
@@ -401,9 +394,9 @@ export async function POST(req: Request) {
       model,
     });
   }
-  const activeModelId = requestedModel ?? process.env.OPENAI_COMPATIBLE_MODEL?.trim();
+  const languageModel = buildLanguageModel(requestedModel);
+  const activeModelId = languageModel.modelId;
 
-  const languageModel = getLanguageModel(requestedModel);
   // Test-connection requests are minimal: one model call, tiny output.
   const isTestRequest = test === true;
   // Use fewer steps for mock provider to prevent repetition
@@ -411,10 +404,7 @@ export async function POST(req: Request) {
   const maxTokens = isTestRequest ? 64 : 10_000;
 
   const reasoningOptions: Record<string, any> = {};
-  if (
-    process.env.OPENAI_COMPATIBLE_BASE_URL?.trim() &&
-    process.env.OPENAI_COMPATIBLE_MODEL?.trim()
-  ) {
+  if (process.env.OPENAI_COMPATIBLE_BASE_URL?.trim()) {
     reasoningOptions["opencode-compatible"] = { reasoningEffort: "low" };
   }
 

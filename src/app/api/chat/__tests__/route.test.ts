@@ -26,7 +26,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 vi.mock("@/lib/provider", () => ({
-  getLanguageModel: vi.fn(() => ({})),
+  buildLanguageModel: vi.fn(() => ({ modelId: "test-model", provider: "mock" })),
 }));
 
 vi.mock("@/lib/models", () => ({

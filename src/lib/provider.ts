@@ -1,5 +1,3 @@
-import { anthropic } from "@ai-sdk/anthropic";
-import { google } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
   LanguageModelV1,
@@ -7,8 +5,7 @@ import {
   LanguageModelV1Message,
 } from "@ai-sdk/provider";
 import { createReasoningNormalizingFetch } from "./reasoning-normalizer";
-
-const MODEL = "claude-haiku-4-5";
+import { DEFAULT_MODEL, isAllowedModel } from "./models";
 
 export class MockLanguageModel implements LanguageModelV1 {
   readonly specificationVersion = "v1" as const;
@@ -142,7 +139,7 @@ export class MockLanguageModel implements LanguageModelV1 {
 
     // Step 3: Create App.jsx
     if (toolMessageCount === 0) {
-      const text = `This is a static response. You can place an Anthropic API key in the .env file to use the Anthropic API for component generation. Let me create an App.jsx file to display the component.`;
+      const text = `This is a static response. Configure an OpenCode Zen endpoint (OPENAI_COMPATIBLE_BASE_URL) in .env to generate with free AI models, or keep mock mode for canned components. Let me create an App.jsx file to display the component.`;
       for (const char of text) {
         yield { type: "text-delta", textDelta: char };
         await this.delay(15);
@@ -509,48 +506,184 @@ export default function App() {
   }
 }
 
-export function getLanguageModel(modelId?: string) {
+export function getLanguageModel(modelId?: string): LanguageModelV1 {
   if (process.env.FORCE_MOCK_PROVIDER?.trim() === "1") {
     console.log(
       "FORCE_MOCK_PROVIDER=1 is set. Using the mock provider for deterministic tests."
     );
-    return new MockLanguageModel("mock-" + MODEL);
-  }
-
-  const googleApiKey = process.env.GOOGLE_API_KEY?.trim();
-  const googleModel = process.env.GOOGLE_GEMINI_MODEL?.trim();
-
-  if (googleApiKey) {
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY = googleApiKey;
-    return google(googleModel || "gemini-2.0-flash");
+    return new MockLanguageModel("mock-" + DEFAULT_MODEL);
   }
 
   const openaiCompatibleBaseURL = process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
-  const openaiCompatibleModel =
-    modelId?.trim() || process.env.OPENAI_COMPATIBLE_MODEL?.trim();
 
-  if (openaiCompatibleBaseURL && openaiCompatibleModel) {
-    const openaiCompatibleApiKey = process.env.OPENAI_COMPATIBLE_API_KEY?.trim();
-    const provider = createOpenAICompatible({
-      name: "opencode-compatible",
-      baseURL: openaiCompatibleBaseURL,
-      ...(openaiCompatibleApiKey ? { apiKey: openaiCompatibleApiKey } : {}),
-      fetch: createReasoningNormalizingFetch(),
-    });
-    return provider.chatModel(openaiCompatibleModel);
-  }
-
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-
-  if (!apiKey || apiKey === "your-api-key-here") {
+  if (!openaiCompatibleBaseURL) {
     console.log(
-      "ANTHROPIC_API_KEY is not set (or is still the placeholder). " +
-        "Using the mock provider — responses will be canned. " +
-        "Set a real key in .env to generate components with Claude, " +
-        "GOOGLE_API_KEY to use Gemini, or OPENAI_COMPATIBLE_BASE_URL for an OpenAI-compatible backend."
+      "OPENAI_COMPATIBLE_BASE_URL is not set. Using the mock provider — " +
+        "responses will be canned. Set OPENAI_COMPATIBLE_BASE_URL to an " +
+        "OpenCode Zen endpoint (free models) to enable real generation."
     );
-    return new MockLanguageModel("mock-" + MODEL);
+    return new MockLanguageModel("mock-" + DEFAULT_MODEL);
   }
 
-  return anthropic(MODEL);
+  const requestedModel =
+    modelId?.trim() || process.env.OPENAI_COMPATIBLE_MODEL?.trim() || DEFAULT_MODEL;
+
+  // Only free models (ZEN_FREE_MODELS) are allowed. A paid/unknown model id
+  // silently falls back to the default so the provider never bills users.
+  const resolvedModel = isAllowedModel(requestedModel) ? requestedModel : DEFAULT_MODEL;
+  if (resolvedModel !== requestedModel) {
+    console.log(
+      `Model "${requestedModel}" is not in the free allowlist (ZEN_FREE_MODELS). ` +
+        `Falling back to "${DEFAULT_MODEL}".`
+    );
+  }
+
+  const openaiCompatibleApiKey = process.env.OPENAI_COMPATIBLE_API_KEY?.trim();
+  const provider = createOpenAICompatible({
+    name: "opencode-compatible",
+    baseURL: openaiCompatibleBaseURL,
+    ...(openaiCompatibleApiKey ? { apiKey: openaiCompatibleApiKey } : {}),
+    fetch: createReasoningNormalizingFetch(),
+  });
+  return provider.chatModel(resolvedModel);
+}
+
+// Provider errors surface as APICallError (an Error subclass with a
+// statusCode) or as plain provider objects; normalize both so we can detect
+// rate-limit responses and fall back to the mock provider.
+export function isRateLimitError(error: unknown): boolean {
+  if (error && typeof error === "object") {
+    const record = error as { statusCode?: unknown };
+    if (record.statusCode === 429) return true;
+  }
+  const message =
+    error instanceof Error
+      ? error.message
+      : String((error as { message?: unknown } | undefined)?.message ?? error ?? "");
+  return /rate limit|rate_limit|429|quota|too many requests|insufficient_quota/i.test(message);
+}
+
+/**
+ * Wraps a real provider model so a rate-limited turn transparently falls back
+ * to a fallback model (the canned mock). Non-rate-limit errors propagate.
+ *
+ * For streaming, fallback only kicks in when the primary stream errors before
+ * producing any content (text/tool/finish parts) — the normal shape of a 429.
+ * Once real content is flowing, errors are passed through untouched.
+ */
+export function createRateLimitFallbackModel(
+  primary: LanguageModelV1,
+  fallback: LanguageModelV1
+): LanguageModelV1 {
+  if (primary.provider === "mock") return primary;
+
+  return {
+    specificationVersion: "v1",
+    provider: primary.provider,
+    modelId: primary.modelId,
+    defaultObjectGenerationMode: primary.defaultObjectGenerationMode,
+    supportsStructuredOutputs: primary.supportsStructuredOutputs,
+
+    async doGenerate(options) {
+      try {
+        return await primary.doGenerate(options);
+      } catch (error) {
+        if (isRateLimitError(error)) {
+          console.log(
+            `Provider "${primary.provider}" hit a rate limit; falling back to the mock provider for this turn.`
+          );
+          return await fallback.doGenerate(options);
+        }
+        throw error;
+      }
+    },
+
+    async doStream(options) {
+      // A 429 usually surfaces as a rejection of doStream() itself (the HTTP
+      // call fails before any chunk is produced). Fall back immediately.
+      let primaryResult: Awaited<ReturnType<LanguageModelV1["doStream"]>>;
+      try {
+        primaryResult = await primary.doStream(options);
+      } catch (error) {
+        if (isRateLimitError(error)) {
+          console.log(
+            `Provider "${primary.provider}" hit a rate limit; falling back to the mock provider for this turn.`
+          );
+          return await fallback.doStream(options);
+        }
+        throw error;
+      }
+      const primaryReader = primaryResult.stream.getReader();
+
+      const stream = new ReadableStream<LanguageModelV1StreamPart>({
+        async start(controller) {
+          let contentStarted = false;
+
+          const pumpFallback = async () => {
+            try {
+              const fallbackResult = await fallback.doStream(options);
+              const fallbackReader = fallbackResult.stream.getReader();
+              for (;;) {
+                const chunk = await fallbackReader.read();
+                if (chunk.done) break;
+                controller.enqueue(chunk.value);
+              }
+              controller.close();
+            } catch (error) {
+              controller.error(error);
+            }
+          };
+
+          const pump = async (): Promise<void> => {
+            try {
+              const { done, value } = await primaryReader.read();
+              if (done) {
+                controller.close();
+                return;
+              }
+
+              if (value.type === "error") {
+                if (!contentStarted && isRateLimitError(value.error)) {
+                  return pumpFallback();
+                }
+                controller.enqueue(value);
+                return pump();
+              }
+
+              if (
+                value.type === "text-delta" ||
+                value.type === "tool-call" ||
+                value.type === "finish"
+              ) {
+                contentStarted = true;
+              }
+              controller.enqueue(value);
+              await pump();
+            } catch (error) {
+              if (!contentStarted && isRateLimitError(error)) {
+                return pumpFallback();
+              }
+              controller.error(error);
+            }
+          };
+
+          await pump();
+        },
+      });
+
+      return {
+        stream,
+        warnings: primaryResult.warnings,
+        rawCall: primaryResult.rawCall,
+        rawResponse: primaryResult.rawResponse,
+      };
+    },
+  };
+}
+
+// The model used by the chat route: a free Zen model (or mock) that falls back
+// to the canned mock when the provider rate-limits the request.
+export function buildLanguageModel(modelId?: string): LanguageModelV1 {
+  const primary = getLanguageModel(modelId);
+  return createRateLimitFallbackModel(primary, new MockLanguageModel("mock-" + DEFAULT_MODEL));
 }
