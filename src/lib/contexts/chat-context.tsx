@@ -22,11 +22,18 @@ import {
   TOAST_WARNING_DURATION_MS,
 } from "@/lib/constants";
 
+/**
+ * Props for the ChatProvider component.
+ */
 interface ChatContextProps {
   projectId?: string;
   initialMessages?: Message[];
 }
 
+/**
+ * Context type for chat functionality.
+ * Provides access to messages, input handling, status, and control methods.
+ */
 interface ChatContextType {
   projectId?: string;
   messages: Message[];
@@ -53,6 +60,11 @@ function isProviderTimeoutError(raw: string): boolean {
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
+/**
+ * Provider component for chat functionality.
+ * Manages conversation state, AI streaming, auto-retry on failures,
+ * and resource usage warnings.
+ */
 export function ChatProvider({
   children,
   projectId,
@@ -335,6 +347,13 @@ export function ChatProvider({
   );
 }
 
+/**
+ * Hook to access chat context.
+ * Must be used within a ChatProvider.
+ *
+ * @returns ChatContextType with messages, input, status, and control methods
+ * @throws Error if used outside ChatProvider
+ */
 export function useChat() {
   const context = useContext(ChatContext);
   if (context === undefined) {

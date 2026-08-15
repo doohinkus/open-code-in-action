@@ -10,11 +10,18 @@ import React, {
 import { VirtualFileSystem, FileNode } from "@/lib/file-system";
 import { validateFiles } from "@/lib/transform/jsx-transformer";
 
+/**
+ * Represents a tool call from the AI assistant.
+ */
 interface ToolCall {
   toolName: string;
   args: any;
 }
 
+/**
+ * Context type for virtual file system operations.
+ * Provides file manipulation, tool call handling, and validation.
+ */
 interface FileSystemContextType {
   fileSystem: VirtualFileSystem;
   selectedFile: string | null;
@@ -40,6 +47,10 @@ const FileSystemContext = createContext<FileSystemContextType | undefined>(
   undefined
 );
 
+/**
+ * Provider component for the virtual file system.
+ * Manages file operations, tool call execution, and syntax validation.
+ */
 export function FileSystemProvider({
   children,
   fileSystem: providedFileSystem,
@@ -261,6 +272,13 @@ export function FileSystemProvider({
   );
 }
 
+/**
+ * Hook to access file system context.
+ * Must be used within a FileSystemProvider.
+ *
+ * @returns FileSystemContextType with file operations and tool handling
+ * @throws Error if used outside FileSystemProvider
+ */
 export function useFileSystem() {
   const context = useContext(FileSystemContext);
   if (!context) {
