@@ -7,6 +7,14 @@ import {
 import { createReasoningNormalizingFetch } from "./reasoning-normalizer";
 import { DEFAULT_MODEL, resolveFreeModel, ZEN_FREE_MODELS } from "./models";
 
+// Cache for provider instances to avoid recreating them on every request
+const providerInstanceCache = new Map<string, LanguageModelV1>();
+
+/**
+ * Mock language model for testing and fallback scenarios.
+ * Generates canned responses (counter, form, card) based on prompt keywords.
+ * When fallbackMessageMode is true, generates an explanatory message instead.
+ */
 export class MockLanguageModel implements LanguageModelV1 {
   readonly specificationVersion = "v1" as const;
   readonly provider = "mock";
@@ -579,6 +587,13 @@ export default function App() {
   }
 }
 
+/**
+ * Gets the language model for a given model ID.
+ * Returns mock provider if forced or if no Zen endpoint is configured.
+ *
+ * @param modelId - Optional model ID override
+ * @returns LanguageModelV1 instance
+ */
 export function getLanguageModel(modelId?: string): LanguageModelV1 {
   if (process.env.FORCE_MOCK_PROVIDER?.trim() === "1") {
     console.log(
@@ -612,6 +627,12 @@ export function getLanguageModel(modelId?: string): LanguageModelV1 {
 }
 
 function buildZenModel(modelId: string): LanguageModelV1 {
+  // Check cache first
+  const cached = providerInstanceCache.get(modelId);
+  if (cached) {
+    return cached;
+  }
+
   const openaiCompatibleBaseURL = process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
   if (!openaiCompatibleBaseURL) {
     throw new Error("OPENAI_COMPATIBLE_BASE_URL is not set");
@@ -623,7 +644,12 @@ function buildZenModel(modelId: string): LanguageModelV1 {
     ...(openaiCompatibleApiKey ? { apiKey: openaiCompatibleApiKey } : {}),
     fetch: createReasoningNormalizingFetch(),
   });
-  return provider.chatModel(modelId);
+  const model = provider.chatModel(modelId);
+
+  // Cache the model instance
+  providerInstanceCache.set(modelId, model);
+
+  return model;
 }
 
 // Provider errors surface in several shapes: APICallError (an Error subclass
@@ -653,6 +679,12 @@ function errorMessage(error: unknown): string {
   return String(error ?? "");
 }
 
+/**
+ * Checks if an error is a rate limit error (429 or rate limit message).
+ *
+ * @param error - The error to check
+ * @returns True if the error indicates a rate limit
+ */
 export function isRateLimitError(error: unknown): boolean {
   if (error && typeof error === "object") {
     const record = error as { statusCode?: unknown };
@@ -666,6 +698,12 @@ export function isRateLimitError(error: unknown): boolean {
 // failures (e.g. "Endpoint is unavailable", 503). Treat those as retryable too
 // so the chain rotates past a down/temp-unavailable free model instead of
 // erroring the turn while other free models still work.
+/**
+ * Checks if an error is a retryable upstream error (rate limit, 5xx, timeout).
+ *
+ * @param error - The error to check
+ * @returns True if the error is retryable
+ */
 export function isRetryableUpstreamError(error: unknown): boolean {
   if (isRateLimitError(error)) return true;
   if (error && typeof error === "object") {
@@ -694,6 +732,15 @@ export function isRetryableUpstreamError(error: unknown): boolean {
  * Later steps skip the throttled free models and jump straight to a model
  * that can actually respond (e.g. the mock fallback), instead of re-trying
  * rate-limited models every step.
+ */
+/**
+ * Wraps a primary model with fallback models for rate limit/5xx handling.
+ * On retryable errors, rotates through the fallback chain.
+ * Tracks failed models to skip them on subsequent streamText steps.
+ *
+ * @param primary - The primary language model
+ * @param fallbacks - Array of fallback models to try on failure
+ * @returns Wrapped model with automatic failover
  */
 export function createRateLimitFallbackModel(
   primary: LanguageModelV1,
@@ -871,6 +918,14 @@ export function createRateLimitFallbackModel(
 // free endpoints also flake with 5xx), so the primary free model is backed by
 // the remaining free models (ZEN_FREE_MODELS order) with the canned mock as the
 // last resort — real generation keeps working unless every free model fails.
+/**
+ * Builds the language model with fallback chain for the chat route.
+ * Creates a wrapped model that rotates through free models on failure,
+ * with the mock as the last resort.
+ *
+ * @param modelId - Optional model ID override
+ * @returns LanguageModelV1 with automatic failover
+ */
 export function buildLanguageModel(modelId?: string): LanguageModelV1 {
   const primary = getLanguageModel(modelId);
   if (primary.provider === "mock") return primary;

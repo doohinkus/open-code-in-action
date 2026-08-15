@@ -12,8 +12,7 @@ import {
 import { AlertCircle, Loader2, Wand2 } from "lucide-react";
 import { GenerationActivityLog } from "./GenerationActivityLog";
 import { logger } from "@/lib/observability/logger";
-
-const REBUILD_DEBOUNCE_MS = 350;
+import { REBUILD_DEBOUNCE_MS } from "@/lib/constants";
 
 interface PreviewErrorInfo {
   message: string;

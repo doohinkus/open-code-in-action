@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { FileNode } from "@/lib/file-system";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 import {
@@ -18,9 +18,20 @@ interface FileTreeNodeProps {
   level: number;
 }
 
-function FileTreeNode({ node, level }: FileTreeNodeProps) {
+const FileTreeNode = React.memo(function FileTreeNode({ node, level }: FileTreeNodeProps) {
   const { selectedFile, setSelectedFile } = useFileSystem();
   const [isExpanded, setIsExpanded] = useState(true);
+
+  const children = useMemo(() => {
+    if (node.type !== "directory" || !node.children) return [];
+    return Array.from(node.children.values()).sort((a, b) => {
+      // Directories first, then files
+      if (a.type !== b.type) {
+        return a.type === "directory" ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [node]);
 
   const handleClick = () => {
     if (node.type === "directory") {
@@ -29,17 +40,6 @@ function FileTreeNode({ node, level }: FileTreeNodeProps) {
       setSelectedFile(node.path);
     }
   };
-
-  const children =
-    node.type === "directory" && node.children
-      ? Array.from(node.children.values()).sort((a, b) => {
-          // Directories first, then files
-          if (a.type !== b.type) {
-            return a.type === "directory" ? -1 : 1;
-          }
-          return a.name.localeCompare(b.name);
-        })
-      : [];
 
   return (
     <div>
@@ -81,11 +81,21 @@ function FileTreeNode({ node, level }: FileTreeNodeProps) {
       )}
     </div>
   );
-}
+});
 
 export function FileTree() {
   const { fileSystem, refreshTrigger } = useFileSystem();
   const rootNode = fileSystem.getNode("/");
+
+  const rootChildren = useMemo(() => {
+    if (!rootNode || !rootNode.children || rootNode.children.size === 0) return [];
+    return Array.from(rootNode.children.values()).sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "directory" ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [rootNode]);
 
   if (!rootNode || !rootNode.children || rootNode.children.size === 0) {
     return (
@@ -96,13 +106,6 @@ export function FileTree() {
       </div>
     );
   }
-
-  const rootChildren = Array.from(rootNode.children.values()).sort((a, b) => {
-    if (a.type !== b.type) {
-      return a.type === "directory" ? -1 : 1;
-    }
-    return a.name.localeCompare(b.name);
-  });
 
   return (
     <ScrollArea className="h-full">

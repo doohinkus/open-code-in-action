@@ -1,10 +1,46 @@
 import * as Babel from "@babel/standalone";
 
+/**
+ * Result of transforming a single JSX/TSX file.
+ */
 export interface TransformResult {
+  /** The transformed JavaScript code */
   code: string;
+  /** Error message if transformation failed */
   error?: string;
+  /** Set of import specifiers found in the file */
   missingImports?: Set<string>;
+  /** Set of CSS import paths found in the file */
   cssImports?: Set<string>;
+}
+
+// Simple hash function for cache keys (not cryptographic, just for dedup)
+function hashString(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return hash.toString(36);
+}
+
+// Cache for transformed code: key = hash(filename + code), value = TransformResult
+const transformCache = new Map<string, TransformResult>();
+const TRANSFORM_CACHE_MAX_SIZE = 200;
+
+function getTransformCacheKey(filename: string, code: string): string {
+  return `${filename}:${hashString(code)}`;
+}
+
+function pruneTransformCache(): void {
+  if (transformCache.size > TRANSFORM_CACHE_MAX_SIZE) {
+    // Remove oldest entries (first 20% of the map)
+    const keysToDelete = Array.from(transformCache.keys()).slice(0, Math.floor(TRANSFORM_CACHE_MAX_SIZE * 0.2));
+    for (const key of keysToDelete) {
+      transformCache.delete(key);
+    }
+  }
 }
 
 function createPlaceholderModule(componentName: string): string {
@@ -18,11 +54,28 @@ export { ${componentName} };
 `;
 }
 
+/**
+ * Transforms JSX/TSX code to JavaScript using Babel.
+ * Results are cached by filename + code hash for performance.
+ *
+ * @param code - The source code to transform
+ * @param filename - The filename (used to determine TypeScript vs JavaScript)
+ * @param existingFiles - Set of existing file paths (for import resolution)
+ * @returns Transform result with code, imports, and any errors
+ */
 export function transformJSX(
   code: string,
   filename: string,
   existingFiles: Set<string>
 ): TransformResult {
+  // Check cache first
+  const cacheKey = getTransformCacheKey(filename, code);
+  const cached = transformCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  let result: TransformResult;
   try {
     const isTypeScript = filename.endsWith(".ts") || filename.endsWith(".tsx");
 
@@ -47,7 +100,7 @@ export function transformJSX(
       }
     }
 
-    const result = Babel.transform(processedCode, {
+    const transformed = Babel.transform(processedCode, {
       filename,
       presets: [
         ["react", { runtime: "automatic" }],
@@ -56,17 +109,23 @@ export function transformJSX(
       plugins: [],
     });
 
-    return {
-      code: result.code || "",
+    result = {
+      code: transformed.code || "",
       missingImports: imports,
       cssImports: cssImports,
     };
   } catch (error) {
-    return {
+    result = {
       code: "",
       error: error instanceof Error ? error.message : "Unknown transform error",
     };
   }
+
+  // Cache the result
+  transformCache.set(cacheKey, result);
+  pruneTransformCache();
+
+  return result;
 }
 
 function resolveRelativePath(fromDir: string, relativePath: string): string {
@@ -409,6 +468,13 @@ export { __AppComponent as App };
   };
 }
 
+/**
+ * Creates an import map and bundled code from a set of files.
+ * Handles local imports, CSS imports, and CDN imports (via esm.sh).
+ *
+ * @param files - Map of file paths to their content
+ * @returns Object with importMap JSON, collected styles, syntax errors, and bundled code
+ */
 export function createImportMap(files: Map<string, string>): {
   importMap: string;
   styles: string;
@@ -495,10 +561,30 @@ function escapeHtml(value: string): string {
 const FULL_SCREEN_RE =
   /\b(?:min-h-screen|h-screen|min-h-dvh|h-dvh|min-h-\[100vh\]|w-screen|min-w-screen)\b/;
 
+/**
+ * Detects whether a component intends to fill the entire viewport.
+ * Used to determine whether to apply flex centering in the preview.
+ *
+ * @param content - The component source code
+ * @returns True if the component uses viewport-filling classes
+ */
 export function isFullScreenComponent(content: string): boolean {
   return FULL_SCREEN_RE.test(content);
 }
 
+/**
+ * Creates the complete HTML document for the preview iframe.
+ * Includes import maps, bundled code, error boundaries, and Tailwind CSS.
+ *
+ * @param entryPoint - Path to the entry component (e.g., "/App.jsx")
+ * @param importMap - JSON string of the import map
+ * @param styles - Collected CSS styles from all files
+ * @param errors - Array of syntax errors to display
+ * @param bundleCode - The bundled JavaScript code
+ * @param nonce - CSP nonce for script tags
+ * @param centerComponent - Whether to apply flex centering to #root
+ * @returns Complete HTML document string
+ */
 export function createPreviewHTML(
   entryPoint: string,
   importMap: string,
@@ -731,6 +817,12 @@ ${rootCentering}    }
 </html>`;
 }
 
+/**
+ * Validates all JSX/TSX files for syntax errors.
+ *
+ * @param files - Map of file paths to their content
+ * @returns Array of errors with path and error message
+ */
 export function validateFiles(
   files: Map<string, string>
 ): Array<{ path: string; error: string }> {

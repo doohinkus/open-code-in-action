@@ -1,3 +1,6 @@
+/**
+ * Represents a file or directory in the virtual file system.
+ */
 export interface FileNode {
   type: "file" | "directory";
   name: string;
@@ -6,6 +9,10 @@ export interface FileNode {
   children?: Map<string, FileNode>;
 }
 
+/**
+ * In-memory virtual file system for AI-generated code.
+ * Supports file/directory operations, path normalization, and serialization.
+ */
 export class VirtualFileSystem {
   private files: Map<string, FileNode> = new Map();
   private root: FileNode;
@@ -65,6 +72,14 @@ export class VirtualFileSystem {
     return this.files.get(parentPath) || null;
   }
 
+  /**
+   * Creates a new file at the specified path.
+   * Creates parent directories if they don't exist.
+   *
+   * @param path - Absolute path for the new file
+   * @param content - Initial file content (default: empty string)
+   * @returns The created FileNode, or null if file already exists
+   */
   createFile(path: string, content: string = ""): FileNode | null {
     const normalized = this.normalizePath(path);
 
@@ -130,6 +145,12 @@ export class VirtualFileSystem {
     return directory;
   }
 
+  /**
+   * Reads the content of a file.
+   *
+   * @param path - Absolute path to the file
+   * @returns File content as string, or null if not found
+   */
   readFile(path: string): string | null {
     const normalized = this.normalizePath(path);
     const file = this.files.get(normalized);
@@ -141,6 +162,13 @@ export class VirtualFileSystem {
     return file.content || "";
   }
 
+  /**
+   * Updates the content of an existing file.
+   *
+   * @param path - Absolute path to the file
+   * @param content - New file content
+   * @returns True if successful, false if file not found
+   */
   updateFile(path: string, content: string): boolean {
     const normalized = this.normalizePath(path);
     const file = this.files.get(normalized);
@@ -153,6 +181,12 @@ export class VirtualFileSystem {
     return true;
   }
 
+  /**
+   * Deletes a file or directory (recursively).
+   *
+   * @param path - Absolute path to delete
+   * @returns True if successful, false if not found
+   */
   deleteFile(path: string): boolean {
     const normalized = this.normalizePath(path);
     const file = this.files.get(normalized);
@@ -179,6 +213,14 @@ export class VirtualFileSystem {
     return true;
   }
 
+  /**
+   * Renames/moves a file or directory.
+   * Updates all child paths if renaming a directory.
+   *
+   * @param oldPath - Current absolute path
+   * @param newPath - New absolute path
+   * @returns True if successful, false on error
+   */
   rename(oldPath: string, newPath: string): boolean {
     const normalizedOld = this.normalizePath(oldPath);
     const normalizedNew = this.normalizePath(newPath);
@@ -295,6 +337,11 @@ export class VirtualFileSystem {
     return Array.from(dir.children?.values() || []);
   }
 
+  /**
+   * Gets all files as a flat map (directories excluded).
+   *
+   * @returns Map of absolute paths to file content
+   */
   getAllFiles(): Map<string, string> {
     const fileMap = new Map<string, string>();
 
@@ -307,6 +354,11 @@ export class VirtualFileSystem {
     return fileMap;
   }
 
+  /**
+   * Serializes the file system to a plain object for storage/transfer.
+   *
+   * @returns Record of paths to FileNode objects
+   */
   serialize(): Record<string, FileNode> {
     const result: Record<string, FileNode> = {};
 
@@ -331,6 +383,12 @@ export class VirtualFileSystem {
     return result;
   }
 
+  /**
+   * Deserializes a plain object back into the file system.
+   * Clears existing files first.
+   *
+   * @param data - Record of paths to FileNode objects
+   */
   deserialize(data: Record<string, string>): void {
     // Clear existing files except root
     this.files.clear();

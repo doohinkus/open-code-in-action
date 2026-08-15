@@ -1,23 +1,42 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import Editor from "@monaco-editor/react";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 import { Code2 } from "lucide-react";
+import { EDITOR_CHANGE_DEBOUNCE_MS } from "@/lib/constants";
 
 export function CodeEditor() {
   const { selectedFile, getFileContent, updateFile } = useFileSystem();
   const editorRef = useRef<any>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup debounce timer on unmount or file change
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [selectedFile]);
 
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
   };
 
-  const handleEditorChange = (value: string | undefined) => {
-    if (selectedFile && value !== undefined) {
-      updateFile(selectedFile, value);
+  const handleEditorChange = useCallback((value: string | undefined) => {
+    if (!selectedFile || value === undefined) return;
+
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
     }
-  };
+
+    // Set new debounce timer
+    debounceTimerRef.current = setTimeout(() => {
+      updateFile(selectedFile, value);
+    }, EDITOR_CHANGE_DEBOUNCE_MS);
+  }, [selectedFile, updateFile]);
 
   const getLanguageFromPath = (path: string): string => {
     const extension = path.split(".").pop()?.toLowerCase();
