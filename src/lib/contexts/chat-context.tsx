@@ -85,8 +85,8 @@ export function ChatProvider({
   const lastSyncedRevisionRef = useRef(-1);
   const anonSessionKeyRef = useRef<string | null>(null);
 
-  const sessionKey = projectId ?? anonSessionKeyRef.current ?? getOrCreateAnonSessionKey();
-  if (!projectId) anonSessionKeyRef.current = sessionKey;
+  const sessionKey = projectId ? undefined : (anonSessionKeyRef.current ?? getOrCreateAnonSessionKey());
+  if (sessionKey) anonSessionKeyRef.current = sessionKey;
 
   // Build a reduced request body: ship the full filesystem only when the
   // server cache is stale (revision mismatch). Messages go through the SDK.
