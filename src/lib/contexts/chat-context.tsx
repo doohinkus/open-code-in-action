@@ -16,6 +16,11 @@ import { setHasAnonWork, getOrCreateAnonSessionKey } from "@/lib/anon-work-track
 import { getStoredModel } from "@/lib/model-selector";
 import { useToast } from "@/components/ui/toast";
 import { mapErrorMessage } from "@/lib/chat-errors";
+import {
+  STALL_TIMEOUT_MS,
+  RESOURCE_WARNING_TIMEOUT_MS,
+  TOAST_WARNING_DURATION_MS,
+} from "@/lib/constants";
 
 interface ChatContextProps {
   projectId?: string;
@@ -37,10 +42,6 @@ interface ChatContextType {
   generationTimedOut: boolean;
   generationInterrupted: boolean;
 }
-
-const STALL_TIMEOUT_MS = 130_000;
-// After this long of a single generation, nudge the user to stop or simplify.
-const RESOURCE_WARNING_TIMEOUT_MS = 35_000;
 
 // Zen's free tier dies mid-stream with an idle timeout (e.g. "Streaming
 // response failed: [504] Upstream idle timeout exceeded") or ends the stream
@@ -257,7 +258,7 @@ export function ChatProvider({
       toast(
         "This component is using lots of AI resources—consider using the red stop button and simplifying.",
         "info",
-        8000
+        TOAST_WARNING_DURATION_MS
       );
     }, RESOURCE_WARNING_TIMEOUT_MS);
 

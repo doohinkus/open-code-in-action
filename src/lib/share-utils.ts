@@ -1,8 +1,12 @@
 import { randomBytes } from "crypto";
+import {
+  MAX_SHARE_FILES_COUNT,
+  MAX_SHARE_FILE_SIZE,
+  MAX_SHARE_NAME_LENGTH,
+} from "@/lib/constants";
 
-export const MAX_SHARE_FILES_COUNT = 500;
-export const MAX_SHARE_FILE_SIZE = 100_000;
-export const MAX_SHARE_NAME_LENGTH = 200;
+// Re-export for backward compatibility with existing imports
+export { MAX_SHARE_FILES_COUNT, MAX_SHARE_FILE_SIZE, MAX_SHARE_NAME_LENGTH };
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
 

@@ -15,26 +15,30 @@ import {
   isAllowedOrigin,
   allowedOriginFor,
 } from "@/lib/origins";
-
-const MAX_MESSAGE_COUNT = 200;
-const MAX_MESSAGE_LENGTH = 50_000;
-const MAX_TOTAL_MESSAGES_LENGTH = 500_000;
-const MAX_FILES_COUNT = 500;
-const MAX_FILE_SIZE = 100_000;
-
+import {
+  MAX_MESSAGE_COUNT,
+  MAX_MESSAGE_LENGTH,
+  MAX_TOTAL_MESSAGES_LENGTH,
+  MAX_FILES_COUNT,
+  MAX_FILE_SIZE,
+  VFS_CACHE_TTL_MS,
+  VFS_CACHE_MAX_ENTRIES,
+  RATE_LIMIT_WINDOW_MS,
+  RATE_LIMIT_MAX_REQUESTS,
+  MAX_STEPS_REAL,
+  MAX_STEPS_MOCK,
+  MAX_TOKENS,
+  MAX_TOKENS_TEST,
+} from "@/lib/constants";
 // Server-side virtual filesystem cache so clients don't resend every file
 // with each request. Best-effort (in-memory): a cache miss triggers a client
 // resync (HTTP 428), after which the client retries with the full payload.
-const VFS_CACHE_TTL_MS = 10 * 60 * 1000;
-const VFS_CACHE_MAX_ENTRIES = 100;
 const vfsCache = new Map<
   string,
   { revision: number; fileSystem: VirtualFileSystem; expiresAt: number }
 >();
 
 const ipRequestCounts = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_REQUESTS = 30;
 
 function getClientIp(req: Request): string {
   // Prefer the proxy-set x-real-ip over the client-influencable X-Forwarded-For.
@@ -402,11 +406,11 @@ export async function POST(req: Request) {
   // Real providers get 10 steps so multi-file apps (games, dashboards) can be
   // assembled in one turn without being cut off mid-build. The mock gets fewer
   // steps to prevent its canned 4-step sequence from repeating.
-  const maxSteps = isTestRequest ? 1 : hasRealProvider() ? 10 : 4;
+  const maxSteps = isTestRequest ? 1 : hasRealProvider() ? MAX_STEPS_REAL : MAX_STEPS_MOCK;
   // Cap per-call output so a single step can't run away; test requests stay
   // tiny. 8k is plenty for a full component/game step while keeping the
   // reasoning preamble bounded.
-  const maxTokens = isTestRequest ? 64 : 8_000;
+  const maxTokens = isTestRequest ? MAX_TOKENS_TEST : MAX_TOKENS;
 
   const reasoningOptions: Record<string, any> = {};
   if (process.env.OPENAI_COMPATIBLE_BASE_URL?.trim()) {

@@ -3,8 +3,13 @@
 // generated code and reasoning tokens in the chat history are redundant and
 // inflate prompt tokens / provider usage.
 
-export const COMPACT_HISTORY_MAX_MESSAGES = 12;
-export const COMPACTED_MESSAGE_MAX_LEN = 300;
+import {
+  COMPACT_HISTORY_MAX_MESSAGES,
+  COMPACTED_MESSAGE_MAX_LEN,
+} from "@/lib/constants";
+
+// Re-export for backward compatibility with existing imports
+export { COMPACT_HISTORY_MAX_MESSAGES, COMPACTED_MESSAGE_MAX_LEN };
 
 export type ChatMessage = {
   id?: string;

@@ -3,6 +3,7 @@
 import * as React from "react"
 import { XIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { TOAST_DEFAULT_DURATION_MS } from "@/lib/constants"
 
 interface Toast {
   id: string
@@ -19,7 +20,7 @@ const ToastContext = React.createContext<ToastContextType | undefined>(undefined
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = React.useState<Toast[]>([])
 
-  const toast = React.useCallback((message: string, type: Toast["type"] = "success", duration = 3000) => {
+  const toast = React.useCallback((message: string, type: Toast["type"] = "success", duration = TOAST_DEFAULT_DURATION_MS) => {
     const id = Math.random().toString(36).slice(2)
     setToasts((prev) => [...prev, { id, message, type }])
     
