@@ -7,6 +7,9 @@ import {
 import { createReasoningNormalizingFetch } from "./reasoning-normalizer";
 import { DEFAULT_MODEL, resolveFreeModel, ZEN_FREE_MODELS } from "./models";
 
+// Cache for provider instances to avoid recreating them on every request
+const providerInstanceCache = new Map<string, LanguageModelV1>();
+
 export class MockLanguageModel implements LanguageModelV1 {
   readonly specificationVersion = "v1" as const;
   readonly provider = "mock";
@@ -612,6 +615,12 @@ export function getLanguageModel(modelId?: string): LanguageModelV1 {
 }
 
 function buildZenModel(modelId: string): LanguageModelV1 {
+  // Check cache first
+  const cached = providerInstanceCache.get(modelId);
+  if (cached) {
+    return cached;
+  }
+
   const openaiCompatibleBaseURL = process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
   if (!openaiCompatibleBaseURL) {
     throw new Error("OPENAI_COMPATIBLE_BASE_URL is not set");
@@ -623,7 +632,12 @@ function buildZenModel(modelId: string): LanguageModelV1 {
     ...(openaiCompatibleApiKey ? { apiKey: openaiCompatibleApiKey } : {}),
     fetch: createReasoningNormalizingFetch(),
   });
-  return provider.chatModel(modelId);
+  const model = provider.chatModel(modelId);
+
+  // Cache the model instance
+  providerInstanceCache.set(modelId, model);
+
+  return model;
 }
 
 // Provider errors surface in several shapes: APICallError (an Error subclass

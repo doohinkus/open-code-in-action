@@ -7,6 +7,35 @@ export interface TransformResult {
   cssImports?: Set<string>;
 }
 
+// Simple hash function for cache keys (not cryptographic, just for dedup)
+function hashString(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return hash.toString(36);
+}
+
+// Cache for transformed code: key = hash(filename + code), value = TransformResult
+const transformCache = new Map<string, TransformResult>();
+const TRANSFORM_CACHE_MAX_SIZE = 200;
+
+function getTransformCacheKey(filename: string, code: string): string {
+  return `${filename}:${hashString(code)}`;
+}
+
+function pruneTransformCache(): void {
+  if (transformCache.size > TRANSFORM_CACHE_MAX_SIZE) {
+    // Remove oldest entries (first 20% of the map)
+    const keysToDelete = Array.from(transformCache.keys()).slice(0, Math.floor(TRANSFORM_CACHE_MAX_SIZE * 0.2));
+    for (const key of keysToDelete) {
+      transformCache.delete(key);
+    }
+  }
+}
+
 function createPlaceholderModule(componentName: string): string {
   return `
 import React from 'react';
@@ -23,6 +52,14 @@ export function transformJSX(
   filename: string,
   existingFiles: Set<string>
 ): TransformResult {
+  // Check cache first
+  const cacheKey = getTransformCacheKey(filename, code);
+  const cached = transformCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  let result: TransformResult;
   try {
     const isTypeScript = filename.endsWith(".ts") || filename.endsWith(".tsx");
 
@@ -47,7 +84,7 @@ export function transformJSX(
       }
     }
 
-    const result = Babel.transform(processedCode, {
+    const transformed = Babel.transform(processedCode, {
       filename,
       presets: [
         ["react", { runtime: "automatic" }],
@@ -56,17 +93,23 @@ export function transformJSX(
       plugins: [],
     });
 
-    return {
-      code: result.code || "",
+    result = {
+      code: transformed.code || "",
       missingImports: imports,
       cssImports: cssImports,
     };
   } catch (error) {
-    return {
+    result = {
       code: "",
       error: error instanceof Error ? error.message : "Unknown transform error",
     };
   }
+
+  // Cache the result
+  transformCache.set(cacheKey, result);
+  pruneTransformCache();
+
+  return result;
 }
 
 function resolveRelativePath(fromDir: string, relativePath: string): string {
