@@ -1,8 +1,9 @@
 "use client";
 
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useRef } from "react";
-import { Send, Mic, MicOff, Square } from "lucide-react";
+import { Send, Mic, MicOff, Square, X } from "lucide-react";
 import { useSpeechRecognition } from "@/lib/hooks/use-speech-recognition";
+import { useInspection } from "@/lib/contexts/inspection-context";
 
 interface MessageInputProps {
   input: string;
@@ -30,7 +31,9 @@ export function MessageInput({
     resetTranscript,
   } = useSpeechRecognition();
 
+  const { taggedElements, removeTag, clearTags } = useInspection();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prevTagCountRef = useRef(0);
 
   useEffect(() => {
     if (!transcript) return;
@@ -48,12 +51,50 @@ export function MessageInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isListening]);
 
+  useEffect(() => {
+    if (taggedElements.length > prevTagCountRef.current) {
+      const newest = taggedElements[taggedElements.length - 1];
+      const mention = `@${newest.label} `;
+      const syntheticEvent = {
+        target: { value: (input || "") + mention },
+      } as ChangeEvent<HTMLTextAreaElement>;
+      handleInputChange(syntheticEvent);
+    }
+    prevTagCountRef.current = taggedElements.length;
+  }, [taggedElements, input, handleInputChange]);
+
+  useEffect(() => {
+    if (taggedElements.length === 0) {
+      prevTagCountRef.current = 0;
+    }
+  }, [taggedElements.length]);
+
+  const handleRemoveTag = (id: string) => {
+    const el = taggedElements.find((e) => e.id === id);
+    if (el) {
+      const mention = `@${el.label} `;
+      const mentionAlt = `@${el.label}`;
+      let newValue = input || "";
+      if (newValue.includes(mention)) {
+        newValue = newValue.replace(mention, "");
+      } else if (newValue.includes(mentionAlt)) {
+        newValue = newValue.replace(mentionAlt, "");
+      }
+      const syntheticEvent = {
+        target: { value: newValue },
+      } as ChangeEvent<HTMLTextAreaElement>;
+      handleInputChange(syntheticEvent);
+    }
+    removeTag(id);
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (isListening) {
         stopListening();
       }
+      clearTags();
       const form = e.currentTarget.form;
       if (form) {
         form.requestSubmit();
@@ -69,9 +110,33 @@ export function MessageInput({
     }
   };
 
+  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+    clearTags();
+    handleSubmit(e);
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="relative p-4 bg-white border-t border-neutral-200/60">
+    <form onSubmit={onSubmit} className="relative p-4 bg-white border-t border-neutral-200/60">
       <div className="relative max-w-4xl mx-auto">
+        {taggedElements.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {taggedElements.map((el) => (
+              <span
+                key={el.id}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium"
+              >
+                @{el.label}
+                <button
+                  type="button"
+                  onClick={() => handleRemoveTag(el.id)}
+                  className="p-0.5 rounded-full hover:bg-blue-200 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           value={isListening ? input + (interimTranscript ? " " + interimTranscript : "") : input}
