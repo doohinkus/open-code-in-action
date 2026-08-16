@@ -585,6 +585,179 @@ export function isFullScreenComponent(content: string): boolean {
  * @param centerComponent - Whether to apply flex centering to #root
  * @returns Complete HTML document string
  */
+function createInspectionScript(nonce: string): string {
+  return `<script${nonce ? ` nonce="${nonce}"` : ''}>
+(function() {
+  let inspectionEnabled = false;
+  let elementMap = new Map();
+  let labelCounts = new Map();
+  let hoverOverlay = null;
+  let hoverDebounceTimer = null;
+
+  function toPascalCase(str) {
+    return str.replace(/(\\s|-|_)(\\w)/g, function(_, __, c) { return c.toUpperCase(); })
+              .replace(/^\\w/, function(c) { return c.toUpperCase(); })
+              .replace(/\\s+/g, '');
+  }
+
+  function generateLabel(el) {
+    var ariaLabel = el.getAttribute('aria-label');
+    if (ariaLabel) return toPascalCase(ariaLabel) + toPascalCase(el.tagName.toLowerCase());
+
+    var testId = el.getAttribute('data-testid');
+    if (testId) return toPascalCase(testId);
+
+    var text = '';
+    if (el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'LABEL') {
+      text = (el.textContent || '').trim().substring(0, 30);
+    } else if (el.tagName.match(/^H[1-6]$/)) {
+      text = (el.textContent || '').trim().substring(0, 30);
+    } else if (el.tagName === 'INPUT') {
+      text = el.getAttribute('placeholder') || el.getAttribute('type') || '';
+    } else if (el.tagName === 'IMG') {
+      text = el.getAttribute('alt') || '';
+    }
+
+    if (text) {
+      var cleanText = text.replace(/[^a-zA-Z0-9\\s]/g, '').trim();
+      if (cleanText.length > 0) {
+        return toPascalCase(cleanText) + toPascalCase(el.tagName.toLowerCase());
+      }
+    }
+
+    return toPascalCase(el.tagName.toLowerCase());
+  }
+
+  function buildElementMap() {
+    elementMap.clear();
+    labelCounts.clear();
+    var root = document.getElementById('root');
+    if (!root) return;
+
+    var allElements = root.querySelectorAll('*');
+    var idCounter = 0;
+    for (var i = 0; i < allElements.length; i++) {
+      var el = allElements[i];
+      if (el === hoverOverlay) continue;
+      var id = 'uigen-el-' + (idCounter++);
+      el.setAttribute('data-uigen-id', id);
+      var label = generateLabel(el);
+      var count = labelCounts.get(label) || 0;
+      labelCounts.set(label, count + 1);
+      var displayLabel = count > 0 ? label + (count + 1) : label;
+      elementMap.set(id, { el: el, label: label, displayLabel: displayLabel });
+    }
+
+    labelCounts.forEach(function(count, label) {
+      if (count === 1) {
+        elementMap.forEach(function(info) {
+          if (info.label === label) info.displayLabel = label;
+        });
+      }
+    });
+  }
+
+  function ensureOverlay() {
+    if (hoverOverlay) return;
+    hoverOverlay = document.createElement('div');
+    hoverOverlay.id = '__uigen-hover-overlay';
+    hoverOverlay.style.cssText = 'position:fixed;pointer-events:none;z-index:99999;border:2px solid #3b82f6;background:rgba(59,130,246,0.1);border-radius:4px;transition:all 0.1s ease;display:none;';
+    document.body.appendChild(hoverOverlay);
+  }
+
+  function showOverlay(el, label) {
+    ensureOverlay();
+    var rect = el.getBoundingClientRect();
+    hoverOverlay.style.left = rect.left + 'px';
+    hoverOverlay.style.top = rect.top + 'px';
+    hoverOverlay.style.width = rect.width + 'px';
+    hoverOverlay.style.height = rect.height + 'px';
+    hoverOverlay.style.display = 'block';
+
+    var existingLabel = hoverOverlay.querySelector('[data-uigen-label]');
+    if (!existingLabel) {
+      existingLabel = document.createElement('div');
+      existingLabel.setAttribute('data-uigen-label', 'true');
+      existingLabel.style.cssText = 'position:absolute;top:-24px;left:0;background:#3b82f6;color:white;font-size:11px;padding:2px 6px;border-radius:3px;white-space:nowrap;font-family:system-ui;pointer-events:none;';
+      hoverOverlay.appendChild(existingLabel);
+    }
+    existingLabel.textContent = '@' + label;
+  }
+
+  function hideOverlay() {
+    if (hoverOverlay) hoverOverlay.style.display = 'none';
+  }
+
+  function postMsg(data) {
+    try { parent.postMessage(data, '*'); } catch(e) {}
+  }
+
+  function handleMouseMove(e) {
+    if (!inspectionEnabled) return;
+    if (hoverDebounceTimer) clearTimeout(hoverDebounceTimer);
+    hoverDebounceTimer = setTimeout(function() {
+      var el = e.target;
+      if (!el || el === hoverOverlay || el.id === '__uigen-hover-overlay') return;
+      var id = el.getAttribute('data-uigen-id');
+      if (!id) return;
+      var info = elementMap.get(id);
+      if (!info) return;
+      showOverlay(el, info.displayLabel);
+      postMsg({ type: 'uigen:element-hover', id: id, label: info.displayLabel, rect: el.getBoundingClientRect() });
+    }, 50);
+  }
+
+  function handleClick(e) {
+    if (!inspectionEnabled) return;
+    var el = e.target;
+    if (!el || el === hoverOverlay || el.id === '__uigen-hover-overlay') return;
+    var id = el.getAttribute('data-uigen-id');
+    if (!id) return;
+    var info = elementMap.get(id);
+    if (!info) return;
+    e.preventDefault();
+    e.stopPropagation();
+    postMsg({
+      type: 'uigen:element-select',
+      id: id,
+      label: info.displayLabel,
+      tagName: el.tagName.toLowerCase(),
+      classes: el.className || '',
+      textContent: (el.textContent || '').trim().substring(0, 100),
+      rect: el.getBoundingClientRect()
+    });
+  }
+
+  function handleParentMessage(e) {
+    var data = e.data;
+    if (!data || typeof data !== 'object') return;
+    if (data.type === 'uigen:set-inspection-mode') {
+      inspectionEnabled = !!data.enabled;
+      if (inspectionEnabled) {
+        buildElementMap();
+        document.body.style.cursor = 'crosshair';
+        document.addEventListener('mousemove', handleMouseMove, true);
+        document.addEventListener('click', handleClick, true);
+      } else {
+        document.body.style.cursor = '';
+        document.removeEventListener('mousemove', handleMouseMove, true);
+        document.removeEventListener('click', handleClick, true);
+        hideOverlay();
+      }
+    }
+  }
+
+  window.addEventListener('message', handleParentMessage);
+
+  var observer = new MutationObserver(function() {
+    if (inspectionEnabled) buildElementMap();
+  });
+  var rootEl = document.getElementById('root');
+  if (rootEl) observer.observe(rootEl, { childList: true, subtree: true });
+})();
+</script>`;
+}
+
 export function createPreviewHTML(
   entryPoint: string,
   importMap: string,
@@ -813,6 +986,7 @@ ${rootCentering}    }
 
     loadApp();
   </script>` : ''}
+  ${createInspectionScript(nonce || '')}
 </body>
 </html>`;
 }

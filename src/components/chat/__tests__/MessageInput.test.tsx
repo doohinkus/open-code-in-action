@@ -2,10 +2,16 @@ import { test, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MessageInput } from "../MessageInput";
+import { InspectionProvider } from "@/lib/contexts/inspection-context";
+import { ReactNode } from "react";
 
 afterEach(() => {
   cleanup();
 });
+
+function renderWithProviders(ui: ReactNode) {
+  return render(<InspectionProvider>{ui}</InspectionProvider>);
+}
 
 function mockSpeechRecognition(permissionState: PermissionState = "granted") {
   const mockStart = vi.fn();
@@ -77,7 +83,7 @@ test("renders with placeholder text", () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const textarea = screen.getByPlaceholderText("Describe the React component you want to create...");
   expect(textarea).toBeDefined();
@@ -91,7 +97,7 @@ test("displays the input value", () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const textarea = screen.getByDisplayValue("Test input value");
   expect(textarea).toBeDefined();
@@ -106,7 +112,7 @@ test("calls handleInputChange when typing", async () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const textarea = screen.getByPlaceholderText("Describe the React component you want to create...");
   await userEvent.type(textarea, "Hello");
@@ -123,7 +129,7 @@ test("calls handleSubmit when form is submitted", async () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const form = screen.getByRole("textbox").closest("form")!;
   fireEvent.submit(form);
@@ -140,7 +146,7 @@ test("submits form when Enter is pressed without shift", async () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const textarea = screen.getByRole("textbox");
   fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
@@ -157,7 +163,7 @@ test("does not submit form when Enter is pressed with shift", async () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const textarea = screen.getByRole("textbox");
   fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true });
@@ -173,7 +179,7 @@ test("disables textarea when isLoading is true", () => {
     isLoading: true,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const textarea = screen.getByRole("textbox");
   expect(textarea).toHaveProperty("disabled", true);
@@ -188,7 +194,7 @@ test("disables send button when isLoading is true", () => {
     isLoading: true,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const sendButton = getSendButton();
   expect(sendButton).toHaveProperty("disabled", true);
@@ -203,7 +209,7 @@ test("disables send button when input is empty", () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const sendButton = getSendButton();
   expect(sendButton).toHaveProperty("disabled", true);
@@ -218,7 +224,7 @@ test("disables send button when input contains only whitespace", () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const sendButton = getSendButton();
   expect(sendButton).toHaveProperty("disabled", true);
@@ -233,7 +239,7 @@ test("enables send button when input has content and not loading", () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const sendButton = getSendButton();
   expect(sendButton).toHaveProperty("disabled", false);
@@ -241,7 +247,7 @@ test("enables send button when input has content and not loading", () => {
 
 test("applies correct CSS classes based on loading state", () => {
   mockSpeechRecognition();
-  const { rerender } = render(
+  const { rerender } = renderWithProviders(
     <MessageInput
       input="Test"
       handleInputChange={vi.fn()}
@@ -255,12 +261,14 @@ test("applies correct CSS classes based on loading state", () => {
   expect(sendButton.className).toContain("hover:bg-blue-50");
 
   rerender(
-    <MessageInput
-      input="Test"
-      handleInputChange={vi.fn()}
-      handleSubmit={vi.fn()}
-      isLoading={true}
-    />
+    <InspectionProvider>
+      <MessageInput
+        input="Test"
+        handleInputChange={vi.fn()}
+        handleSubmit={vi.fn()}
+        isLoading={true}
+      />
+    </InspectionProvider>
   );
 
   sendButton = getSendButton();
@@ -270,7 +278,7 @@ test("applies correct CSS classes based on loading state", () => {
 
 test("applies pulse animation to send icon when loading", () => {
   mockSpeechRecognition();
-  const { rerender } = render(
+  const { rerender } = renderWithProviders(
     <MessageInput
       input="Test"
       handleInputChange={vi.fn()}
@@ -283,12 +291,14 @@ test("applies pulse animation to send icon when loading", () => {
   expect(sendIcon?.getAttribute("class")).not.toContain("animate-pulse");
 
   rerender(
-    <MessageInput
-      input="Test"
-      handleInputChange={vi.fn()}
-      handleSubmit={vi.fn()}
-      isLoading={true}
-    />
+    <InspectionProvider>
+      <MessageInput
+        input="Test"
+        handleInputChange={vi.fn()}
+        handleSubmit={vi.fn()}
+        isLoading={true}
+      />
+    </InspectionProvider>
   );
 
   sendIcon = getSendButton().querySelector("svg");
@@ -303,7 +313,7 @@ test("textarea has correct styling classes", () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const textarea = screen.getByRole("textbox");
   expect(textarea.className).toContain("min-h-[80px]");
@@ -323,7 +333,7 @@ test("send button click triggers form submission", async () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const sendButton = getSendButton();
   await userEvent.click(sendButton);
@@ -340,7 +350,7 @@ test("shows mic button when SpeechRecognition is supported", () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   expect(getMicButton()).toBeDefined();
 });
@@ -356,7 +366,7 @@ test("hides mic button when SpeechRecognition is unsupported", () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   expect(screen.queryByTitle("Start voice input")).toBeNull();
 });
@@ -370,7 +380,7 @@ test("clicking mic button starts listening", () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const micButton = getMicButton();
   fireEvent.click(micButton);
@@ -387,7 +397,7 @@ test("disables mic button when isLoading", () => {
     isLoading: true,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const micButton = screen.getByTitle("Start voice input");
   expect(micButton).toHaveProperty("disabled", true);
@@ -402,7 +412,7 @@ test("textarea gets red border when listening", () => {
     isLoading: false,
   };
 
-  const { rerender } = render(<MessageInput {...mockProps} />);
+  const { rerender } = renderWithProviders(<MessageInput {...mockProps} />);
 
   let textarea = screen.getByRole("textbox");
   expect(textarea.className).toContain("border-neutral-200");
@@ -421,7 +431,7 @@ test("textarea has pr-24 padding for both buttons", () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   const textarea = screen.getByRole("textbox");
   expect(textarea.className).toContain("pr-24");
@@ -436,7 +446,7 @@ test("hides mic button when microphone permission is denied", async () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   await vi.waitFor(() => {
     expect(screen.queryByTitle("Start voice input")).toBeNull();
@@ -452,7 +462,7 @@ test("shows mic button when microphone permission is granted", async () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   await vi.waitFor(() => {
     expect(getMicButton()).toBeDefined();
@@ -468,7 +478,7 @@ test("shows mic button when microphone permission is prompt", async () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   await vi.waitFor(() => {
     expect(getMicButton()).toBeDefined();
@@ -490,7 +500,7 @@ test("shows mic button when navigator.permissions is unavailable", () => {
     isLoading: false,
   };
 
-  render(<MessageInput {...mockProps} />);
+  renderWithProviders(<MessageInput {...mockProps} />);
 
   expect(getMicButton()).toBeDefined();
 });

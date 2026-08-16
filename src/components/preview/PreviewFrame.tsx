@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 import { useChat } from "@/lib/contexts/chat-context";
+import { useInspection } from "@/lib/contexts/inspection-context";
 import {
   createImportMap,
   createPreviewHTML,
   isFullScreenComponent,
 } from "@/lib/transform/jsx-transformer";
-import { AlertCircle, Loader2, Wand2 } from "lucide-react";
+import { AlertCircle, Loader2, Wand2, MousePointerClick } from "lucide-react";
 import { GenerationActivityLog } from "./GenerationActivityLog";
+import { InspectionOverlay } from "./InspectionOverlay";
 import { logger } from "@/lib/observability/logger";
 import { REBUILD_DEBOUNCE_MS } from "@/lib/constants";
 
@@ -21,32 +23,89 @@ interface PreviewErrorInfo {
 
 export function PreviewFrame() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { getAllFiles, refreshTrigger, isFixingErrors } = useFileSystem();
   const { status, requestFix } = useChat();
+  const {
+    isInspectMode,
+    setInspectMode,
+    tagElement,
+    setHoveredElement,
+    hoveredElement,
+  } = useInspection();
   const [error, setError] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<PreviewErrorInfo | null>(null);
   const [entryPoint, setEntryPoint] = useState<string>("/App.jsx");
   const [isFirstLoad, setIsFirstLoad] = useState(true);
+  const [iframeRect, setIframeRect] = useState<DOMRect | null>(null);
 
   const isGenerating = status === "streaming" || status === "submitted";
 
-  // Surface runtime errors from inside the sandboxed iframe
+  const updateIframeRect = useCallback(() => {
+    if (iframeRef.current) {
+      setIframeRect(iframeRef.current.getBoundingClientRect());
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isInspectMode) return;
+    updateIframeRect();
+    window.addEventListener("resize", updateIframeRect);
+    window.addEventListener("scroll", updateIframeRect);
+    return () => {
+      window.removeEventListener("resize", updateIframeRect);
+      window.removeEventListener("scroll", updateIframeRect);
+    };
+  }, [isInspectMode, updateIframeRect]);
+
+  useEffect(() => {
+    if (isGenerating) {
+      setInspectMode(false);
+    }
+  }, [isGenerating, setInspectMode]);
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
       const data = event.data;
-      if (data && data.type === "uigen:error") {
+      if (!data || typeof data !== "object") return;
+
+      if (data.type === "uigen:error") {
         setPreviewError({ message: data.message, stack: data.stack });
         const error = new Error(data.message);
         error.stack = data.stack;
         Sentry.captureException(error, {
           tags: { source: "preview-sandbox" },
         });
+      } else if (data.type === "uigen:element-hover") {
+        setHoveredElement({
+          id: data.id,
+          label: data.label,
+          rect: data.rect,
+        });
+      } else if (data.type === "uigen:element-select") {
+        tagElement({
+          id: data.id,
+          label: data.label,
+          tagName: data.tagName,
+          classes: data.classes,
+          textContent: data.textContent,
+        });
+        setInspectMode(false);
       }
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, []);
+  }, [tagElement, setInspectMode, setHoveredElement]);
+
+  useEffect(() => {
+    if (iframeRef.current) {
+      iframeRef.current.contentWindow?.postMessage(
+        { type: "uigen:set-inspection-mode", enabled: isInspectMode },
+        "*"
+      );
+    }
+  }, [isInspectMode, refreshTrigger]);
 
   useEffect(() => {
     if (isGenerating || isFixingErrors) return;
@@ -56,12 +115,10 @@ export function PreviewFrame() {
         try {
           const files = getAllFiles();
 
-          // Clear error first when we have files
           if (files.size > 0 && error) {
             setError(null);
           }
 
-          // Find the entry point - look for App.jsx, App.tsx, index.jsx, or index.tsx
           let foundEntryPoint = entryPoint;
           const possibleEntries = [
             "/App.jsx",
@@ -78,7 +135,6 @@ export function PreviewFrame() {
               foundEntryPoint = found;
               setEntryPoint(found);
             } else if (files.size > 0) {
-              // Just use the first .jsx/.tsx file found
               const firstJSX = Array.from(files.keys()).find(
                 (path) => path.endsWith(".jsx") || path.endsWith(".tsx")
               );
@@ -98,7 +154,6 @@ export function PreviewFrame() {
             return;
           }
 
-          // We have files, so it's no longer the first load
           if (isFirstLoad) {
             setIsFirstLoad(false);
           }
@@ -112,7 +167,6 @@ export function PreviewFrame() {
 
           const { importMap, styles, errors, bundleCode } = createImportMap(files);
 
-          // Guard against an empty bundle producing a blank iframe
           if (errors.length === 0 && !bundleCode) {
             setError(
               "No React component found. Create an App.jsx file that exports a default component to get started."
@@ -121,8 +175,6 @@ export function PreviewFrame() {
           }
 
           const nonce = crypto.randomUUID();
-          // Don't force-centering on full-screen components: it would shrink
-          // their root so the background no longer spans the full width.
           const centerComponent = !isFullScreenComponent(
             files.get(foundEntryPoint) ?? ""
           );
@@ -139,9 +191,6 @@ export function PreviewFrame() {
           if (iframeRef.current) {
             const iframe = iframeRef.current;
 
-            // Sandbox: allow-scripts only — intentionally no allow-same-origin
-            // to prevent AI-generated code from accessing the parent page's
-            // sessionStorage, cookies, or DOM. User code runs in a null origin.
             iframe.setAttribute(
               "sandbox",
               "allow-scripts"
@@ -168,6 +217,10 @@ export function PreviewFrame() {
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshTrigger, getAllFiles, entryPoint, isFirstLoad, isGenerating, isFixingErrors]);
+
+  const toggleInspectMode = () => {
+    setInspectMode(!isInspectMode);
+  };
 
   if (isGenerating) {
     return (
@@ -294,10 +347,24 @@ export function PreviewFrame() {
   }
 
   return (
-    <iframe
-      ref={iframeRef}
-      className="w-full h-full border-0 bg-white"
-      title="Preview"
-    />
+    <div ref={containerRef} className="relative w-full h-full">
+      <button
+        onClick={toggleInspectMode}
+        title={isInspectMode ? "Exit inspection mode" : "Click elements to tag them in the prompt"}
+        className={`absolute top-2 right-2 z-40 p-2 rounded-lg transition-all ${
+          isInspectMode
+            ? "bg-blue-500 text-white shadow-lg"
+            : "bg-white/80 text-gray-600 hover:bg-white hover:text-gray-900 shadow-sm border border-gray-200"
+        }`}
+      >
+        <MousePointerClick className="h-4 w-4" />
+      </button>
+      <iframe
+        ref={iframeRef}
+        className="w-full h-full border-0 bg-white"
+        title="Preview"
+      />
+      <InspectionOverlay iframeRect={iframeRect} />
+    </div>
   );
 }

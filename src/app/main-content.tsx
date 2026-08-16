@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/resizable";
 import { FileSystemProvider } from "@/lib/contexts/file-system-context";
 import { ChatProvider } from "@/lib/contexts/chat-context";
+import { InspectionProvider } from "@/lib/contexts/inspection-context";
 import { ChatInterface } from "@/components/chat/ChatInterface";
 import { FileTree } from "@/components/editor/FileTree";
 import { CodeEditor } from "@/components/editor/CodeEditor";
@@ -102,7 +103,9 @@ export function MainContent({ user, project }: MainContentProps) {
     return (
       <FileSystemProvider key={project?.id ?? "anon"} initialData={project?.data}>
         <ChatProvider key={project?.id ?? "anon"} projectId={project?.id} initialMessages={project?.messages}>
-          <LoadingScreen />
+          <InspectionProvider>
+            <LoadingScreen />
+          </InspectionProvider>
         </ChatProvider>
       </FileSystemProvider>
     );
@@ -111,7 +114,9 @@ export function MainContent({ user, project }: MainContentProps) {
   return (
     <FileSystemProvider key={project?.id ?? "anon"} initialData={project?.data}>
       <ChatProvider key={project?.id ?? "anon"} projectId={project?.id} initialMessages={project?.messages}>
-        <AppShell user={user} project={project} />
+        <InspectionProvider>
+          <AppShell user={user} project={project} />
+        </InspectionProvider>
       </ChatProvider>
     </FileSystemProvider>
   );
