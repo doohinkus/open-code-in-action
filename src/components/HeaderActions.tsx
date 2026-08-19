@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, LogOut, FolderOpen, ChevronDown, Download, MoreVertical, Save, Pencil, Trash2, Check, X } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { signOut } from "@/actions";
 import { useAuth } from "@/hooks/use-auth";
 import { getProjects } from "@/actions/get-projects";
@@ -317,7 +318,7 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => setShowDeleteConfirm(true)}
-                className="text-red-600 focus:text-red-600"
+                className="text-destructive focus:text-destructive"
               >
                 <Trash2 className="h-4 w-4" />
                 Delete
@@ -330,7 +331,7 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
       {/* Delete Confirmation Inline */}
       {showDeleteConfirm && (
         <div className="flex items-center gap-2 text-sm">
-          <span>Delete?</span>
+          <span className="text-muted-foreground">Delete?</span>
           <Button
             variant="destructive"
             size="sm"
@@ -349,6 +350,8 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
           </Button>
         </div>
       )}
+
+      <ThemeToggle />
 
       {/* Desktop actions */}
       <div className="hidden lg:flex items-center gap-2">
@@ -455,7 +458,7 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setShowDeleteConfirm(true)}
-                  className="text-red-600 focus:text-red-600"
+                  className="text-destructive focus:text-destructive"
                 >
                   <Trash2 className="h-4 w-4" />
                   Delete

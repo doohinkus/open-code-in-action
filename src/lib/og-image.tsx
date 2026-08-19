@@ -6,7 +6,7 @@ import { siteUrlFallback } from "@/lib/site-url";
 export const OG_IMAGE_WIDTH = 1200;
 export const OG_IMAGE_HEIGHT = 630;
 
-export const siteName = "React Component Generator";
+export const siteName = "UI Generator";
 export const siteTagline =
   "Describe a UI in plain English and get production-ready React components in seconds.";
 
@@ -112,7 +112,7 @@ const logoMarkStyle = (): React.CSSProperties => ({
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+  background: "linear-gradient(135deg, #0d9488 0%, #10b981 100%)",
   color: "#ffffff",
   fontSize: "22px",
   fontWeight: 700,
@@ -131,7 +131,7 @@ function BrandHeader({ fileCount }: { fileCount?: number }) {
       }}
     >
       <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "18px" }}>
-        <div style={logoMarkStyle()}>RCG</div>
+        <div style={logoMarkStyle()}>UI</div>
         <div
           style={{
             fontSize: "26px",
@@ -140,7 +140,7 @@ function BrandHeader({ fileCount }: { fileCount?: number }) {
             color: "#e5e5e5",
           }}
         >
-          React Component Generator
+          UI Generator
         </div>
       </div>
       {typeof fileCount === "number" && (
@@ -179,7 +179,7 @@ function BrandFooter({ url }: { url: string }) {
       }}
     >
       <div style={{ fontSize: "22px", fontWeight: 500, color: "#a1a1aa" }}>
-        Built with React Component Generator
+        Built with UI Generator
       </div>
       <div
         style={{
@@ -205,13 +205,13 @@ function EyebrowPill({ children }: { children: ReactNode }) {
         alignSelf: "flex-start",
         padding: "10px 22px",
         borderRadius: "9999px",
-        border: "1px solid rgba(99,102,241,0.45)",
-        background: "rgba(99,102,241,0.12)",
+        border: "1px solid rgba(13,148,136,0.45)",
+        background: "rgba(13,148,136,0.12)",
         fontSize: "20px",
         fontWeight: 600,
         letterSpacing: "0.14em",
         textTransform: "uppercase",
-        color: "#a5b4fc",
+        color: "#5eead4",
       }}
     >
       <span
@@ -219,7 +219,7 @@ function EyebrowPill({ children }: { children: ReactNode }) {
           width: "10px",
           height: "10px",
           borderRadius: "9999px",
-          background: "#818cf8",
+          background: "#14b8a6",
         }}
       />
       {children}

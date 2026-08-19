@@ -59,13 +59,13 @@ export default async function SharePage({ params }: SharePageProps) {
   }
 
   return (
-    <div className="h-dvh flex flex-col bg-neutral-50">
-      <header className="h-12 flex items-center justify-between border-b border-neutral-200/60 bg-white px-4 flex-shrink-0">
+    <div className="h-dvh flex flex-col bg-background">
+      <header className="h-12 flex items-center justify-between border-b border-border bg-card px-4 flex-shrink-0">
         <Link
           href="/"
-          className="text-sm text-neutral-500 hover:text-neutral-800 transition-colors"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          Built with React Component Generator
+          Built with UI Generator
         </Link>
         <ShareActions files={share.files} />
       </header>

@@ -258,7 +258,7 @@ test("applies correct CSS classes based on loading state", () => {
 
   let sendButton = getSendButton();
   expect(sendButton.className).toContain("disabled:opacity-40");
-  expect(sendButton.className).toContain("hover:bg-blue-50");
+  expect(sendButton.className).toContain("bg-primary");
 
   rerender(
     <InspectionProvider>
@@ -276,7 +276,7 @@ test("applies correct CSS classes based on loading state", () => {
   expect(sendButton.className).toContain("disabled:opacity-40");
 });
 
-test("applies pulse animation to send icon when loading", () => {
+test("send button uses muted style when disabled by loading", () => {
   mockSpeechRecognition();
   const { rerender } = renderWithProviders(
     <MessageInput
@@ -287,8 +287,7 @@ test("applies pulse animation to send icon when loading", () => {
     />
   );
 
-  let sendIcon = getSendButton().querySelector("svg");
-  expect(sendIcon?.getAttribute("class")).not.toContain("animate-pulse");
+  expect(getSendButton().className).toContain("bg-primary");
 
   rerender(
     <InspectionProvider>
@@ -301,8 +300,7 @@ test("applies pulse animation to send icon when loading", () => {
     </InspectionProvider>
   );
 
-  sendIcon = getSendButton().querySelector("svg");
-  expect(sendIcon?.getAttribute("class")).toContain("text-neutral-300");
+  expect(getSendButton().className).toContain("bg-muted");
 });
 
 test("textarea has correct styling classes", () => {
@@ -319,8 +317,9 @@ test("textarea has correct styling classes", () => {
   expect(textarea.className).toContain("min-h-[80px]");
   expect(textarea.className).toContain("max-h-[200px]");
   expect(textarea.className).toContain("resize-none");
-  expect(textarea.className).toContain("focus:ring-2");
-  expect(textarea.className).toContain("focus:ring-blue-500/10");
+  expect(textarea.className).toContain("rounded-2xl");
+  const shell = textarea.parentElement;
+  expect(shell?.className).toContain("focus-within:ring-primary/20");
 });
 
 test("send button click triggers form submission", async () => {
@@ -415,8 +414,8 @@ test("textarea gets red border when listening", () => {
   const { rerender } = renderWithProviders(<MessageInput {...mockProps} />);
 
   let textarea = screen.getByRole("textbox");
-  expect(textarea.className).toContain("border-neutral-200");
-  expect(textarea.className).not.toContain("border-red-300");
+  expect(textarea.className).not.toContain("caret-destructive");
+  expect(textarea.parentElement?.className).toContain("border-border");
 
   // Simulate listening state via re-render won't work directly since
   // isListening is internal state, but we can verify the class exists

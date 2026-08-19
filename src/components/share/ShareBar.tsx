@@ -137,16 +137,16 @@ export function ShareBar() {
   if (!shareUrl && !sharing && !failed) return null;
 
   return (
-    <div className="flex items-center justify-between gap-3 px-4 h-11 border-b border-neutral-200/60 bg-white flex-shrink-0">
+    <div className="flex items-center justify-between gap-3 px-4 h-11 border-b border-border bg-card flex-shrink-0">
       <div className="flex items-center gap-2 min-w-0">
-        <Link2 className="h-4 w-4 text-neutral-400 flex-shrink-0" />
+        <Link2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         {sharing || !shareUrl ? (
           failed ? (
-            <span className="flex items-center gap-1.5 text-sm text-neutral-500">
+            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
               Share link failed
               <button
                 onClick={() => publishShare(projectId)}
-                className="inline-flex items-center gap-1 px-2 h-6 text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-md transition-colors"
+                className="inline-flex items-center gap-1 px-2 h-6 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
                 title="Retry"
               >
                 <RotateCcw className="h-3 w-3" />
@@ -154,8 +154,8 @@ export function ShareBar() {
               </button>
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 text-sm text-neutral-500">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
               Creating share link...
             </span>
           )
@@ -164,7 +164,7 @@ export function ShareBar() {
             href={shareUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-sm text-blue-600 hover:underline truncate"
+            className="text-sm text-primary hover:underline truncate"
             title={shareUrl}
           >
             {shareUrl.replace(/^https?:\/\//, "")}
@@ -175,11 +175,11 @@ export function ShareBar() {
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={handleCopy}
-            className="inline-flex items-center gap-1.5 px-2.5 h-7 text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-md transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 h-7 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors border border-transparent hover:border-border"
             title="Copy link"
           >
             {copied ? (
-              <Check className="h-3.5 w-3.5 text-green-600" />
+              <Check className="h-3.5 w-3.5 text-success" />
             ) : (
               <Copy className="h-3.5 w-3.5" />
             )}
@@ -189,7 +189,7 @@ export function ShareBar() {
             href={shareUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 px-2.5 h-7 text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-md transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 h-7 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors border border-transparent hover:border-border"
             title="Open shared component"
           >
             <ExternalLink className="h-3.5 w-3.5" />

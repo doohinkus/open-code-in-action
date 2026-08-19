@@ -96,12 +96,12 @@ export function GenerationActivityLog() {
   if (totalSteps === 0) {
     const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
     return (
-      <div className="flex items-center gap-2 mt-3 text-gray-500">
-        <Loader2 className="h-4 w-4 animate-spin" />
+      <div className="flex items-center gap-2 mt-1 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
         <span className="text-sm">
           Preparing...
           {elapsed > 0 && (
-            <span className="ml-1 text-gray-400">({elapsed}s)</span>
+            <span className="ml-1 text-muted-foreground/70 font-mono text-xs">({elapsed}s)</span>
           )}
         </span>
       </div>
@@ -110,7 +110,7 @@ export function GenerationActivityLog() {
 
   return (
     <div className="w-full max-w-sm mx-auto text-left">
-      <div className="text-xs text-gray-400 mb-2">
+      <div className="text-xs text-muted-foreground mb-2 font-mono">
         Step {completedCount} of {totalSteps}
       </div>
       <div
@@ -120,14 +120,14 @@ export function GenerationActivityLog() {
         {activities.map((activity, index) => (
           <div
             key={`${activity.id}-${index}`}
-            className="flex items-center gap-2 px-2.5 py-1.5 bg-white/60 rounded-md border border-gray-100"
+            className="flex items-center gap-2 px-2.5 py-1.5 bg-muted/50 rounded-md border border-border"
           >
             {activity.status === "done" ? (
-              <Check className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+              <Check className="h-3 w-3 text-success flex-shrink-0" />
             ) : (
-              <Loader2 className="h-3 w-3 animate-spin text-blue-500 flex-shrink-0" />
+              <Loader2 className="h-3 w-3 animate-spin text-primary flex-shrink-0" />
             )}
-            <span className="text-xs font-mono text-gray-600 truncate">
+            <span className="text-xs font-mono text-foreground/80 truncate">
               {activity.label}
             </span>
           </div>

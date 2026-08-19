@@ -46,8 +46,8 @@ test("renders inline code with custom styling", () => {
   expect(codeElement.className).toContain("px-1");
   expect(codeElement.className).toContain("py-0.5");
   expect(codeElement.className).toContain("rounded-sm");
-  expect(codeElement.className).toContain("bg-neutral-100");
-  expect(codeElement.className).toContain("text-neutral-900");
+  expect(codeElement.className).toContain("bg-muted");
+  expect(codeElement.className).toContain("text-foreground");
   expect(codeElement.className).toContain("font-mono");
 });
 
