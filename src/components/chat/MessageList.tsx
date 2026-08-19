@@ -80,9 +80,9 @@ const MessageItem = React.memo(function MessageItem({ message, isLoading, isLast
                       if (!hasReasoning && !consumedText) return null;
                       return (
                         <div key={partIndex} className="mt-3 p-3 bg-muted/60 rounded-lg border border-border">
-                          <span className="text-xs font-medium text-muted-foreground block mb-1">Reasoning</span>
+                          <span className="text-xs font-medium text-foreground/70 block mb-1">Reasoning</span>
                           {hasReasoning ? (
-                            <span className="text-sm text-foreground/90">{part.reasoning}</span>
+                            <span className="text-sm text-foreground">{part.reasoning}</span>
                           ) : (
                             <MarkdownRenderer content={consumedText} className="prose-sm" />
                           )}
@@ -128,7 +128,7 @@ const MessageItem = React.memo(function MessageItem({ message, isLoading, isLast
                             toolFailed ? (
                               <>
                                 <div className="w-2 h-2 rounded-full bg-destructive"></div>
-                                <span className="text-foreground/80">{label}</span>
+                                <span className="text-foreground">{label}</span>
                                 <span className="text-destructive">
                                   {typeof toolResult === "string"
                                     ? toolResult
@@ -138,13 +138,13 @@ const MessageItem = React.memo(function MessageItem({ message, isLoading, isLast
                             ) : (
                               <>
                                 <div className="w-2 h-2 rounded-full bg-success"></div>
-                                <span className="text-foreground/80">{label}</span>
+                                <span className="text-foreground">{label}</span>
                               </>
                             )
                           ) : (
                             <>
                               <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                              <span className="text-foreground/80">{label}</span>
+                              <span className="text-foreground">{label}</span>
                             </>
                           )}
                         </div>
