@@ -93,6 +93,16 @@ export function transformJSX(
 
     processedCode = processedCode.replace(cssImportRegex, '');
 
+    // Auto-inject `import React from 'react'` when the code references the
+    // React namespace without importing it first. Models commonly emit
+    // `React.useState`, `React.createElement`, or `<React.Fragment>` without
+    // an import, which crashed the preview with "React is not defined".
+    const hasReactImport = /(?:from\s*|import\s+)\s*['"]react['"]/.test(processedCode);
+    const usesReactNs = /\bReact\s*[.(]/.test(processedCode);
+    if (!hasReactImport && usesReactNs) {
+      processedCode = `import React from 'react';\n${processedCode}`;
+    }
+
     let match;
     while ((match = importRegex.exec(code)) !== null) {
       if (!match[1].endsWith('.css')) {

@@ -72,6 +72,29 @@ test("transformJSX collects imports from code", () => {
   expect(result.missingImports?.size).toBe(3);
 });
 
+test("transformJSX injects React import when code uses React namespace without importing it", () => {
+  const code = `export default function Counter() {
+  const [count, setCount] = React.useState(0);
+  return <div>{count}</div>;
+};`;
+  const result = transformJSX(code, "App.jsx", new Set());
+
+  expect(result.error).toBeUndefined();
+  expect(result.code).toContain("import React from 'react'");
+});
+
+test("transformJSX does not inject React import when React is already imported", () => {
+  const code = `import * as React from 'react';
+export default function Counter() {
+  const [count, setCount] = React.useState(0);
+  return <div>{count}</div>;
+};`;
+  const result = transformJSX(code, "App.jsx", new Set());
+
+  expect(result.error).toBeUndefined();
+  expect(result.code).not.toMatch(/import React from 'react'/);
+});
+
 test("transformJSX handles transform errors gracefully", () => {
   vi.mocked(Babel.transform).mockImplementationOnce(() => {
     throw new Error("Transform failed");
