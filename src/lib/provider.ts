@@ -315,7 +315,7 @@ const ContactForm = () => {
             value={formData.name}
             onChange={handleChange}
             required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
         </div>
         
@@ -330,7 +330,7 @@ const ContactForm = () => {
             value={formData.email}
             onChange={handleChange}
             required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
         </div>
         
@@ -345,13 +345,13 @@ const ContactForm = () => {
             onChange={handleChange}
             required
             rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
         </div>
         
         <button
           type="submit"
-          className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition-colors"
+          className="w-full bg-teal-600 text-white py-2 px-4 rounded-md hover:bg-teal-700 transition-colors"
         >
           Send Message
         </button>
@@ -420,7 +420,7 @@ const Counter = () => {
       <div className="flex gap-4">
         <button 
           onClick={decrement}
-          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+          className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
         >
           Decrease
         </button>
@@ -432,7 +432,7 @@ const Counter = () => {
         </button>
         <button 
           onClick={increment}
-          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+          className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
         >
           Increase
         </button>
@@ -479,7 +479,7 @@ export default function App() {
           title="Amazing Product"
           description="This is a fantastic product that will change your life. Experience the difference today!"
           actions={
-            <button className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors">
+            <button className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700 transition-colors">
               Learn More
             </button>
           }

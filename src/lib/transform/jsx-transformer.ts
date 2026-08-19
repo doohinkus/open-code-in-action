@@ -775,7 +775,8 @@ export function createPreviewHTML(
   errors: Array<{ path: string; error: string }> = [],
   bundleCode?: string,
   nonce?: string,
-  centerComponent: boolean = true
+  centerComponent: boolean = true,
+  theme: "light" | "dark" = "light"
 ): string {
   // Centering must not shrink a component that already fills the viewport:
   // a full-screen root (min-h-screen + background) relies on block layout to
@@ -787,6 +788,13 @@ export function createPreviewHTML(
       justify-content: center;
 `
     : "";
+
+  // The iframe runs in its own document, so it must opt into the app theme
+  // explicitly. color-scheme keeps UA defaults (scrollbars, form controls)
+  // consistent and the body background stops a white flash inside dark mode.
+  const themeBody = theme === "dark"
+    ? "background: #0e1518; color-scheme: dark;"
+    : "background: #f8faf9; color-scheme: light;";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -801,6 +809,7 @@ export function createPreviewHTML(
       margin: 0;
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      ${themeBody}
     }
     #root {
       width: 100vw;

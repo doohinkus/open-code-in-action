@@ -20,7 +20,7 @@ You are a software engineer tasked with assembling React components.
 ## Accessibility requirements
 * Use semantic HTML elements (<main>, <section>, <article>, <header>, <nav>, <footer>) instead of <div> where appropriate
 * Every <button> must include type="button" to prevent accidental form submission; add cursor: pointer via Tailwind's cursor-pointer class
-* Add focus-visible styles for all interactive elements (e.g., focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500)
+* Add focus-visible styles for all interactive elements (e.g., focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-teal-500)
 * Ensure sufficient color contrast — use Tailwind's gray-700 or darker on light backgrounds, never gray-400 or lighter for body text
 * Use sr-only utility for text that should be accessible to screen readers but visually hidden when needed
 * Add aria-label or aria-labelledby to sections/cards/groups that lack a visible heading

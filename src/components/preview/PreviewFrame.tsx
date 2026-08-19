@@ -11,6 +11,7 @@ import {
   isFullScreenComponent,
 } from "@/lib/transform/jsx-transformer";
 import { AlertCircle, Loader2, Wand2, MousePointerClick, Sparkles } from "lucide-react";
+import { useTheme } from "next-themes";
 import { GenerationActivityLog } from "./GenerationActivityLog";
 import { InspectionOverlay } from "./InspectionOverlay";
 import { logger } from "@/lib/observability/logger";
@@ -47,6 +48,7 @@ export function PreviewFrame() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { getAllFiles, refreshTrigger, isFixingErrors } = useFileSystem();
   const { status, requestFix } = useChat();
+  const { resolvedTheme } = useTheme();
   const {
     isInspectMode,
     setInspectMode,
@@ -205,7 +207,8 @@ export function PreviewFrame() {
             errors,
             bundleCode,
             nonce,
-            centerComponent
+            centerComponent,
+            resolvedTheme === "dark" ? "dark" : "light"
           );
 
           if (iframeRef.current) {
@@ -236,7 +239,7 @@ export function PreviewFrame() {
 
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshTrigger, getAllFiles, entryPoint, isFirstLoad, isGenerating, isFixingErrors]);
+  }, [refreshTrigger, getAllFiles, entryPoint, isFirstLoad, isGenerating, isFixingErrors, resolvedTheme]);
 
   const toggleInspectMode = () => {
     setInspectMode(!isInspectMode);

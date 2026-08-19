@@ -232,6 +232,14 @@ test("createPreviewHTML centers generated components in the viewport", () => {
   expect(rootCss).toContain("justify-content: center;");
 });
 
+test("createPreviewHTML opts into the app theme for the iframe document", () => {
+  const light = createPreviewHTML("/App.jsx", "{}");
+  expect(light).toContain("color-scheme: light");
+
+  const dark = createPreviewHTML("/App.jsx", "{}", "", [], undefined, undefined, true, "dark");
+  expect(dark).toContain("color-scheme: dark");
+});
+
 test("createPreviewHTML skips flex centering for full-screen components", () => {
   const html = createPreviewHTML("/App.jsx", "{}", "", [], undefined, undefined, false);
   const rootCss = html.slice(html.indexOf("#root"), html.indexOf(".error-boundary"));

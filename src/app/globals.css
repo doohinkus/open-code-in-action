@@ -134,6 +134,33 @@
   }
 }
 
+/* Unlayered so these win over component styles and follow theme tokens. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+::selection {
+  background-color: color-mix(in oklab, var(--primary) 25%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--border) 60%, var(--primary));
+  }
+}
+
 /* Unlayered so it wins over the typography plugin's layered prose styles and
    follows theme tokens in both light and dark mode. */
 .prose {
