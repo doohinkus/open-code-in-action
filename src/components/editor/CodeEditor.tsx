@@ -1,17 +1,23 @@
 "use client";
 
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
+import { useTheme } from "next-themes";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 import { Code2 } from "lucide-react";
 import { EDITOR_CHANGE_DEBOUNCE_MS } from "@/lib/constants";
 
 export function CodeEditor() {
   const { selectedFile, getFileContent, updateFile } = useFileSystem();
+  const { resolvedTheme } = useTheme();
   const editorRef = useRef<any>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  // Cleanup debounce timer on unmount or file change
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {
@@ -27,12 +33,10 @@ export function CodeEditor() {
   const handleEditorChange = useCallback((value: string | undefined) => {
     if (!selectedFile || value === undefined) return;
 
-    // Clear existing timer
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
 
-    // Set new debounce timer
     debounceTimerRef.current = setTimeout(() => {
       updateFile(selectedFile, value);
     }, EDITOR_CHANGE_DEBOUNCE_MS);
@@ -60,13 +64,16 @@ export function CodeEditor() {
     }
   };
 
+  const monacoTheme =
+    mounted && resolvedTheme === "dark" ? "vs-dark" : "light";
+
   if (!selectedFile) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-900">
+      <div className="h-full flex items-center justify-center bg-muted/30">
         <div className="text-center">
-          <Code2 className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-          <p className="text-sm text-gray-500">Select a file to edit</p>
-          <p className="text-xs text-gray-600 mt-1">
+          <Code2 className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Select a file to edit</p>
+          <p className="text-xs text-muted-foreground/80 mt-1">
             Choose a file from the file tree
           </p>
         </div>
@@ -78,24 +85,34 @@ export function CodeEditor() {
   const language = getLanguageFromPath(selectedFile);
 
   return (
-    <Editor
-      height="100%"
-      language={language}
-      value={content}
-      onChange={handleEditorChange}
-      onMount={handleEditorDidMount}
-      theme="vs-dark"
-      options={{
-        minimap: { enabled: false },
-        fontSize: 14,
-        lineNumbers: "on",
-        roundedSelection: false,
-        scrollBeyondLastLine: false,
-        readOnly: false,
-        automaticLayout: true,
-        wordWrap: "on",
-        padding: { top: 16, bottom: 16 },
-      }}
-    />
+    <div className="flex flex-col h-full">
+      <div className="h-9 flex items-center px-3 border-b border-border bg-muted/40 flex-shrink-0">
+        <span className="text-xs font-mono text-muted-foreground truncate">
+          {selectedFile}
+        </span>
+      </div>
+      <div className="flex-1 min-h-0">
+        <Editor
+          height="100%"
+          language={language}
+          value={content}
+          onChange={handleEditorChange}
+          onMount={handleEditorDidMount}
+          theme={monacoTheme}
+          options={{
+            minimap: { enabled: false },
+            fontSize: 14,
+            fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+            lineNumbers: "on",
+            roundedSelection: false,
+            scrollBeyondLastLine: false,
+            readOnly: false,
+            automaticLayout: true,
+            wordWrap: "on",
+            padding: { top: 16, bottom: 16 },
+          }}
+        />
+      </div>
+    </div>
   );
 }

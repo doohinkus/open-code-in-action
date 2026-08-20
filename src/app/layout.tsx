@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const title = "React Component Generator";
+const title = "UI Generator";
 const description =
   "Describe a UI in plain English and get production-ready React components in seconds.";
 
@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(siteUrl),
     title: {
       default: title,
-      template: "%s · React Component Generator",
+      template: "%s · UI Generator",
     },
     description,
     openGraph: {
@@ -53,7 +53,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} min-h-dvh font-sans antialiased`}
       >
         <Providers>{children}</Providers>
       </body>

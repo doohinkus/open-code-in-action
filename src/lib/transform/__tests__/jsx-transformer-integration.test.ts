@@ -7,6 +7,21 @@ import {
 // These tests exercise the real @babel/standalone pipeline (no mock) to cover
 // the bundler's export-rewriting and CDN import handling end to end.
 
+test("integration: React namespace usage without import gets a default react import", () => {
+  const files = new Map<string, string>([
+    ["/App.jsx", `export default function Counter() {
+  const [count, setCount] = React.useState(0);
+  return <div>{count}</div>;
+};`],
+  ]);
+
+  const result = createBundleFromFiles(files);
+
+  expect(result.errors).toHaveLength(0);
+  expect(result.code).toContain("import React from 'react'");
+  expect(result.code).not.toContain("React is not defined");
+});
+
 test("integration: anonymous arrow default export becomes a renderable entry", () => {
   const files = new Map<string, string>([
     ["/App.jsx", `export default () => {

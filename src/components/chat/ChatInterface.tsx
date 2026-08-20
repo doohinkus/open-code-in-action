@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, ChangeEvent } from "react";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { ModelSelector } from "./ModelSelector";
@@ -79,6 +79,21 @@ export function ChatInterface() {
     }
   }, [toast]);
 
+  const handleStarterPrompt = useCallback(
+    (prompt: string) => {
+      if (status === "streaming" || status === "submitted") return;
+      if (append) {
+        append({ role: "user", content: prompt });
+        return;
+      }
+      const syntheticEvent = {
+        target: { value: prompt },
+      } as ChangeEvent<HTMLTextAreaElement>;
+      handleInputChange(syntheticEvent);
+    },
+    [append, handleInputChange, status]
+  );
+
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector(
@@ -93,8 +108,12 @@ export function ChatInterface() {
   return (
     <div className="flex flex-col h-full p-4 overflow-hidden">
       <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-hidden">
-        <div className="pr-4">
-          <MessageList messages={messages} isLoading={status === "streaming"} />
+        <div className="pr-4 h-full">
+          <MessageList
+            messages={messages}
+            isLoading={status === "streaming"}
+            onStarterPrompt={handleStarterPrompt}
+          />
         </div>
       </ScrollArea>
       <div className="mt-4 flex-shrink-0">
@@ -102,7 +121,7 @@ export function ChatInterface() {
           <div className="mb-3 flex justify-center">
             <button
               onClick={() => reload()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground bg-muted hover:bg-accent hover:text-accent-foreground rounded-lg transition-colors border border-border"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Retry
@@ -110,14 +129,14 @@ export function ChatInterface() {
           </div>
         )}
         {generationInterrupted && (
-          <div className="mb-3 flex items-center justify-between gap-2 px-3 py-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="mb-3 flex items-center justify-between gap-2 px-3 py-2 text-sm text-warning-foreground bg-warning/15 border border-warning/30 rounded-lg">
             <span>
               Generation was interrupted and may be incomplete. Say
               &ldquo;continue&rdquo; to keep going.
             </span>
             <button
               onClick={() => reload()}
-              className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1 text-xs font-medium text-amber-700 bg-white border border-amber-300 hover:bg-amber-100 rounded-lg transition-colors"
+              className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1 text-xs font-medium bg-card border border-border hover:bg-accent rounded-lg transition-colors"
             >
               <RotateCcw className="h-3 w-3" />
               Retry
@@ -139,14 +158,14 @@ export function ChatInterface() {
             <button
               onClick={handleTestConnection}
               disabled={testStatus === "running"}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground bg-muted/80 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-border"
             >
               {testStatus === "running" ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : testStatus === "pass" ? (
-                <CheckCircle2 className="h-3 w-3 text-green-600" />
+                <CheckCircle2 className="h-3 w-3 text-success" />
               ) : testStatus === "fail" ? (
-                <XCircle className="h-3 w-3 text-red-500" />
+                <XCircle className="h-3 w-3 text-destructive" />
               ) : (
                 <FlaskConical className="h-3 w-3" />
               )}

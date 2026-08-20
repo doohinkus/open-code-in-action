@@ -31,10 +31,10 @@ export function ModelSelector() {
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+          className="h-7 gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-full"
           title="Switch model"
         >
-          <Sparkles className="h-3 w-3" />
+          <Sparkles className="h-3 w-3 text-primary" />
           <span className="max-w-[140px] truncate">{modelName(model)}</span>
           <ChevronDown className="h-3 w-3 opacity-50" />
         </Button>

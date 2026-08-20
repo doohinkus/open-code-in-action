@@ -79,20 +79,20 @@ export function SharedPreview({ files }: SharedPreviewProps) {
   }, [files]);
 
   return (
-    <div className="h-full w-full bg-white border border-neutral-200/60 rounded-lg overflow-hidden relative">
+    <div className="h-full w-full bg-card border border-border rounded-lg overflow-hidden relative shadow-sm">
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
-          <Loader2 className="h-6 w-6 text-blue-600 animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center bg-card z-10">
+          <Loader2 className="h-6 w-6 text-primary animate-spin" />
         </div>
       )}
       {error && !loading && (
         <div className="absolute inset-0 flex items-center justify-center p-6 z-10">
-          <p className="text-sm text-neutral-500">{error}</p>
+          <p className="text-sm text-muted-foreground">{error}</p>
         </div>
       )}
       <iframe
         ref={iframeRef}
-        className="w-full h-full border-0"
+        className="w-full h-full border-0 bg-background"
         title="Shared component"
       />
     </div>

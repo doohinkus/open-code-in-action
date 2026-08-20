@@ -17,6 +17,7 @@ import { PreviewFrame } from "@/components/preview/PreviewFrame";
 import { ShareBar } from "@/components/share/ShareBar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HeaderActions } from "@/components/HeaderActions";
+import { BrandMark } from "@/components/BrandMark";
 import { authClient } from "@/lib/auth/client";
 import { getAnonWorkData, clearAnonWork } from "@/lib/anon-work-tracker";
 import { createProject } from "@/actions/create-project";
@@ -129,7 +130,6 @@ function AppShell({ user, project }: MainContentProps) {
   const { status } = useChat();
   const prevStatusRef = useRef(status);
 
-  // On mobile, auto-switch to the Preview tab when a new generation starts
   useEffect(() => {
     const wasGenerating =
       prevStatusRef.current === "submitted" ||
@@ -146,7 +146,7 @@ function AppShell({ user, project }: MainContentProps) {
   }
 
   return (
-    <main className="h-dvh w-full overflow-hidden bg-neutral-50">
+    <main className="h-dvh w-full overflow-hidden bg-background">
       {isMobile ? (
         <MobileShell
           user={user}
@@ -173,6 +173,33 @@ interface ShellProps extends MainContentProps {
   setMobileTab?: (tab: MobileTab) => void;
 }
 
+const tabTriggerClass =
+  "data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm text-muted-foreground px-4 py-1.5 text-sm font-medium transition-all";
+
+function ProductTitle({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className="flex items-center gap-2.5 min-w-0">
+      <BrandMark size={compact ? "sm" : "md"} />
+      <div className="min-w-0">
+        <h1
+          className={
+            compact
+              ? "text-sm font-semibold text-foreground tracking-tight truncate"
+              : "text-base font-semibold text-foreground tracking-tight truncate"
+          }
+        >
+          UI Generator
+        </h1>
+        {!compact && (
+          <p className="text-[11px] text-muted-foreground leading-none mt-0.5 truncate">
+            Describe UI · get React
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MobileShell({
   user,
   project,
@@ -181,29 +208,25 @@ function MobileShell({
 }: ShellProps) {
   return (
     <div className="flex flex-col h-full">
-      {/* Top Bar */}
-      <div className="h-14 flex items-center justify-between gap-2 px-4 border-b border-neutral-200/60 bg-white flex-shrink-0">
-        <h1 className="text-base font-semibold text-neutral-900 tracking-tight truncate">
-          React Component Generator
-        </h1>
+      <div className="h-14 flex items-center justify-between gap-2 px-4 border-b border-border bg-card flex-shrink-0">
+        <ProductTitle compact />
         <HeaderActionsWrapper user={user} projectId={project?.id} />
       </div>
 
-      {/* View Tabs + Content */}
       <Tabs
         value={mobileTab}
         onValueChange={(v) => setMobileTab?.(v as MobileTab)}
         className="flex flex-col flex-1 min-h-0 min-w-0 gap-0"
       >
-        <div className="px-4 py-2 border-b border-neutral-200/60 bg-white flex-shrink-0">
-          <TabsList className="bg-neutral-100 border border-neutral-200/60 p-0.5 h-9 w-full shadow-sm">
-            <TabsTrigger value="chat" className="flex-1 data-[state=active]:bg-white data-[state=active]:text-neutral-900 data-[state=active]:shadow-sm text-neutral-600 px-4 py-1.5 text-sm font-medium transition-all">
+        <div className="px-4 py-2 border-b border-border bg-card flex-shrink-0">
+          <TabsList className="bg-muted border border-border p-0.5 h-9 w-full shadow-sm">
+            <TabsTrigger value="chat" className={`flex-1 ${tabTriggerClass}`}>
               Chat
             </TabsTrigger>
-            <TabsTrigger value="preview" className="flex-1 data-[state=active]:bg-white data-[state=active]:text-neutral-900 data-[state=active]:shadow-sm text-neutral-600 px-4 py-1.5 text-sm font-medium transition-all">
+            <TabsTrigger value="preview" className={`flex-1 ${tabTriggerClass}`}>
               Preview
             </TabsTrigger>
-            <TabsTrigger value="code" className="flex-1 data-[state=active]:bg-white data-[state=active]:text-neutral-900 data-[state=active]:shadow-sm text-neutral-600 px-4 py-1.5 text-sm font-medium transition-all">
+            <TabsTrigger value="code" className={`flex-1 ${tabTriggerClass}`}>
               Code
             </TabsTrigger>
           </TabsList>
@@ -211,16 +234,16 @@ function MobileShell({
 
         <TabsContent
           value="chat"
-          className="flex-1 min-h-0 min-w-0 overflow-hidden bg-neutral-50"
+          className="flex-1 min-h-0 min-w-0 overflow-hidden bg-muted/30"
         >
           {mobileTab === "chat" && <ChatInterface />}
         </TabsContent>
         <TabsContent
           value="preview"
           forceMount
-          className={`${mobileTab !== "preview" ? "hidden" : "flex-1"} min-h-0 min-w-0 overflow-hidden bg-neutral-50`}
+          className={`${mobileTab !== "preview" ? "hidden" : "flex-1"} min-h-0 min-w-0 overflow-hidden bg-muted/30`}
         >
-          <div className="h-full bg-white">
+          <div className="h-full bg-card">
             <div className="flex flex-col h-full">
               <ShareBar />
               <div className="flex-1 min-h-0">
@@ -231,18 +254,18 @@ function MobileShell({
         </TabsContent>
         <TabsContent
           value="code"
-          className="flex-1 min-h-0 min-w-0 overflow-hidden bg-neutral-50"
+          className="flex-1 min-h-0 min-w-0 overflow-hidden bg-muted/30"
         >
           {mobileTab === "code" && (
             <ResizablePanelGroup direction="vertical" className="h-full">
               <ResizablePanel defaultSize={30} minSize={20} maxSize={50}>
-                <div className="h-full bg-neutral-50 border-b border-neutral-200">
+                <div className="h-full bg-muted/40 border-b border-border">
                   <FileTree />
                 </div>
               </ResizablePanel>
-              <ResizableHandle className="h-[1px] bg-neutral-200 hover:bg-neutral-300 transition-colors" />
+              <ResizableHandle className="h-px bg-border hover:bg-primary/40 transition-colors" />
               <ResizablePanel defaultSize={70}>
-                <div className="h-full bg-white">
+                <div className="h-full bg-card">
                   <CodeEditor />
                 </div>
               </ResizablePanel>
@@ -263,26 +286,21 @@ function DesktopShell({
   return (
     <div className="h-full">
       <ResizablePanelGroup direction="horizontal" className="h-full">
-        {/* Left Panel - Chat */}
         <ResizablePanel defaultSize={35} minSize={25} maxSize={50}>
-          <div className="h-full flex flex-col bg-white">
-            {/* Chat Header */}
-            <div className="h-14 flex items-center px-6 border-b border-neutral-200/60">
-              <h1 className="text-lg font-semibold text-neutral-900 tracking-tight">React Component Generator</h1>
+          <div className="h-full flex flex-col bg-card border-r border-border">
+            <div className="h-14 flex items-center px-5 border-b border-border">
+              <ProductTitle />
             </div>
-
-            {/* Chat Content */}
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden bg-muted/20">
               <ChatInterface />
             </div>
           </div>
         </ResizablePanel>
 
-        <ResizableHandle className="w-[1px] bg-neutral-200 hover:bg-neutral-300 transition-colors" />
+        <ResizableHandle className="w-px bg-border hover:bg-primary/40 transition-colors data-[resize-handle-active]:bg-primary/50" />
 
-        {/* Right Panel - Preview/Code */}
         <ResizablePanel defaultSize={65}>
-          <div className="h-full flex flex-col bg-white">
+          <div className="h-full flex flex-col bg-card">
             <Tabs
               value={activeView}
               onValueChange={(v) =>
@@ -290,22 +308,24 @@ function DesktopShell({
               }
               className="flex flex-col h-full min-w-0 gap-0"
             >
-              {/* Top Bar */}
-              <div className="h-14 border-b border-neutral-200/60 px-6 flex items-center justify-between bg-neutral-50/50 flex-shrink-0">
-                <TabsList className="bg-white/60 border border-neutral-200/60 p-0.5 h-9 shadow-sm">
-                  <TabsTrigger value="preview" className="data-[state=active]:bg-white data-[state=active]:text-neutral-900 data-[state=active]:shadow-sm text-neutral-600 px-4 py-1.5 text-sm font-medium transition-all">Preview</TabsTrigger>
-                  <TabsTrigger value="code" className="data-[state=active]:bg-white data-[state=active]:text-neutral-900 data-[state=active]:shadow-sm text-neutral-600 px-4 py-1.5 text-sm font-medium transition-all">Code</TabsTrigger>
+              <div className="h-14 border-b border-border px-5 flex items-center justify-between bg-muted/30 flex-shrink-0">
+                <TabsList className="bg-background/80 border border-border p-0.5 h-9 shadow-sm">
+                  <TabsTrigger value="preview" className={tabTriggerClass}>
+                    Preview
+                  </TabsTrigger>
+                  <TabsTrigger value="code" className={tabTriggerClass}>
+                    Code
+                  </TabsTrigger>
                 </TabsList>
                 <HeaderActionsWrapper user={user} projectId={project?.id} />
               </div>
 
-              {/* Content Area */}
               <TabsContent
                 value="preview"
                 forceMount
-                className={`${activeView !== "preview" ? "hidden" : "flex-1"} min-h-0 min-w-0 overflow-hidden bg-neutral-50`}
+                className={`${activeView !== "preview" ? "hidden" : "flex-1"} min-h-0 min-w-0 overflow-hidden bg-muted/20`}
               >
-                <div className="h-full bg-white">
+                <div className="h-full bg-card">
                   <div className="flex flex-col h-full">
                     <ShareBar />
                     <div className="flex-1 min-h-0">
@@ -316,29 +336,27 @@ function DesktopShell({
               </TabsContent>
               <TabsContent
                 value="code"
-                className="flex-1 min-h-0 min-w-0 overflow-hidden bg-neutral-50"
+                className="flex-1 min-h-0 min-w-0 overflow-hidden bg-muted/20"
               >
                 {activeView === "code" && (
                   <ResizablePanelGroup
                     direction="horizontal"
                     className="h-full"
                   >
-                    {/* File Tree */}
                     <ResizablePanel
                       defaultSize={30}
                       minSize={20}
                       maxSize={50}
                     >
-                      <div className="h-full bg-neutral-50 border-r border-neutral-200">
+                      <div className="h-full bg-muted/40 border-r border-border">
                         <FileTree />
                       </div>
                     </ResizablePanel>
 
-                    <ResizableHandle className="w-[1px] bg-neutral-200 hover:bg-neutral-300 transition-colors" />
+                    <ResizableHandle className="w-px bg-border hover:bg-primary/40 transition-colors" />
 
-                    {/* Code Editor */}
                     <ResizablePanel defaultSize={70}>
-                      <div className="h-full bg-white">
+                      <div className="h-full bg-card">
                         <CodeEditor />
                       </div>
                     </ResizablePanel>

@@ -10,7 +10,8 @@ import {
   createPreviewHTML,
   isFullScreenComponent,
 } from "@/lib/transform/jsx-transformer";
-import { AlertCircle, Loader2, Wand2, MousePointerClick } from "lucide-react";
+import { AlertCircle, Loader2, Wand2, MousePointerClick, Sparkles } from "lucide-react";
+import { useTheme } from "next-themes";
 import { GenerationActivityLog } from "./GenerationActivityLog";
 import { InspectionOverlay } from "./InspectionOverlay";
 import { logger } from "@/lib/observability/logger";
@@ -21,17 +22,38 @@ interface PreviewErrorInfo {
   stack?: string;
 }
 
+function PreviewChrome({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="h-full flex items-center justify-center p-8 bg-muted/40 relative overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.35] dark:opacity-[0.2]"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0)",
+          backgroundSize: "20px 20px",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,oklch(0.52_0.12_175_/_0.08),transparent_65%)]"
+      />
+      <div className="relative text-center max-w-md w-full">{children}</div>
+    </div>
+  );
+}
+
 export function PreviewFrame() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { getAllFiles, refreshTrigger, isFixingErrors } = useFileSystem();
   const { status, requestFix } = useChat();
+  const { resolvedTheme } = useTheme();
   const {
     isInspectMode,
     setInspectMode,
     tagElement,
     setHoveredElement,
-    hoveredElement,
   } = useInspection();
   const [error, setError] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<PreviewErrorInfo | null>(null);
@@ -185,7 +207,8 @@ export function PreviewFrame() {
             errors,
             bundleCode,
             nonce,
-            centerComponent
+            centerComponent,
+            resolvedTheme === "dark" ? "dark" : "light"
           );
 
           if (iframeRef.current) {
@@ -216,7 +239,7 @@ export function PreviewFrame() {
 
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshTrigger, getAllFiles, entryPoint, isFirstLoad, isGenerating, isFixingErrors]);
+  }, [refreshTrigger, getAllFiles, entryPoint, isFirstLoad, isGenerating, isFixingErrors, resolvedTheme]);
 
   const toggleInspectMode = () => {
     setInspectMode(!isInspectMode);
@@ -224,144 +247,126 @@ export function PreviewFrame() {
 
   if (isGenerating) {
     return (
-      <div className="h-full flex items-center justify-center p-8 bg-gray-50">
-        <div className="text-center max-w-md">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
-            <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">
-            Generating Preview...
-          </h2>
+      <PreviewChrome>
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/15 mb-4 shadow-sm">
+          <Loader2 className="h-8 w-8 text-primary animate-spin" />
+        </div>
+        <h2 className="text-lg font-semibold text-foreground mb-2 tracking-tight">
+          Generating preview…
+        </h2>
+        <div className="mt-4 rounded-xl border border-border bg-card/80 backdrop-blur-sm p-4 text-left shadow-sm">
           <GenerationActivityLog />
         </div>
-      </div>
+      </PreviewChrome>
     );
   }
 
   if (isFixingErrors) {
     return (
-      <div className="h-full flex items-center justify-center p-8 bg-gray-50">
-        <div className="text-center max-w-md">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
-            <Loader2 className="h-8 w-8 text-amber-600 animate-spin" />
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">
-            Fixing Syntax Errors...
-          </h2>
+      <PreviewChrome>
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-warning/15 border border-warning/25 mb-4 shadow-sm">
+          <Loader2 className="h-8 w-8 text-warning animate-spin" />
+        </div>
+        <h2 className="text-lg font-semibold text-foreground mb-2 tracking-tight">
+          Fixing syntax errors…
+        </h2>
+        <div className="mt-4 rounded-xl border border-border bg-card/80 backdrop-blur-sm p-4 text-left shadow-sm">
           <GenerationActivityLog />
         </div>
-      </div>
+      </PreviewChrome>
     );
   }
 
   if (error) {
     if (error === "firstLoad") {
       return (
-        <div className="h-full flex items-center justify-center p-8 bg-gray-50">
-          <div className="text-center max-w-md">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
-              <svg
-                className="h-8 w-8 text-blue-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">
-              Welcome to UI Generator
-            </h2>
-            <p className="text-sm text-gray-600 mb-3">
-              Start building React components with AI assistance
-            </p>
-            <p className="text-xs text-gray-500">
-              Ask the AI to create your first component to see it live here
-            </p>
+        <PreviewChrome>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/15 mb-4 shadow-sm">
+            <Sparkles className="h-8 w-8 text-primary" />
           </div>
-        </div>
+          <h2 className="text-lg font-semibold text-foreground mb-2 tracking-tight">
+            Welcome to UI Generator
+          </h2>
+          <p className="text-sm text-muted-foreground mb-3">
+            Start building React components with AI assistance
+          </p>
+          <p className="text-xs text-muted-foreground/80">
+            Ask the AI to create your first component to see it live here
+          </p>
+        </PreviewChrome>
       );
     }
 
     return (
-      <div className="h-full flex items-center justify-center p-8 bg-gray-50">
-        <div className="text-center max-w-md">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
-            <AlertCircle className="h-8 w-8 text-gray-400" />
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">
-            No Preview Available
-          </h2>
-          <p className="text-sm text-gray-500">{error}</p>
-          <p className="text-xs text-gray-400 mt-2">
-            Start by creating a React component using the AI assistant
-          </p>
+      <PreviewChrome>
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-muted border border-border mb-4">
+          <AlertCircle className="h-8 w-8 text-muted-foreground" />
         </div>
-      </div>
+        <h2 className="text-lg font-semibold text-foreground mb-2 tracking-tight">
+          No preview available
+        </h2>
+        <p className="text-sm text-muted-foreground">{error}</p>
+        <p className="text-xs text-muted-foreground/80 mt-2">
+          Start by creating a React component using the AI assistant
+        </p>
+      </PreviewChrome>
     );
   }
 
   if (previewError) {
     return (
-      <div className="h-full flex items-center justify-center p-8 bg-gray-50">
-        <div className="text-center max-w-md w-full">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
-            <AlertCircle className="h-8 w-8 text-red-600" />
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">
-            Preview Error
-          </h2>
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-left">
-            <p className="text-xs text-red-700 font-mono whitespace-pre-wrap break-all">
-              {previewError.message}
-            </p>
-            {previewError.stack && (
-              <p className="text-[10px] text-red-500 font-mono whitespace-pre-wrap mt-2 max-h-32 overflow-y-auto">
-                {previewError.stack}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center justify-center gap-2">
-            <button
-              onClick={() => requestFix(previewError.message)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-            >
-              <Wand2 className="h-4 w-4" />
-              Fix with AI
-            </button>
-            <button
-              onClick={() => setPreviewError(null)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              Dismiss
-            </button>
-          </div>
+      <PreviewChrome>
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-destructive/10 border border-destructive/20 mb-4">
+          <AlertCircle className="h-8 w-8 text-destructive" />
         </div>
-      </div>
+        <h2 className="text-lg font-semibold text-foreground mb-2 tracking-tight">
+          Preview error
+        </h2>
+        <div className="mb-4 p-3 bg-destructive/5 border border-destructive/20 rounded-lg text-left">
+          <p className="text-xs text-destructive font-mono whitespace-pre-wrap break-all">
+            {previewError.message}
+          </p>
+          {previewError.stack && (
+            <p className="text-[10px] text-destructive/70 font-mono whitespace-pre-wrap mt-2 max-h-32 overflow-y-auto">
+              {previewError.stack}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => requestFix(previewError.message)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition-colors shadow-sm"
+          >
+            <Wand2 className="h-4 w-4" />
+            Fix with AI
+          </button>
+          <button
+            onClick={() => setPreviewError(null)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-muted-foreground bg-muted hover:bg-accent hover:text-accent-foreground rounded-lg transition-colors border border-border"
+          >
+            Dismiss
+          </button>
+        </div>
+      </PreviewChrome>
     );
   }
 
   return (
-    <div ref={containerRef} className="relative w-full h-full">
+    <div ref={containerRef} className="relative w-full h-full bg-background">
       <button
         onClick={toggleInspectMode}
         title={isInspectMode ? "Exit inspection mode" : "Click elements to tag them in the prompt"}
         className={`absolute top-2 right-2 z-40 p-2 rounded-lg transition-all ${
           isInspectMode
-            ? "bg-blue-500 text-white shadow-lg"
-            : "bg-white/80 text-gray-600 hover:bg-white hover:text-gray-900 shadow-sm border border-gray-200"
+            ? "bg-primary text-primary-foreground shadow-lg"
+            : "bg-card/90 text-muted-foreground hover:bg-card hover:text-foreground shadow-sm border border-border backdrop-blur-sm"
         }`}
       >
         <MousePointerClick className="h-4 w-4" />
       </button>
       <iframe
         ref={iframeRef}
-        className="w-full h-full border-0 bg-white"
+        className="w-full h-full border-0 bg-background"
         title="Preview"
       />
       <InspectionOverlay iframeRect={iframeRect} />

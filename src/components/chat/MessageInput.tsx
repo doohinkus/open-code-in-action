@@ -115,21 +115,23 @@ export function MessageInput({
     handleSubmit(e);
   };
 
+  const canSend = !isLoading && !!input?.trim();
+
   return (
-    <form onSubmit={onSubmit} className="relative p-4 bg-white border-t border-neutral-200/60">
+    <form onSubmit={onSubmit} className="relative p-4 bg-card/80 border-t border-border backdrop-blur-sm">
       <div className="relative max-w-4xl mx-auto">
         {taggedElements.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {taggedElements.map((el) => (
               <span
                 key={el.id}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium border border-primary/15"
               >
                 @{el.label}
                 <button
                   type="button"
                   onClick={() => handleRemoveTag(el.id)}
-                  className="p-0.5 rounded-full hover:bg-blue-200 transition-colors"
+                  className="p-0.5 rounded-full hover:bg-primary/20 transition-colors"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -137,58 +139,66 @@ export function MessageInput({
             ))}
           </div>
         )}
-        <textarea
-          ref={textareaRef}
-          value={isListening ? input + (interimTranscript ? " " + interimTranscript : "") : input}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder="Describe the React component you want to create..."
-          disabled={isLoading}
-          className={`w-full min-h-[80px] max-h-[200px] pl-4 pr-24 py-3.5 rounded-xl border bg-neutral-50/50 text-neutral-900 resize-none focus:outline-none focus:ring-2 focus:bg-white transition-all placeholder:text-neutral-400 text-[15px] font-normal shadow-sm ${
-            isListening
-              ? "border-red-300 focus:ring-red-500/10 focus:border-red-500/50"
-              : "border-neutral-200 focus:ring-blue-500/10 focus:border-blue-500/50"
-          }`}
-          rows={3}
-        />
-        <div className="absolute right-2 bottom-2 flex items-center gap-1">
-          {isSupported && hasPermission !== "denied" && (
+        <div className="relative rounded-2xl border border-border bg-background shadow-sm focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/40 transition-all">
+          <textarea
+            ref={textareaRef}
+            value={isListening ? input + (interimTranscript ? " " + interimTranscript : "") : input}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Describe the React component you want to create..."
+            disabled={isLoading}
+            className={`w-full min-h-[80px] max-h-[200px] pl-4 pr-24 py-3.5 rounded-2xl border-0 bg-transparent text-foreground resize-none focus:outline-none focus:ring-0 placeholder:text-muted-foreground text-[15px] font-normal ${
+              isListening ? "caret-destructive" : ""
+            }`}
+            rows={3}
+          />
+          <div className="absolute right-2 bottom-2 flex items-center gap-1">
+            {isSupported && hasPermission !== "denied" && (
+              <button
+                type="button"
+                onClick={toggleListening}
+                disabled={isLoading}
+                title={isListening ? "Stop listening" : "Start voice input"}
+                className={`p-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed group ${
+                  isListening
+                    ? "bg-destructive/10 hover:bg-destructive/15"
+                    : "hover:bg-muted"
+                }`}
+              >
+                {isListening ? (
+                  <MicOff className="h-4 w-4 text-destructive animate-pulse" />
+                ) : (
+                  <Mic className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                )}
+              </button>
+            )}
+            {isLoading && onStop && (
+              <button
+                type="button"
+                onClick={onStop}
+                title="Stop generating"
+                className="p-2.5 rounded-xl transition-all hover:bg-destructive/10 group"
+              >
+                <Square className="h-4 w-4 text-destructive fill-destructive group-hover:opacity-90" />
+              </button>
+            )}
             <button
-              type="button"
-              onClick={toggleListening}
-              disabled={isLoading}
-              title={isListening ? "Stop listening" : "Start voice input"}
-              className={`p-2.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed group ${
-                isListening
-                  ? "bg-red-50 hover:bg-red-100"
-                  : "hover:bg-neutral-100"
+              type="submit"
+              disabled={!canSend}
+              title="Send message"
+              className={`p-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed group ${
+                canSend
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+                  : "bg-muted text-muted-foreground"
               }`}
             >
-              {isListening ? (
-                <MicOff className="h-4 w-4 text-red-500 animate-pulse" />
-              ) : (
-                <Mic className="h-4 w-4 text-neutral-400 group-hover:text-neutral-600" />
-              )}
+              <Send
+                className={`h-4 w-4 transition-transform ${
+                  canSend ? "group-hover:translate-x-0.5 group-hover:-translate-y-0.5" : ""
+                }`}
+              />
             </button>
-          )}
-          {isLoading && onStop && (
-            <button
-              type="button"
-              onClick={onStop}
-              title="Stop generating"
-              className="p-2.5 rounded-lg transition-all hover:bg-red-50 group"
-            >
-              <Square className="h-4 w-4 text-red-500 fill-red-500 group-hover:text-red-600 group-hover:fill-red-600" />
-            </button>
-          )}
-          <button
-            type="submit"
-            disabled={isLoading || !input?.trim()}
-            title="Send message"
-            className="p-2.5 rounded-lg transition-all hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent group"
-          >
-            <Send className={`h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 ${isLoading || !input?.trim() ? 'text-neutral-300' : 'text-blue-600'}`} />
-          </button>
+          </div>
         </div>
       </div>
     </form>
