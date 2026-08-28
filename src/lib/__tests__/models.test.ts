@@ -7,8 +7,8 @@ import {
 } from "@/lib/models";
 
 describe("models", () => {
-  test("defaults to deepseek-v4-flash-free", () => {
-    expect(DEFAULT_MODEL).toBe("deepseek-v4-flash-free");
+  test("defaults to big-pickle", () => {
+    expect(DEFAULT_MODEL).toBe("big-pickle");
   });
 
   test("lists only free models with unique ids", () => {
@@ -38,9 +38,9 @@ describe("models", () => {
 
   test("includes exactly the allowed free models in order", () => {
     expect(ZEN_FREE_MODELS.map((m) => m.id)).toEqual([
-      "deepseek-v4-flash-free",
-      "nemotron-3-ultra-free",
+      "big-pickle",
       "hy3-free",
+      "ling-3.0-flash-fin-free",
     ]);
   });
 });

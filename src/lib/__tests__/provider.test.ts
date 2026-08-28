@@ -40,26 +40,26 @@ afterEach(() => {
 describe("getLanguageModel", () => {
   test("uses the env default model for the OpenAI-compatible provider", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "deepseek-v4-flash-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "hy3-free";
     process.env.OPENAI_COMPATIBLE_API_KEY = "sk-test";
 
     const model = getLanguageModel();
-    expect(model.modelId).toBe("deepseek-v4-flash-free");
+    expect(model.modelId).toBe("hy3-free");
     expect(model.provider).toBe("opencode-compatible.chat");
   });
 
   test("overrides the model with the requested free id", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "deepseek-v4-flash-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "hy3-free";
     process.env.OPENAI_COMPATIBLE_API_KEY = "sk-test";
 
-    const model = getLanguageModel("nemotron-3-ultra-free");
-    expect(model.modelId).toBe("nemotron-3-ultra-free");
+    const model = getLanguageModel("ling-3.0-flash-fin-free");
+    expect(model.modelId).toBe("ling-3.0-flash-fin-free");
   });
 
   test("trims whitespace around the requested model id", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "deepseek-v4-flash-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "big-pickle";
 
     const model = getLanguageModel("  hy3-free  ");
     expect(model.modelId).toBe("hy3-free");
@@ -67,10 +67,10 @@ describe("getLanguageModel", () => {
 
   test("falls back to the env default for an empty override", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "deepseek-v4-flash-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "hy3-free";
 
     const model = getLanguageModel("   ");
-    expect(model.modelId).toBe("deepseek-v4-flash-free");
+    expect(model.modelId).toBe("hy3-free");
   });
 
   test("defaults to a free model when the env model is paid", () => {
@@ -82,9 +82,17 @@ describe("getLanguageModel", () => {
     expect(model.provider).toBe("opencode-compatible.chat");
   });
 
-  test("defaults to a free model when the requested id is paid", () => {
+  test("falls back to the env free model when the requested id is paid", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "deepseek-v4-flash-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "hy3-free";
+
+    const model = getLanguageModel("gpt-5.4-mini");
+    expect(model.modelId).toBe("hy3-free");
+  });
+
+  test("falls back to the default model when both the env model and requested id are paid", () => {
+    process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
+    process.env.OPENAI_COMPATIBLE_MODEL = "claude-haiku-4-5";
 
     const model = getLanguageModel("gpt-5.4-mini");
     expect(model.modelId).toBe(DEFAULT_MODEL);
@@ -591,11 +599,11 @@ describe("createRateLimitFallbackModel", () => {
 describe("buildLanguageModel", () => {
   test("returns a wrapped real provider when Zen is configured", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "nemotron-3-ultra-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "big-pickle";
 
     const model = buildLanguageModel();
     expect(model.provider).toBe("opencode-compatible.chat");
-    expect(model.modelId).toBe("nemotron-3-ultra-free");
+    expect(model.modelId).toBe("big-pickle");
   });
 
   test("returns the mock provider when Zen is not configured", () => {

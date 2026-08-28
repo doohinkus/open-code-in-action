@@ -21,7 +21,7 @@
 
 ## AI / Chat
 - No API key needed: `MockLanguageModel` in `src/lib/provider.ts` returns canned components (4-step limit, counter/form/card)
-- Provider priority: OpenCode Zen free models only (`OPENAI_COMPATIBLE_*`; model must be in `ZEN_FREE_MODELS` — anything else silently defaults to `deepseek-v4-flash-free`) → Mock fallback. Gemini/Anthropic are not supported. Rate-limited turns auto-fall back to the mock via `createRateLimitFallbackModel` (`buildLanguageModel` in `src/lib/provider.ts`)
+- Provider priority: OpenCode Zen free models only (`OPENAI_COMPATIBLE_*`; model must be in `ZEN_FREE_MODELS`: `big-pickle` (default), `hy3-free`, `ling-3.0-flash-fin-free` — anything else silently defaults to `big-pickle`) → Mock fallback. Gemini/Anthropic are not supported. Rate-limited turns auto-fall back to the mock via `createRateLimitFallbackModel` (`buildLanguageModel` in `src/lib/provider.ts`)
 - Chat API route: `src/app/api/chat/route.ts` — uses `ai` SDK `streamText` with tools; rate-limited to 30 requests/min/IP; `maxDuration = 120` for Vercel serverless
 - Mock provider uses `maxSteps=4`; real providers use `maxSteps=5`; test-connection requests use `maxSteps=1`, `maxTokens=64` (`route.ts:314`)
 - OpenAI-compatible provider sends `providerOptions["opencode-compatible"] = { reasoningEffort: "low" }` (`route.ts:322`)

@@ -4,12 +4,12 @@ export interface ModelInfo {
 }
 
 export const ZEN_FREE_MODELS: ModelInfo[] = [
-  { id: "deepseek-v4-flash-free", name: "DeepSeek V4 Flash Free" },
-  { id: "nemotron-3-ultra-free", name: "Nemotron 3 Ultra Free" },
+  { id: "big-pickle", name: "Big Pickle Free" },
   { id: "hy3-free", name: "Hy3 Free" },
+  { id: "ling-3.0-flash-fin-free", name: "Ling 3.0 Flash Fin Free" },
 ];
 
-export const DEFAULT_MODEL = "deepseek-v4-flash-free";
+export const DEFAULT_MODEL = "big-pickle";
 
 const ALLOWED_MODEL_IDS = new Set(ZEN_FREE_MODELS.map((m) => m.id));
 

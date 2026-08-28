@@ -21,7 +21,7 @@ vi.mock("@/lib/anon-work-tracker", () => ({
 }));
 
 vi.mock("@/lib/model-selector", () => ({
-  getStoredModel: vi.fn(() => "deepseek-v4-flash-free"),
+  getStoredModel: vi.fn(() => "big-pickle"),
 }));
 
 // Helper component to access chat context
@@ -268,7 +268,7 @@ describe("ChatContext", () => {
       requestBody: {},
     });
 
-    expect(body.model).toBe("deepseek-v4-flash-free");
+    expect(body.model).toBe("big-pickle");
   });
 
   function renderAndCaptureVfsFetch() {

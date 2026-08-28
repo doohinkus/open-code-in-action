@@ -54,7 +54,7 @@ vi.mock("../ModelSelector", () => ({
 }));
 
 vi.mock("@/lib/model-selector", () => ({
-  getStoredModel: vi.fn(() => "deepseek-v4-flash-free"),
+  getStoredModel: vi.fn(() => "big-pickle"),
 }));
 
 const mockUseChat = {
