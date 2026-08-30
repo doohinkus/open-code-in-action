@@ -5,8 +5,9 @@ export interface ModelInfo {
 
 export const ZEN_FREE_MODELS: ModelInfo[] = [
   { id: "big-pickle", name: "Big Pickle Free" },
-  { id: "hy3-free", name: "Hy3 Free" },
   { id: "ling-3.0-flash-fin-free", name: "Ling 3.0 Flash Fin Free" },
+  { id: "mimo-v2.5-free", name: "MiMo 2.5 Free" },
+  { id: "nemotron-3.5-lightning-free", name: "Nemotron 3.5 Lightning Free" },
 ];
 
 export const DEFAULT_MODEL = "big-pickle";
