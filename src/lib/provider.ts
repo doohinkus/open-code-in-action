@@ -694,18 +694,49 @@ export function isRateLimitError(error: unknown): boolean {
   return /rate limit|rate_limit|429|quota|too many requests|insufficient_quota/i.test(message);
 }
 
-// Beyond rate limits, Zen's free endpoints also flake with transient 5xx
-// failures (e.g. "Endpoint is unavailable", 503). Treat those as retryable too
-// so the chain rotates past a down/temp-unavailable free model instead of
-// erroring the turn while other free models still work.
+// Free-model lineups change upstream without notice — Zen retired "hy3-free"
+// with a 401 `{"type":"ModelError","message":"Model hy3-free is not supported"}`.
+// A model the provider no longer offers is permanently broken for this turn,
+// so the fallback chain should skip it like any other retryable failure instead
+// of failing the whole turn. The match is deliberately narrow (model-specific
+// wording / ModelError type) so a real credentials failure (plain 401
+// "Unauthorized"/"invalid api key") still surfaces immediately.
 /**
- * Checks if an error is a retryable upstream error (rate limit, 5xx, timeout).
+ * Checks if an error indicates the requested model doesn't exist upstream.
+ *
+ * @param error - The error to check
+ * @returns True if the error indicates a dead/unsupported model
+ */
+export function isDeadModelError(error: unknown): boolean {
+  if (error && typeof error === "object") {
+    const nested = (error as { error?: unknown }).error;
+    if (nested && typeof nested === "object") {
+      const type = (nested as { type?: unknown }).type;
+      if (typeof type === "string" && /^modelerror$/i.test(type)) return true;
+    }
+  }
+  const message = errorMessage(error);
+  return /model [`"]?[\w.-]+["`']? (is )?not supported|model not supported|unknown model|invalid model( id| name)?|model [`"]?[\w.-]+["`']? does not exist|no such model/i.test(
+    message
+  );
+}
+
+
+// Beyond rate limits, Zen's free endpoints also flake with transient 5xx
+// failures (e.g. "Endpoint is unavailable", 503), and retire models outright
+// (401 "Model ... is not supported"). Treat all of those as retryable so the
+// chain rotates past a down/unavailable/retired free model instead of erroring
+// the turn while other free models still work.
+/**
+ * Checks if an error is a retryable upstream error (rate limit, 5xx, timeout,
+ * dead model).
  *
  * @param error - The error to check
  * @returns True if the error is retryable
  */
 export function isRetryableUpstreamError(error: unknown): boolean {
   if (isRateLimitError(error)) return true;
+  if (isDeadModelError(error)) return true;
   if (error && typeof error === "object") {
     const record = error as { statusCode?: unknown };
     if (typeof record.statusCode === "number" && record.statusCode >= 500) return true;

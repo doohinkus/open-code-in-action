@@ -32,15 +32,21 @@ describe("models", () => {
   });
 
   test("resolves names for known and unknown models", () => {
-    expect(modelName("hy3-free")).toBe("Hy3 Free");
+    expect(modelName("mimo-v2.5-free")).toBe("MiMo 2.5 Free");
     expect(modelName("unknown-model")).toBe("unknown-model");
+  });
+
+  test("treats retired models as unknown", () => {
+    expect(isAllowedModel("hy3-free")).toBe(false);
+    expect(modelName("hy3-free")).toBe("hy3-free");
   });
 
   test("includes exactly the allowed free models in order", () => {
     expect(ZEN_FREE_MODELS.map((m) => m.id)).toEqual([
       "big-pickle",
-      "hy3-free",
       "ling-3.0-flash-fin-free",
+      "mimo-v2.5-free",
+      "nemotron-3.5-lightning-free",
     ]);
   });
 });

@@ -5,6 +5,7 @@ import {
   MockLanguageModel,
   createRateLimitFallbackModel,
   isRateLimitError,
+  isDeadModelError,
   isRetryableUpstreamError,
 } from "@/lib/provider";
 import { DEFAULT_MODEL } from "@/lib/models";
@@ -40,37 +41,37 @@ afterEach(() => {
 describe("getLanguageModel", () => {
   test("uses the env default model for the OpenAI-compatible provider", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "hy3-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "ling-3.0-flash-fin-free";
     process.env.OPENAI_COMPATIBLE_API_KEY = "sk-test";
 
     const model = getLanguageModel();
-    expect(model.modelId).toBe("hy3-free");
+    expect(model.modelId).toBe("ling-3.0-flash-fin-free");
     expect(model.provider).toBe("opencode-compatible.chat");
   });
 
   test("overrides the model with the requested free id", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "hy3-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "ling-3.0-flash-fin-free";
     process.env.OPENAI_COMPATIBLE_API_KEY = "sk-test";
 
-    const model = getLanguageModel("ling-3.0-flash-fin-free");
-    expect(model.modelId).toBe("ling-3.0-flash-fin-free");
+    const model = getLanguageModel("mimo-v2.5-free");
+    expect(model.modelId).toBe("mimo-v2.5-free");
   });
 
   test("trims whitespace around the requested model id", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
     process.env.OPENAI_COMPATIBLE_MODEL = "big-pickle";
 
-    const model = getLanguageModel("  hy3-free  ");
-    expect(model.modelId).toBe("hy3-free");
+    const model = getLanguageModel("  ling-3.0-flash-fin-free  ");
+    expect(model.modelId).toBe("ling-3.0-flash-fin-free");
   });
 
   test("falls back to the env default for an empty override", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "hy3-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "ling-3.0-flash-fin-free";
 
     const model = getLanguageModel("   ");
-    expect(model.modelId).toBe("hy3-free");
+    expect(model.modelId).toBe("ling-3.0-flash-fin-free");
   });
 
   test("defaults to a free model when the env model is paid", () => {
@@ -84,10 +85,20 @@ describe("getLanguageModel", () => {
 
   test("falls back to the env free model when the requested id is paid", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "hy3-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "ling-3.0-flash-fin-free";
 
     const model = getLanguageModel("gpt-5.4-mini");
-    expect(model.modelId).toBe("hy3-free");
+    expect(model.modelId).toBe("ling-3.0-flash-fin-free");
+  });
+
+  test("falls back to the default model when the env model was retired upstream", () => {
+    // "hy3-free" was removed from Zen with a 401 ModelError; the allowlist no
+    // longer lists it, so a stale env value must resolve to the default.
+    process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
+    process.env.OPENAI_COMPATIBLE_MODEL = "hy3-free";
+
+    const model = getLanguageModel();
+    expect(model.modelId).toBe(DEFAULT_MODEL);
   });
 
   test("falls back to the default model when both the env model and requested id are paid", () => {
@@ -109,13 +120,13 @@ describe("getLanguageModel", () => {
     process.env.FORCE_MOCK_PROVIDER = "1";
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
 
-    const model = getLanguageModel("hy3-free");
+    const model = getLanguageModel("ling-3.0-flash-fin-free");
     expect(model).toBeInstanceOf(MockLanguageModel);
     expect(model.modelId).toBe("mock-" + DEFAULT_MODEL);
   });
 
   test("returns the mock provider when no Zen endpoint is configured", () => {
-    const model = getLanguageModel("hy3-free");
+    const model = getLanguageModel("ling-3.0-flash-fin-free");
     expect(model).toBeInstanceOf(MockLanguageModel);
     expect(model.modelId).toBe("mock-" + DEFAULT_MODEL);
   });
@@ -153,6 +164,45 @@ describe("isRateLimitError", () => {
       isRateLimitError({ error: "Rate limit exceeded. Please try again later." })
     ).toBe(true);
     expect(isRateLimitError({ error: { message: "insufficient_quota" } })).toBe(true);
+  });
+});
+
+describe("isDeadModelError", () => {
+  test("matches the Zen retired-model error shape", () => {
+    // Exact shape Zen returned when "hy3-free" was removed upstream.
+    expect(
+      isDeadModelError({
+        error: { type: "ModelError", message: "Model hy3-free is not supported" },
+      })
+    ).toBe(true);
+    expect(isDeadModelError(new Error("Model hy3-free is not supported"))).toBe(true);
+  });
+
+  test("matches other model-missing wordings", () => {
+    expect(isDeadModelError(new Error("The model `foo-bar` does not exist"))).toBe(true);
+    expect(isDeadModelError({ error: "unknown model: nope-free" })).toBe(true);
+    expect(isDeadModelError(new Error("invalid model id: mystery-model"))).toBe(true);
+  });
+
+  test("ignores credential failures and unrelated errors", () => {
+    expect(
+      isDeadModelError(Object.assign(new Error("Invalid API key"), { statusCode: 401 }))
+    ).toBe(false);
+    expect(isDeadModelError(new Error("Internal server error"))).toBe(false);
+    expect(isDeadModelError({ statusCode: 404, message: "Not Found" })).toBe(false);
+  });
+
+  test("is treated as retryable by isRetryableUpstreamError", () => {
+    expect(isRetryableUpstreamError(new Error("Model hy3-free is not supported"))).toBe(true);
+    expect(
+      isRetryableUpstreamError({
+        error: { type: "ModelError", message: "Model x is not supported" },
+      })
+    ).toBe(true);
+    // A plain credentials 401 must still propagate immediately.
+    expect(
+      isRetryableUpstreamError(Object.assign(new Error("Invalid API key"), { statusCode: 401 }))
+    ).toBe(false);
   });
 });
 
@@ -356,6 +406,40 @@ describe("createRateLimitFallbackModel", () => {
     const wrapped = createRateLimitFallbackModel(primary, [fallback]);
     const result = await wrapped.doGenerate(GENERATE_OPTIONS as any);
     expect(result.text).toBe("recovered");
+  });
+
+  test("doGenerate rotates past a retired (not supported) model", async () => {
+    // A 401 "Model X is not supported" means the model is gone upstream; the
+    // chain must skip it rather than fail the turn.
+    const primary = fakeGenerateModel(() => {
+      throw Object.assign(new Error("Model hy3-free is not supported"), { statusCode: 401 });
+    });
+    const fallback = fakeGenerateModel(() => ({ text: "recovered" }));
+
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
+    const result = await wrapped.doGenerate(GENERATE_OPTIONS as any);
+    expect(result.text).toBe("recovered");
+  });
+
+  test("doStream rotates past a retired (not supported) model error part", async () => {
+    const primary = fakeStreamModel([
+      {
+        type: "error",
+        error: { error: { type: "ModelError", message: "Model hy3-free is not supported" } },
+      },
+    ]);
+    const fallback = fakeStreamModel([
+      { type: "text-delta", textDelta: "ok" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      },
+    ]);
+
+    const wrapped = createRateLimitFallbackModel(primary, [fallback]);
+    const parts = await collectStreamParts(wrapped);
+    expect(parts.map((p) => p.type)).toEqual(["text-delta", "finish"]);
   });
 
   test("doGenerate propagates non-retryable upstream errors", async () => {
