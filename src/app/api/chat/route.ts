@@ -6,7 +6,7 @@ import { buildStrReplaceTool } from "@/lib/tools/str-replace";
 import { buildFileManagerTool } from "@/lib/tools/file-manager";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { buildLanguageModel } from "@/lib/provider";
+import { buildLanguageModel, isGoogleConfigured } from "@/lib/provider";
 import { generationPrompt } from "@/lib/prompts/generation";
 import { prepareModelMessages } from "@/lib/message-compaction";
 import { logger, getRequestId, hashIp } from "@/lib/observability/logger";
@@ -125,9 +125,9 @@ function hasRealProvider(): boolean {
   if (process.env.FORCE_MOCK_PROVIDER?.trim() === "1") {
     return false;
   }
-  // Only the OpenCode Zen free endpoint is supported; the default free model
-  // applies when OPENAI_COMPATIBLE_MODEL is unset or non-free.
-  return !!process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
+  // Real generation is available when any free provider is configured:
+  // Google AI Studio (Gemini, primary) or the OpenCode Zen free endpoint.
+  return isGoogleConfigured() || !!process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
 }
 
 // Stream errors can be Error instances or plain provider objects (e.g.
@@ -417,6 +417,17 @@ export async function POST(req: Request) {
     // Keep reasoning cheap on the free tier: long thinking windows are what
     // trip Zen's ~2-minute upstream idle timeout (504) mid-stream.
     reasoningOptions["opencode-compatible"] = { reasoningEffort: "low" };
+  }
+  if (isGoogleConfigured()) {
+    // Gemini 2.5 Flash thinks by default and thinking tokens burn free-tier
+    // quota, so thinking is disabled (GEMINI_THINKING_BUDGET overrides).
+    // Options are keyed per provider, so both can coexist for fallback
+    // rotation mid-turn.
+    const raw = process.env.GEMINI_THINKING_BUDGET?.trim();
+    const budget = raw ? Number(raw) : 0;
+    reasoningOptions.google = {
+      thinkingConfig: { thinkingBudget: Number.isFinite(budget) ? budget : 0 },
+    };
   }
 
   const { span, finish: finishSpan } = Sentry.startSpanManual(

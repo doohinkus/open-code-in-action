@@ -27,6 +27,7 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/provider", () => ({
   buildLanguageModel: vi.fn(() => ({ modelId: "test-model", provider: "mock" })),
+  isGoogleConfigured: vi.fn(() => false),
 }));
 
 vi.mock("@/lib/models", () => ({
