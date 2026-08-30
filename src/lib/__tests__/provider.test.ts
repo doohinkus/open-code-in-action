@@ -5,10 +5,10 @@ import {
   MockLanguageModel,
   createRateLimitFallbackModel,
   isRateLimitError,
-  isDeadModelError,
   isRetryableUpstreamError,
+  isDeadModelError,
 } from "@/lib/provider";
-import { DEFAULT_MODEL } from "@/lib/models";
+import { DEFAULT_MODEL, ZEN_DEFAULT_MODEL } from "@/lib/models";
 
 import type {
   LanguageModelV1,
@@ -22,6 +22,7 @@ function clearProviderEnv() {
     if (
       key.startsWith("OPENAI_COMPATIBLE_") ||
       key.startsWith("GOOGLE_") ||
+      key.startsWith("GEMINI_") ||
       key === "ANTHROPIC_API_KEY" ||
       key === "FORCE_MOCK_PROVIDER"
     ) {
@@ -41,21 +42,21 @@ afterEach(() => {
 describe("getLanguageModel", () => {
   test("uses the env default model for the OpenAI-compatible provider", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "ling-3.0-flash-fin-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "big-pickle";
     process.env.OPENAI_COMPATIBLE_API_KEY = "sk-test";
 
     const model = getLanguageModel();
-    expect(model.modelId).toBe("ling-3.0-flash-fin-free");
+    expect(model.modelId).toBe("big-pickle");
     expect(model.provider).toBe("opencode-compatible.chat");
   });
 
   test("overrides the model with the requested free id", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "ling-3.0-flash-fin-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "big-pickle";
     process.env.OPENAI_COMPATIBLE_API_KEY = "sk-test";
 
-    const model = getLanguageModel("mimo-v2.5-free");
-    expect(model.modelId).toBe("mimo-v2.5-free");
+    const model = getLanguageModel("nemotron-3.5-lightning-free");
+    expect(model.modelId).toBe("nemotron-3.5-lightning-free");
   });
 
   test("trims whitespace around the requested model id", () => {
@@ -68,10 +69,10 @@ describe("getLanguageModel", () => {
 
   test("falls back to the env default for an empty override", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "ling-3.0-flash-fin-free";
+    process.env.OPENAI_COMPATIBLE_MODEL = "big-pickle";
 
     const model = getLanguageModel("   ");
-    expect(model.modelId).toBe("ling-3.0-flash-fin-free");
+    expect(model.modelId).toBe("big-pickle");
   });
 
   test("defaults to a free model when the env model is paid", () => {
@@ -79,7 +80,7 @@ describe("getLanguageModel", () => {
     process.env.OPENAI_COMPATIBLE_MODEL = "claude-haiku-4-5";
 
     const model = getLanguageModel();
-    expect(model.modelId).toBe(DEFAULT_MODEL);
+    expect(model.modelId).toBe(ZEN_DEFAULT_MODEL);
     expect(model.provider).toBe("opencode-compatible.chat");
   });
 
@@ -98,7 +99,7 @@ describe("getLanguageModel", () => {
     process.env.OPENAI_COMPATIBLE_MODEL = "hy3-free";
 
     const model = getLanguageModel();
-    expect(model.modelId).toBe(DEFAULT_MODEL);
+    expect(model.modelId).toBe(ZEN_DEFAULT_MODEL);
   });
 
   test("falls back to the default model when both the env model and requested id are paid", () => {
@@ -106,27 +107,27 @@ describe("getLanguageModel", () => {
     process.env.OPENAI_COMPATIBLE_MODEL = "claude-haiku-4-5";
 
     const model = getLanguageModel("gpt-5.4-mini");
-    expect(model.modelId).toBe(DEFAULT_MODEL);
+    expect(model.modelId).toBe(ZEN_DEFAULT_MODEL);
   });
 
   test("defaults to a free model when the env model is empty", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
 
     const model = getLanguageModel();
-    expect(model.modelId).toBe(DEFAULT_MODEL);
+    expect(model.modelId).toBe(ZEN_DEFAULT_MODEL);
   });
 
   test("returns the mock provider when forced, ignoring overrides", () => {
     process.env.FORCE_MOCK_PROVIDER = "1";
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
 
-    const model = getLanguageModel("ling-3.0-flash-fin-free");
+    const model = getLanguageModel("big-pickle");
     expect(model).toBeInstanceOf(MockLanguageModel);
     expect(model.modelId).toBe("mock-" + DEFAULT_MODEL);
   });
 
-  test("returns the mock provider when no Zen endpoint is configured", () => {
-    const model = getLanguageModel("ling-3.0-flash-fin-free");
+  test("returns the mock provider when no provider is configured", () => {
+    const model = getLanguageModel("big-pickle");
     expect(model).toBeInstanceOf(MockLanguageModel);
     expect(model.modelId).toBe("mock-" + DEFAULT_MODEL);
   });
@@ -141,6 +142,82 @@ describe("getLanguageModel", () => {
     process.env.ANTHROPIC_API_KEY = "sk-test";
     const model = getLanguageModel();
     expect(model).toBeInstanceOf(MockLanguageModel);
+  });
+});
+
+describe("getLanguageModel (Gemini)", () => {
+  test("builds a Google model when a Gemini key is configured", () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
+
+    const model = getLanguageModel();
+    expect(model.modelId).toBe(DEFAULT_MODEL);
+    expect(model.provider).toBe("google.generative-ai");
+  });
+
+  test("serves the requested Gemini model", () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
+
+    const model = getLanguageModel("gemini-2.5-flash-lite");
+    expect(model.modelId).toBe("gemini-2.5-flash-lite");
+    expect(model.provider).toBe("google.generative-ai");
+  });
+
+  test("uses GEMINI_MODEL as the default Gemini model", () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
+    process.env.GEMINI_MODEL = "gemini-2.5-flash-lite";
+
+    const model = getLanguageModel();
+    expect(model.modelId).toBe("gemini-2.5-flash-lite");
+  });
+
+  test("falls back when GEMINI_MODEL is not a free Gemini model", () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
+    process.env.GEMINI_MODEL = "gemini-2.5-pro";
+
+    const model = getLanguageModel();
+    expect(model.modelId).toBe(DEFAULT_MODEL);
+  });
+
+  test("serves the Gemini default when only a Zen id is requested without Zen configured", () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
+
+    const model = getLanguageModel("big-pickle");
+    expect(model.modelId).toBe(DEFAULT_MODEL);
+    expect(model.provider).toBe("google.generative-ai");
+  });
+
+  test("serves the Zen default when a Gemini id is requested without Google configured", () => {
+    process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
+
+    const model = getLanguageModel("gemini-2.5-flash");
+    expect(model.modelId).toBe(ZEN_DEFAULT_MODEL);
+    expect(model.provider).toBe("opencode-compatible.chat");
+  });
+
+  test("serves the Zen default when a retired Zen id is requested", () => {
+    process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
+
+    const model = getLanguageModel("hy3-free");
+    expect(model.modelId).toBe(ZEN_DEFAULT_MODEL);
+    expect(model.provider).toBe("opencode-compatible.chat");
+  });
+
+  test("respects a Zen selection when both providers are configured", () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
+    process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
+
+    const model = getLanguageModel("mimo-v2.5-free");
+    expect(model.modelId).toBe("mimo-v2.5-free");
+    expect(model.provider).toBe("opencode-compatible.chat");
+  });
+
+  test("respects a Gemini selection when both providers are configured", () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
+    process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
+
+    const model = getLanguageModel("gemini-2.5-flash-lite");
+    expect(model.modelId).toBe("gemini-2.5-flash-lite");
+    expect(model.provider).toBe("google.generative-ai");
   });
 });
 
@@ -182,6 +259,23 @@ describe("isDeadModelError", () => {
     expect(isDeadModelError(new Error("The model `foo-bar` does not exist"))).toBe(true);
     expect(isDeadModelError({ error: "unknown model: nope-free" })).toBe(true);
     expect(isDeadModelError(new Error("invalid model id: mystery-model"))).toBe(true);
+  });
+
+  test("matches Google's 404 not-found error", () => {
+    expect(
+      isDeadModelError(
+        new Error("models/gemini-2.5-flash is not found for API version v1beta")
+      )
+    ).toBe(true);
+    expect(
+      isDeadModelError({
+        error: {
+          code: 404,
+          message: "models/gemini-2.5-pro is not found for API version v1beta",
+          status: "NOT_FOUND",
+        },
+      })
+    ).toBe(true);
   });
 
   test("ignores credential failures and unrelated errors", () => {
@@ -681,16 +775,24 @@ describe("createRateLimitFallbackModel", () => {
 });
 
 describe("buildLanguageModel", () => {
+  test("returns a wrapped Google model when Gemini is configured", () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
+
+    const model = buildLanguageModel();
+    expect(model.provider).toBe("google.generative-ai");
+    expect(model.modelId).toBe(DEFAULT_MODEL);
+  });
+
   test("returns a wrapped real provider when Zen is configured", () => {
     process.env.OPENAI_COMPATIBLE_BASE_URL = "https://opencode.ai/zen/v1";
-    process.env.OPENAI_COMPATIBLE_MODEL = "big-pickle";
+    process.env.OPENAI_COMPATIBLE_MODEL = "nemotron-3.5-lightning-free";
 
     const model = buildLanguageModel();
     expect(model.provider).toBe("opencode-compatible.chat");
-    expect(model.modelId).toBe("big-pickle");
+    expect(model.modelId).toBe("nemotron-3.5-lightning-free");
   });
 
-  test("returns the mock provider when Zen is not configured", () => {
+  test("returns the mock provider when no provider is configured", () => {
     const model = buildLanguageModel();
     expect(model.provider).toBe("mock");
     expect(model.modelId).toBe("mock-" + DEFAULT_MODEL);

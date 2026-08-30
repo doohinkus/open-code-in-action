@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { ChevronDown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +12,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
-import { ZEN_FREE_MODELS, modelName } from "@/lib/models";
+import { ALL_FREE_MODELS, modelName, ModelProvider } from "@/lib/models";
 import { getStoredModel, setStoredModel } from "@/lib/model-selector";
+
+const PROVIDER_GROUPS: { provider: ModelProvider; label: string }[] = [
+  { provider: "google", label: "Google Gemini" },
+  { provider: "zen", label: "OpenCode Zen" },
+];
 
 export function ModelSelector() {
   const { toast } = useToast();
@@ -42,10 +47,17 @@ export function ModelSelector() {
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel>Model</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={model} onValueChange={handleSelect}>
-          {ZEN_FREE_MODELS.map((m) => (
-            <DropdownMenuRadioItem key={m.id} value={m.id}>
-              <span className="truncate">{m.name}</span>
-            </DropdownMenuRadioItem>
+          {PROVIDER_GROUPS.map((group) => (
+            <Fragment key={group.provider}>
+              <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {group.label}
+              </DropdownMenuLabel>
+              {ALL_FREE_MODELS.filter((m) => m.provider === group.provider).map((m) => (
+                <DropdownMenuRadioItem key={m.id} value={m.id}>
+                  <span className="truncate">{m.name}</span>
+                </DropdownMenuRadioItem>
+              ))}
+            </Fragment>
           ))}
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
