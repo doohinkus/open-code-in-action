@@ -75,6 +75,11 @@ npm run lint && npm test -- --run && npx tsc --noEmit
 ```
 Fix any failures before pushing. Never push with failing tests. `next lint` and vitest do NOT catch TypeScript errors — the Vercel build (`npm run build` / `vercel-build`) does, so run `npx tsc --noEmit` (or `npm run build`) before pushing.
 
+## Git Workflow
+- **Keep `main` synced with remote**: run `git sync-main` (repo-local alias for `git fetch origin main:main`) — fast-forwards local `main` from remote without leaving the current branch; fast-forward only, so it fails safely on divergence. Run it before branching off `main` and before creating a PR.
+- Always branch off freshly-synced `main`: `git sync-main && git switch -c <branch> main`.
+- Before pushing/creating a PR, bring the branch up to date: `git sync-main && git rebase main`. Rebase before the first push; if the branch was already pushed, rebase + force-push only when no one else relies on it.
+
 ## Testing
 - Vitest config: `vitest.config.mts` — uses `@vitejs/plugin-react` and `vite-tsconfig-paths`
 - Run single test file: `npx vitest src/lib/__tests__/file-system.test.ts`
