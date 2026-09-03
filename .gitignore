@@ -3,6 +3,7 @@ CLAUDE.local.md
 .env
 node_modules/
 .next/
+*.tsbuildinfo
 prisma/dev.db
 playwright-report/
 test-results/
