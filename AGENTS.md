@@ -1,15 +1,16 @@
 # UIGen
 
 ## Prerequisites
-- Node.js 25+ (CI uses `node-version: "25"`; Node 25's Web Storage API requires the `node-compat.cjs` shim)
+- Node.js 25+ (CI uses `node-version: "25"`)
 
 ## Setup & Commands
 - `npm run setup` — install, prisma generate, prisma migrate dev (required first step)
 - `npm run dev` — `next dev --turbopack`, opens at http://localhost:3000
 - `npm run dev:daemon` — same as `dev` but backgrounds and writes to `logs.txt`
 - `npm test` — vitest (jsdom environment)
-- `npm run build` / `npm start` — production
+- `npm run build` / `npm start` — production (`npm run vercel-build` mirrors the Vercel build)
 - `npm run lint` — `next lint`
+- `npm run test:e2e` / `npm run test:e2e:ui` — Playwright E2E with Chromium; auto-starts dev server locally
 - `npm run db:reset` — `prisma migrate reset --force`
 - **Never run `npm audit fix`** — dependencies are pinned; audit fix breaks compatibility
 
@@ -20,16 +21,9 @@
 - Requires `DATABASE_URL` pointing to a Neon Postgres instance; `npm run setup` will fail without it
 
 ## AI / Chat
-- No API key needed: `MockLanguageModel` in `src/lib/provider.ts` returns canned components (4-step limit, counter/form/card)
-- Provider priority: Google AI Studio Gemini free tier (`GOOGLE_GENERATIVE_AI_API_KEY`; models in `GEMINI_FREE_MODELS`, default `gemini-2.5-flash`, env override `GEMINI_MODEL`, thinking disabled via `GEMINI_THINKING_BUDGET`, default 0) → OpenCode Zen free models (`OPENAI_COMPATIBLE_*`; model must be in `ZEN_FREE_MODELS`: `big-pickle` (default), `ling-3.0-flash-fin-free`, `mimo-v2.5-free`, `nemotron-3.5-lightning-free` — anything else silently defaults to `big-pickle`) → Mock fallback. A requested model is always served by its own provider; Anthropic is not supported. Rate-limited/5xx/retired-model turns rotate through the remaining free models across configured providers (Gemini first, then Zen) before auto-falling back to the mock via `createRateLimitFallbackModel` (`buildLanguageModel` in `src/lib/provider.ts`)
-- Chat API route: `src/app/api/chat/route.ts` — uses `ai` SDK `streamText` with tools; rate-limited to 30 requests/min/IP; `maxDuration = 120` for Vercel serverless
-- Mock provider uses `maxSteps=4`; real providers use `maxSteps=5`; test-connection requests use `maxSteps=1`, `maxTokens=64` (`route.ts:314`)
-- OpenAI-compatible provider sends `providerOptions["opencode-compatible"] = { reasoningEffort: "low" }` (`route.ts:322`); Google provider sends `providerOptions.google = { thinkingConfig: { thinkingBudget: 0 } }` (both keys coexist so mid-turn fallback rotation keeps each provider tuned)
-- **Payload reduction** (to cut provider token usage): full history kept for persistence as `originalMessages`; the model gets a compacted copy via `prepareModelMessages` (`src/lib/message-compaction.ts`) — history capped at 12 messages, non-last assistant messages collapsed to ≤300-char text placeholders, `reasoning` parts stripped
-- **VFS caching**: server keeps an in-memory VFS cache (10-min TTL, 100 entries) keyed by `project:${projectId}` or `anon:${sessionKey}`; clients omit `files` unless the revision is dirty and transparently retry on HTTP `428 VFS_RESYNC_REQUIRED` (`chat-context.tsx`)
-- Stream errors are surfaced to the client via `getErrorMessage` (`describeError` in `route.ts`); the AI SDK's default masks them as "An error occurred." — `mapErrorMessage` in `ChatInterface.tsx` shows the real message unless it's exactly that mask
-- AI tools: `str_replace_editor` (view/create/replace/insert) and `file_manager` (rename/delete) — operate on VirtualFileSystem
-- System prompt: `src/lib/prompts/generation.tsx` — requires `/App.jsx` entrypoint, `@/` import alias, Tailwind CSS
+- No API key needed: `MockLanguageModel` in `src/lib/provider.ts` returns canned components
+- Chat API route: `src/app/api/chat/route.ts` — `ai` SDK `streamText` with tools; rate-limited to 30 requests/min/IP; `maxDuration = 120` for Vercel serverless
+- Provider selection, free-model allowlists, fallback rotation, step/token limits, message compaction, VFS caching, and error surfacing: **see the `ai-chat` skill**
 
 ## Key Architecture
 - **Virtual file system** (`src/lib/file-system.ts`): in-memory, never writes to real FS. Serialized to/from project data. Commands mirror Claude Code's str_replace_editor pattern.
@@ -40,7 +34,7 @@
 - **Path aliases**: `@/` → `./src/*`, `@/components/ui` for shadcn, `@/lib/utils` for `cn()` helper
 
 ## Important Constraints
-- **Node 25+ SSR fix**: `node-compat.cjs` loaded in `next.config.ts` deletes `localStorage`/`sessionStorage` globals on server — do not remove
+- **Node 25+ SSR fix**: `node-compat.cjs` loaded in `next.config.ts` deletes `localStorage`/`sessionStorage` globals on server — do not remove (this is why Node 25 is required)
 - **Anonymous users**: Work stored in `sessionStorage` via `src/lib/anon-work-tracker.ts`. On Google sign-in, `src/app/main-content.tsx` migrates it into a project and clears it
 - **`server-only`**: `src/lib/auth.ts` imports `server-only` — never import it in client components
 - **shadcn/ui**: New York style, `components.json` at root. Existing UI components in `src/components/ui/`
@@ -54,18 +48,7 @@
 - **CSP**: `connect-src` in `next.config.ts` allows `https://*.ingest.sentry.io` for Sentry ingest. If you add other Sentry features (Session Replay, etc.), update it.
 
 ## Pre-Commit Verification (REQUIRED)
-**Always run before committing significant changes:**
-
-1. Start dev server: `npx next dev --turbopack > /tmp/uigen-dev.log 2>&1 &` (use `npx` directly — `npm run dev` hangs)
-2. Wait for server, verify with: `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000` (should return `200`)
-3. Navigate to `http://localhost:3000` with Playwright MCP
-4. Verify page loads (title, chat input, preview/code tabs visible)
-5. Send a test message: type "Create a counter component" and press Enter
-6. Confirm provider responds (mock: "Creating /App.jsx"; real: actual AI-generated text + tool calls)
-7. Check Preview tab: Counter component renders with Decrement/Reset/Increment buttons
-8. Check Code tab: File tree shows `App.jsx`, Monaco editor displays React code
-9. Close browser and stop dev server: `pkill -f "next dev"`
-
+**Always run before committing significant changes:** the `verify-app` skill — starts the dev server, drives the app with Playwright MCP (send "Create a counter component", confirm Preview + Code tabs render), then stops the server.
 **Console errors**: Ignore Monaco CSP font warnings (cosmetic). Fail on runtime errors or blank pages.
 
 ## Before Pushing (REQUIRED)
@@ -76,13 +59,10 @@ npm run lint && npm test -- --run && npx tsc --noEmit
 Fix any failures before pushing. Never push with failing tests. `next lint` and vitest do NOT catch TypeScript errors — the Vercel build (`npm run build` / `vercel-build`) does, so run `npx tsc --noEmit` (or `npm run build`) before pushing.
 
 ## Git Workflow
-- **Keep `main` synced with remote**: run `git sync-main` (repo-local alias for `git fetch origin main:main`) — fast-forwards local `main` from remote without leaving the current branch; fast-forward only, so it fails safely on divergence. Run it before branching off `main` and before creating a PR.
-- Always branch off freshly-synced `main`: `git sync-main && git switch -c <branch> main`.
-- Before pushing/creating a PR, bring the branch up to date: `git sync-main && git rebase main`. Rebase before the first push; if the branch was already pushed, rebase + force-push only when no one else relies on it.
+- Run the `git-workflow` skill before branching off `main`, pushing, or creating a PR: sync `main` with `git sync-main`, branch off freshly-synced `main`, and rebase before push.
 
 ## Testing
 - Vitest config: `vitest.config.mts` — uses `@vitejs/plugin-react` and `vite-tsconfig-paths`
 - Run single test file: `npx vitest src/lib/__tests__/file-system.test.ts`
 - Tests in `src/lib/__tests__/`, `src/lib/transform/__tests__/`, `src/lib/contexts/__tests__/`, `src/components/chat/__tests__/`
-- E2E tests (`tests/e2e/`): `npm run test:e2e` — Playwright with Chromium; auto-starts dev server locally
 - Known: `.opencode/node_modules/zod` tests fail (missing deps) — these are pre-existing and unrelated to project code
