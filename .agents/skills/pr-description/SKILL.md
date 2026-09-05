@@ -32,9 +32,8 @@ Brief context on why this change is needed
 - Mention manual or E2E verification steps if applicable
 - If verification was not run, say so explicitly
 
-4. Before creating the PR, bring the branch up to date with main:
+4. Before creating the PR, bring the branch up to date with main (full branching/rebase rules in the `git-workflow` skill):
    ```bash
    git sync-main && git rebase main
    ```
-   (Rebase before the first push; force-push an already-pushed branch only when no one else relies on it.)
 5. Create the PR with `gh pr create --title ... --body ...` using this description as the body. Title follows the conventional-commit style of the branch's commits (e.g. `feat: add Gemini free tier as primary AI provider`).

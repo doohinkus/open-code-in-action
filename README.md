@@ -54,6 +54,8 @@ Open [http://localhost:3000](http://localhost:3000)
 | `smoke.spec.ts`                | Homepage loads, chat panel present, preview panel loads (3 tests) |
 | `a11y.spec.ts`                 | axe-core accessibility audit of homepage                          |
 | `component-generation.spec.ts` | Send chat message, tab navigation (2 tests)                       |
+| `component-preview.spec.ts`    | Multi-file components render in preview without import errors (1 test) |
+| `responsive.spec.ts`           | Mobile layout: Chat/Preview/Code tabs and view switching (4 tests) |
 
 Run locally: start `npm run dev` in one terminal, then `npm run test:e2e` in another.
 
@@ -69,6 +71,7 @@ model User {
   email     String    @unique
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
   projects  Project[]
 }
 
@@ -78,9 +81,25 @@ model Project {
   userId    String?
   messages  String   @default("[]")
   data      String   @default("{}")
+  version   Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shares    Share[]
+}
+
+model Share {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  name      String   @default("Shared component")
+  data      String   @default("{}")
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
 }
 ```
 
@@ -132,7 +151,7 @@ Push to main
 
 ## Features
 
-- AI-powered component generation (OpenCode Zen, Google Gemini, Anthropic Claude, or mock)
+- AI-powered component generation (Google Gemini, OpenCode Zen, or mock)
 - Live preview with hot reload
 - Virtual file system (no files written to disk)
 - Syntax highlighting and code editor
@@ -146,6 +165,6 @@ Push to main
 - Tailwind CSS v4
 - Prisma with Neon Postgres
 - Vercel AI SDK
-- OpenCode Zen / Google Gemini / Anthropic Claude
+- OpenCode Zen / Google Gemini
 - Playwright + axe-core (e2e + a11y tests)
 - GitHub Actions (CI/CD)
