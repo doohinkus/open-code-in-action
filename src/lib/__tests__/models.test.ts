@@ -51,15 +51,15 @@ describe("models", () => {
   });
 
   test("resolves names for known and unknown models", () => {
-    expect(modelName("gemini-2.5-flash")).toBe("Gemini 2.5 Flash");
+    expect(modelName("gemini-3.5-flash")).toBe("Gemini 3.5 Flash");
     expect(modelName("unknown-model")).toBe("unknown-model");
   });
 
   test("maps model ids to their providers", () => {
-    expect(modelProvider("gemini-2.5-flash")).toBe("google");
+    expect(modelProvider("gemini-3.5-flash")).toBe("google");
     expect(modelProvider("big-pickle")).toBeUndefined();
     expect(modelProvider("hy3-free")).toBeUndefined();
-    expect(isGeminiModel("gemini-2.5-flash")).toBe(true);
+    expect(isGeminiModel("gemini-3.5-flash")).toBe(true);
     expect(isGeminiModel("big-pickle")).toBe(false);
     expect(isGeminiModel("unknown-model")).toBe(false);
   });
@@ -69,22 +69,20 @@ describe("models", () => {
       "gemini-3.6-flash",
       "gemini-3.5-flash",
       "gemini-3.5-flash-lite",
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
     ]);
     expect(ALL_FREE_MODELS).toEqual(GEMINI_FREE_MODELS);
   });
 
   test("resolves free models against the unified allowlist", () => {
-    expect(resolveFreeModel("gemini-2.5-flash-lite", "x")).toBe("gemini-2.5-flash-lite");
+    expect(resolveFreeModel("gemini-3.5-flash-lite", "x")).toBe("gemini-3.5-flash-lite");
     expect(resolveFreeModel("big-pickle", "x")).toBe("x");
     expect(resolveFreeModel("gpt-5.4-mini", "x")).toBe("x");
     expect(resolveFreeModel(undefined, "x")).toBe("x");
   });
 
   test("resolves models scoped to a single provider", () => {
-    expect(resolveProviderModel("gemini-2.5-flash", "google", "fallback")).toBe(
-      "gemini-2.5-flash"
+    expect(resolveProviderModel("gemini-3.5-flash", "google", "fallback")).toBe(
+      "gemini-3.5-flash"
     );
     expect(resolveProviderModel("big-pickle", "google", "fallback")).toBe("fallback");
     expect(resolveProviderModel(undefined, "google", "fallback")).toBe("fallback");
@@ -122,11 +120,6 @@ describe("fallbackModelIds", () => {
       "gemini-3.6-flash",
       "gemini-3.5-flash",
     ]);
-  });
-
-  test("keeps 2.5 fallbacks in the 2.5 family", () => {
-    expect(fallbackModelIds("gemini-2.5-flash")).toEqual(["gemini-2.5-flash-lite"]);
-    expect(fallbackModelIds("gemini-2.5-flash-lite")).toEqual(["gemini-2.5-flash"]);
   });
 
   test("never mixes thinking families", () => {

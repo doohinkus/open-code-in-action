@@ -7,13 +7,12 @@ export interface ModelInfo {
 }
 
 // Google AI Studio's Gemini free tier — the only supported provider.
-// Ordered by fallback priority: newest stable generation first.
+// Ordered by fallback priority: newest stable generation first. Gemini 2.5
+// models were dropped (free-tier quotas effectively unusable).
 export const GEMINI_FREE_MODELS: ModelInfo[] = [
   { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", provider: "google" },
   { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", provider: "google" },
   { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash Lite", provider: "google" },
-  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "google" },
-  { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite", provider: "google" },
 ];
 
 // All selectable free models, in fallback priority order.
