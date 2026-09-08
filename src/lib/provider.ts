@@ -1,15 +1,11 @@
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import {
   LanguageModelV1,
   LanguageModelV1StreamPart,
   LanguageModelV1Message,
 } from "@ai-sdk/provider";
-import { createReasoningNormalizingFetch } from "./reasoning-normalizer";
 import {
   DEFAULT_MODEL,
-  ZEN_DEFAULT_MODEL,
-  ZEN_FREE_MODELS,
   GEMINI_FREE_MODELS,
   modelProvider,
   resolveProviderModel,
@@ -228,7 +224,7 @@ export class MockLanguageModel implements LanguageModelV1 {
 
     // Step 3: Create App.jsx
     if (toolMessageCount === 0) {
-      const text = `This is a static response. Configure an OpenCode Zen endpoint (OPENAI_COMPATIBLE_BASE_URL) in .env to generate with free AI models, or keep mock mode for canned components. Let me create an App.jsx file to display the component.`;
+      const text = `This is a static response. Configure a Google AI Studio key (GOOGLE_GENERATIVE_AI_API_KEY) in .env to generate with free Gemini models, or keep mock mode for canned components. Let me create an App.jsx file to display the component.`;
       for (const char of text) {
         yield { type: "text-delta", textDelta: char };
         await this.delay(15);
@@ -599,10 +595,9 @@ export default function App() {
  * Gets the language model for a given model ID.
  * Returns mock provider if forced or if no free provider is configured.
  *
- * Provider priority: Google AI Studio (Gemini) first — the most stable free
- * lineup — then the OpenCode Zen free endpoint. A specific configured model
- * id (e.g. the UI selection) always wins when its provider is available;
- * otherwise the default of the highest-priority configured provider is used.
+ * Provider: Google AI Studio (Gemini) — the only supported real provider.
+ * A specific configured model id (e.g. the UI selection) always wins when the
+ * provider is available; otherwise the Gemini default is used.
  *
  * @param modelId - Optional model ID override
  * @returns LanguageModelV1 instance
@@ -615,78 +610,30 @@ export function getLanguageModel(modelId?: string): LanguageModelV1 {
     return new MockLanguageModel("mock-" + DEFAULT_MODEL);
   }
 
-  const googleConfigured = isGoogleConfigured();
-  const zenConfigured = isZenConfigured();
-
-  if (!googleConfigured && !zenConfigured) {
+  if (!isGoogleConfigured()) {
     console.log(
-      "No AI provider is configured (GOOGLE_GENERATIVE_AI_API_KEY or " +
-        "OPENAI_COMPATIBLE_BASE_URL). Using the mock provider — responses " +
-        "will be canned."
+      "No AI provider is configured (GOOGLE_GENERATIVE_AI_API_KEY). Using " +
+        "the mock provider — responses will be canned."
     );
     return new MockLanguageModel("mock-" + DEFAULT_MODEL);
   }
 
   const requested = modelId?.trim() || undefined;
-  const requestedProvider = requested ? modelProvider(requested) : undefined;
-
-  // A specific free model always wins when its provider is configured.
-  if (requestedProvider === "google" && googleConfigured) {
-    return buildGoogleModel(requested!);
-  }
-  if (requestedProvider === "zen" && zenConfigured) {
-    return buildZenModel(requested!);
+  if (requested && modelProvider(requested) === "google") {
+    return buildGoogleModel(requested);
   }
 
-  // The requested model's provider isn't configured (or nothing was
-  // requested): serve the default of the highest-priority configured provider.
-  if (googleConfigured) {
-    const envModel = process.env.GEMINI_MODEL?.trim();
-    const resolved = resolveProviderModel(envModel, "google", DEFAULT_MODEL);
-    if (envModel && envModel !== resolved) {
-      console.log(
-        `GEMINI_MODEL "${envModel}" is not a free Gemini model. ` +
-          `Falling back to "${resolved}".`
-      );
-    }
-    return buildGoogleModel(resolved);
-  }
-
-  const envModel = process.env.OPENAI_COMPATIBLE_MODEL?.trim();
-  const resolved = resolveProviderModel(envModel, "zen", ZEN_DEFAULT_MODEL);
+  // The requested model isn't a free Gemini model (or nothing was requested):
+  // serve the Gemini default.
+  const envModel = process.env.GEMINI_MODEL?.trim();
+  const resolved = resolveProviderModel(envModel, "google", DEFAULT_MODEL);
   if (envModel && envModel !== resolved) {
     console.log(
-      `Model "${envModel}" is not in the free allowlist (ZEN_FREE_MODELS). ` +
+      `GEMINI_MODEL "${envModel}" is not a free Gemini model. ` +
         `Falling back to "${resolved}".`
     );
   }
-  return buildZenModel(resolved);
-}
-
-function buildZenModel(modelId: string): LanguageModelV1 {
-  // Check cache first
-  const cached = providerInstanceCache.get(modelId);
-  if (cached) {
-    return cached;
-  }
-
-  const openaiCompatibleBaseURL = process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
-  if (!openaiCompatibleBaseURL) {
-    throw new Error("OPENAI_COMPATIBLE_BASE_URL is not set");
-  }
-  const openaiCompatibleApiKey = process.env.OPENAI_COMPATIBLE_API_KEY?.trim();
-  const provider = createOpenAICompatible({
-    name: "opencode-compatible",
-    baseURL: openaiCompatibleBaseURL,
-    ...(openaiCompatibleApiKey ? { apiKey: openaiCompatibleApiKey } : {}),
-    fetch: createReasoningNormalizingFetch(),
-  });
-  const model = provider.chatModel(modelId);
-
-  // Cache the model instance
-  providerInstanceCache.set(modelId, model);
-
-  return model;
+  return buildGoogleModel(resolved);
 }
 
 function googleApiKey(): string | undefined {
@@ -695,10 +642,6 @@ function googleApiKey(): string | undefined {
 
 export function isGoogleConfigured(): boolean {
   return !!googleApiKey();
-}
-
-function isZenConfigured(): boolean {
-  return !!process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
 }
 
 export function buildGoogleModel(modelId: string): LanguageModelV1 {
@@ -726,9 +669,10 @@ export function buildGoogleModel(modelId: string): LanguageModelV1 {
 // Provider errors surface in several shapes: APICallError (an Error subclass
 // with a statusCode), Error instances, or plain provider objects. The plain
 // objects are often `{ error: "..." }` or `{ error: { message/type } }` (e.g.
-// Zen's "Streaming response failed: [504] Upstream idle timeout exceeded"),
-// so String(error) alone yields "[object Object]" and hides the message.
-// Normalize all of these so rate-limit/5xx detection can actually see the text.
+// an upstream "Streaming response failed: [504] Upstream idle timeout
+// exceeded"), so String(error) alone yields "[object Object]" and hides the
+// message. Normalize all of these so rate-limit/5xx detection can actually
+// see the text.
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message || String(error);
   if (error && typeof error === "object") {
@@ -765,15 +709,14 @@ export function isRateLimitError(error: unknown): boolean {
   return /rate limit|rate_limit|429|quota|too many requests|insufficient_quota/i.test(message);
 }
 
-// Free-model lineups change upstream without notice — Zen retired "hy3-free"
-// with a 401 `{"type":"ModelError","message":"Model hy3-free is not
-// supported"}`, and Google returns 404 "models/<id> is not found for API
-// version v1beta" for retired Gemini models. A model the provider no longer
-// offers is permanently broken for this turn, so the fallback chain should
-// skip it like any other retryable failure instead of failing the whole turn.
-// The match is deliberately narrow (model-specific wording / ModelError type)
-// so a real credentials failure (plain 401 "Unauthorized"/"invalid api key")
-// still surfaces immediately.
+// Free-model lineups change upstream without notice — Google returns 404
+// "models/<id> is not found for API version v1beta" for retired Gemini
+// models. A model the provider no longer offers is permanently broken for
+// this turn, so the fallback chain should skip it like any other retryable
+// failure instead of failing the whole turn. The match is deliberately broad
+// enough to cover common provider wordings (model-specific phrasing /
+// ModelError type) so a real credentials failure (plain 401
+// "Unauthorized"/"invalid api key") still surfaces immediately.
 /**
  * Checks if an error indicates the requested model doesn't exist upstream.
  *
@@ -797,7 +740,7 @@ export function isDeadModelError(error: unknown): boolean {
 // Beyond rate limits, free endpoints also flake with transient 5xx
 // failures (e.g. "Endpoint is unavailable", 503), and retire models outright
 // (404/401 "Model ... is not supported/not found"). Treat all of those as
-// retryable so the chain rotates past a down/unavailable/retired free model
+// retryable so the chain rotates past a down/unavailable/retired model
 // instead of erroring the turn while other free models still work.
 /**
  * Checks if an error is a retryable upstream error (rate limit, 5xx, timeout,
@@ -822,13 +765,12 @@ export function isRetryableUpstreamError(error: unknown): boolean {
  * transparently rotates through the remaining free models before finally
  * falling back to the canned mock. Other errors propagate immediately.
  *
- * Zen's free tier rate-limits per-model, so trying each free model in turn
- * keeps real generation working even when one model's quota is exhausted.
+ * The Gemini free tier rate-limits per-model, so trying each free model in
+ * turn keeps real generation working even when one model's quota is exhausted.
  *
  * For streaming, rotation only kicks in when a stream errors before a tool
- * call has started (or finishes) — the normal shape of a 429/5xx / Zen's 504
- * idle timeout. Once a tool call is streaming, errors are passed through
- * untouched.
+ * call has started (or finishes) — the normal shape of a 429/5xx / 504 idle
+ * timeout. Once a tool call is streaming, errors are passed through untouched.
  *
  * streamText calls doStream once per generation step, so the wrapper also
  * remembers which models already failed with a retryable error this turn.
@@ -975,7 +917,7 @@ export function createRateLimitFallbackModel(
                 // The stream is only "committed" once a tool call starts
                 // streaming (or the stream finishes). Reasoning deltas and
                 // plain text are deliberately NOT committed content: a free
-                // model that dies mid-generation (e.g. Zen's 504 idle
+                // model that dies mid-generation (e.g. a 504 idle
                 // timeout) can still rotate to the next model instead of
                 // failing the whole turn. Rotating before any tool call is
                 // safe — no tool has executed, so the VFS is untouched.
@@ -1018,15 +960,14 @@ export function createRateLimitFallbackModel(
 }
 
 // The model used by the chat route. Free tiers rate-limit per model (and
-// free endpoints also flake with 5xx or retire models outright), so the
-// primary free model is backed by the remaining free models — the other
-// Gemini models first, then the Zen free models — with the canned mock as
-// the last resort. Only configured providers join the chain; real generation
-// keeps working unless every free model fails.
+// endpoints also flake with 5xx or retire models outright), so the primary
+// free model is backed by the remaining free Gemini models, with the canned
+// mock as the last resort. Real generation keeps working unless every free
+// Gemini model fails.
 /**
  * Builds the language model with fallback chain for the chat route.
- * Creates a wrapped model that rotates through free models (across
- * configured providers) on failure, with the mock as the last resort.
+ * Creates a wrapped model that rotates through the free Gemini models on
+ * failure, with the mock as the last resort.
  *
  * @param modelId - Optional model ID override
  * @returns LanguageModelV1 with automatic failover
@@ -1036,15 +977,10 @@ export function buildLanguageModel(modelId?: string): LanguageModelV1 {
   if (primary.provider === "mock") return primary;
 
   const requested = primary.modelId;
-  const googleConfigured = isGoogleConfigured();
-  const zenConfigured = isZenConfigured();
 
   const freeChain: LanguageModelV1[] = [];
   for (const m of GEMINI_FREE_MODELS) {
-    if (m.id !== requested && googleConfigured) freeChain.push(buildGoogleModel(m.id));
-  }
-  for (const m of ZEN_FREE_MODELS) {
-    if (m.id !== requested && zenConfigured) freeChain.push(buildZenModel(m.id));
+    if (m.id !== requested) freeChain.push(buildGoogleModel(m.id));
   }
 
   // Last resort: explain the free-tier limitation rather than emitting a

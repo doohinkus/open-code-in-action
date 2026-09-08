@@ -125,9 +125,8 @@ function hasRealProvider(): boolean {
   if (process.env.FORCE_MOCK_PROVIDER?.trim() === "1") {
     return false;
   }
-  // Real generation is available when any free provider is configured:
-  // Google AI Studio (Gemini, primary) or the OpenCode Zen free endpoint.
-  return isGoogleConfigured() || !!process.env.OPENAI_COMPATIBLE_BASE_URL?.trim();
+  // Real generation is available when Google AI Studio (Gemini) is configured.
+  return isGoogleConfigured();
 }
 
 // Stream errors can be Error instances or plain provider objects (e.g.
@@ -388,8 +387,8 @@ export async function POST(req: Request) {
   }
   const fileSystem = vfsResolution.fileSystem;
 
-  // Client may request a specific model (e.g. a free Zen model selected in
-  // the UI). Unknown models fall back to the server default rather than
+  // Client may request a specific model (e.g. a free Gemini model selected
+  // in the UI). Unknown models fall back to the server default rather than
   // erroring, so stale selections don't break requests.
   const requestedModel = model && isAllowedModel(model) ? model : undefined;
   if (model && !requestedModel) {
@@ -413,16 +412,9 @@ export async function POST(req: Request) {
   const maxTokens = isTestRequest ? MAX_TOKENS_TEST : MAX_TOKENS;
 
   const reasoningOptions: Record<string, any> = {};
-  if (process.env.OPENAI_COMPATIBLE_BASE_URL?.trim()) {
-    // Keep reasoning cheap on the free tier: long thinking windows are what
-    // trip Zen's ~2-minute upstream idle timeout (504) mid-stream.
-    reasoningOptions["opencode-compatible"] = { reasoningEffort: "low" };
-  }
   if (isGoogleConfigured()) {
     // Gemini 2.5 Flash thinks by default and thinking tokens burn free-tier
     // quota, so thinking is disabled (GEMINI_THINKING_BUDGET overrides).
-    // Options are keyed per provider, so both can coexist for fallback
-    // rotation mid-turn.
     const raw = process.env.GEMINI_THINKING_BUDGET?.trim();
     const budget = raw ? Number(raw) : 0;
     reasoningOptions.google = {

@@ -151,7 +151,7 @@ Push to main
 
 ## Features
 
-- AI-powered component generation (Google Gemini, OpenCode Zen, or mock)
+- AI-powered component generation (Google Gemini or mock)
 - Live preview with hot reload
 - Virtual file system (no files written to disk)
 - Syntax highlighting and code editor
@@ -165,6 +165,6 @@ Push to main
 - Tailwind CSS v4
 - Prisma with Neon Postgres
 - Vercel AI SDK
-- OpenCode Zen / Google Gemini
+- Google Gemini (AI SDK)
 - Playwright + axe-core (e2e + a11y tests)
 - GitHub Actions (CI/CD)

@@ -1,4 +1,4 @@
-export type ModelProvider = "google" | "zen";
+export type ModelProvider = "google";
 
 export interface ModelInfo {
   id: string;
@@ -6,26 +6,16 @@ export interface ModelInfo {
   provider: ModelProvider;
 }
 
-// Google AI Studio's Gemini free tier — the most stable free lineup (Google
-// keeps these models around far longer than Zen/OpenRouter free lists) and
-// the default provider when a key is configured.
+// Google AI Studio's Gemini free tier — the only supported provider.
 export const GEMINI_FREE_MODELS: ModelInfo[] = [
   { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "google" },
   { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite", provider: "google" },
 ];
 
-export const ZEN_FREE_MODELS: ModelInfo[] = [
-  { id: "big-pickle", name: "Big Pickle Free", provider: "zen" },
-  { id: "ling-3.0-flash-fin-free", name: "Ling 3.0 Flash Fin Free", provider: "zen" },
-  { id: "mimo-v2.5-free", name: "MiMo 2.5 Free", provider: "zen" },
-  { id: "nemotron-3.5-lightning-free", name: "Nemotron 3.5 Lightning Free", provider: "zen" },
-];
-
-// All selectable free models, Gemini first (higher fallback priority).
-export const ALL_FREE_MODELS: ModelInfo[] = [...GEMINI_FREE_MODELS, ...ZEN_FREE_MODELS];
+// All selectable free models, in fallback priority order.
+export const ALL_FREE_MODELS: ModelInfo[] = [...GEMINI_FREE_MODELS];
 
 export const DEFAULT_MODEL = "gemini-2.5-flash";
-export const ZEN_DEFAULT_MODEL = "big-pickle";
 
 const ALLOWED_MODEL_IDS = new Set(ALL_FREE_MODELS.map((m) => m.id));
 
@@ -50,7 +40,7 @@ export function resolveFreeModel(id: string | undefined, fallback: string): stri
 }
 
 // Resolve a requested model id against a single provider's free models, so a
-// Zen id can never leak into the Google provider (or vice versa).
+// non-Gemini id can never leak into the Google provider.
 export function resolveProviderModel(
   id: string | undefined,
   provider: ModelProvider,

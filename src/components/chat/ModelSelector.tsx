@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { ChevronDown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,13 +12,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
-import { ALL_FREE_MODELS, modelName, ModelProvider } from "@/lib/models";
+import { ALL_FREE_MODELS, modelName } from "@/lib/models";
 import { getStoredModel, setStoredModel } from "@/lib/model-selector";
 
-const PROVIDER_GROUPS: { provider: ModelProvider; label: string }[] = [
-  { provider: "google", label: "Google Gemini" },
-  { provider: "zen", label: "OpenCode Zen" },
-];
+const PROVIDER_GROUP = { provider: "google" as const, label: "Google Gemini" };
 
 export function ModelSelector() {
   const { toast } = useToast();
@@ -46,18 +43,14 @@ export function ModelSelector() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel>Model</DropdownMenuLabel>
+        <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          {PROVIDER_GROUP.label}
+        </DropdownMenuLabel>
         <DropdownMenuRadioGroup value={model} onValueChange={handleSelect}>
-          {PROVIDER_GROUPS.map((group) => (
-            <Fragment key={group.provider}>
-              <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {group.label}
-              </DropdownMenuLabel>
-              {ALL_FREE_MODELS.filter((m) => m.provider === group.provider).map((m) => (
-                <DropdownMenuRadioItem key={m.id} value={m.id}>
-                  <span className="truncate">{m.name}</span>
-                </DropdownMenuRadioItem>
-              ))}
-            </Fragment>
+          {ALL_FREE_MODELS.filter((m) => m.provider === PROVIDER_GROUP.provider).map((m) => (
+            <DropdownMenuRadioItem key={m.id} value={m.id}>
+              <span className="truncate">{m.name}</span>
+            </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
