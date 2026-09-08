@@ -3,17 +3,19 @@ import {
   GEMINI_FREE_MODELS,
   ALL_FREE_MODELS,
   DEFAULT_MODEL,
+  fallbackModelIds,
   isAllowedModel,
   isGeminiModel,
   modelProvider,
   modelName,
   resolveFreeModel,
   resolveProviderModel,
+  supportsThinkingBudget,
 } from "@/lib/models";
 
 describe("models", () => {
-  test("defaults to gemini-2.5-flash", () => {
-    expect(DEFAULT_MODEL).toBe("gemini-2.5-flash");
+  test("defaults to gemini-3.6-flash", () => {
+    expect(DEFAULT_MODEL).toBe("gemini-3.6-flash");
   });
 
   test("lists only free models with unique ids", () => {
@@ -64,6 +66,9 @@ describe("models", () => {
 
   test("includes exactly the allowed free models in order", () => {
     expect(GEMINI_FREE_MODELS.map((m) => m.id)).toEqual([
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
       "gemini-2.5-flash",
       "gemini-2.5-flash-lite",
     ]);
@@ -83,5 +88,52 @@ describe("models", () => {
     );
     expect(resolveProviderModel("big-pickle", "google", "fallback")).toBe("fallback");
     expect(resolveProviderModel(undefined, "google", "fallback")).toBe("fallback");
+  });
+});
+
+describe("supportsThinkingBudget", () => {
+  test("true for the Gemini 2.5 family", () => {
+    expect(supportsThinkingBudget("gemini-2.5-flash")).toBe(true);
+    expect(supportsThinkingBudget("gemini-2.5-flash-lite")).toBe(true);
+  });
+
+  test("false for Gemini 3.x models", () => {
+    expect(supportsThinkingBudget("gemini-3.6-flash")).toBe(false);
+    expect(supportsThinkingBudget("gemini-3.5-flash")).toBe(false);
+    expect(supportsThinkingBudget("gemini-3.5-flash-lite")).toBe(false);
+  });
+
+  test("false for unknown ids", () => {
+    expect(supportsThinkingBudget("gpt-5.4-mini")).toBe(false);
+  });
+});
+
+describe("fallbackModelIds", () => {
+  test("keeps 3.x fallbacks in the 3.x family, priority order", () => {
+    expect(fallbackModelIds("gemini-3.6-flash")).toEqual([
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+    ]);
+    expect(fallbackModelIds("gemini-3.5-flash")).toEqual([
+      "gemini-3.6-flash",
+      "gemini-3.5-flash-lite",
+    ]);
+    expect(fallbackModelIds("gemini-3.5-flash-lite")).toEqual([
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+    ]);
+  });
+
+  test("keeps 2.5 fallbacks in the 2.5 family", () => {
+    expect(fallbackModelIds("gemini-2.5-flash")).toEqual(["gemini-2.5-flash-lite"]);
+    expect(fallbackModelIds("gemini-2.5-flash-lite")).toEqual(["gemini-2.5-flash"]);
+  });
+
+  test("never mixes thinking families", () => {
+    for (const m of ALL_FREE_MODELS) {
+      for (const id of fallbackModelIds(m.id)) {
+        expect(supportsThinkingBudget(id)).toBe(supportsThinkingBudget(m.id));
+      }
+    }
   });
 });

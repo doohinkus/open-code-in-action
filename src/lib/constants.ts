@@ -64,6 +64,14 @@ export const MAX_STEPS_MOCK = 4;
 export const MAX_TOKENS = 8_000;
 
 /**
+ * Maximum tokens per AI call for Gemini 3.x models. Those models always
+ * think (thinking tokens count against this cap) and burn ~4-5k tokens even
+ * at thinkingLevel "minimal", so the 8k default would cut them off with
+ * finishReason "length" before the first tool call.
+ */
+export const MAX_TOKENS_GEMINI_3 = 24_000;
+
+/**
  * Maximum tokens for test-connection requests (minimal response).
  */
 export const MAX_TOKENS_TEST = 64;

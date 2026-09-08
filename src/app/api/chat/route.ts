@@ -10,7 +10,7 @@ import { buildLanguageModel, isGoogleConfigured } from "@/lib/provider";
 import { generationPrompt } from "@/lib/prompts/generation";
 import { prepareModelMessages } from "@/lib/message-compaction";
 import { logger, getRequestId, hashIp } from "@/lib/observability/logger";
-import { isAllowedModel } from "@/lib/models";
+import { isAllowedModel, supportsThinkingBudget } from "@/lib/models";
 import {
   isAllowedOrigin,
   allowedOriginFor,
@@ -28,6 +28,7 @@ import {
   MAX_STEPS_REAL,
   MAX_STEPS_MOCK,
   MAX_TOKENS,
+  MAX_TOKENS_GEMINI_3,
   MAX_TOKENS_TEST,
 } from "@/lib/constants";
 // Server-side virtual filesystem cache so clients don't resend every file
@@ -407,14 +408,25 @@ export async function POST(req: Request) {
   // steps to prevent its canned 4-step sequence from repeating.
   const maxSteps = isTestRequest ? 1 : hasRealProvider() ? MAX_STEPS_REAL : MAX_STEPS_MOCK;
   // Cap per-call output so a single step can't run away; test requests stay
-  // tiny. 8k is plenty for a full component/game step while keeping the
-  // reasoning preamble bounded.
-  const maxTokens = isTestRequest ? MAX_TOKENS_TEST : MAX_TOKENS;
+  // tiny. 8k is plenty for a full component/game step on 2.5/mock, while
+  // Gemini 3.x needs more headroom because its (unavoidable) thinking tokens
+  // count against the cap.
+  const maxTokens = isTestRequest
+    ? MAX_TOKENS_TEST
+    : activeModelId && supportsThinkingBudget(activeModelId)
+      ? MAX_TOKENS
+      : MAX_TOKENS_GEMINI_3;
 
   const reasoningOptions: Record<string, any> = {};
-  if (isGoogleConfigured()) {
+  if (
+    isGoogleConfigured() &&
+    activeModelId &&
+    supportsThinkingBudget(activeModelId)
+  ) {
     // Gemini 2.5 Flash thinks by default and thinking tokens burn free-tier
     // quota, so thinking is disabled (GEMINI_THINKING_BUDGET overrides).
+    // Gemini 3.x models use thinkingLevel — unsupported by the pinned
+    // @ai-sdk/google and thinking can't be disabled — so no config is sent.
     const raw = process.env.GEMINI_THINKING_BUDGET?.trim();
     const budget = raw ? Number(raw) : 0;
     reasoningOptions.google = {

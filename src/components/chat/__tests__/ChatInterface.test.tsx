@@ -54,7 +54,7 @@ vi.mock("../ModelSelector", () => ({
 }));
 
 vi.mock("@/lib/model-selector", () => ({
-  getStoredModel: vi.fn(() => "gemini-2.5-flash"),
+  getStoredModel: vi.fn(() => "gemini-3.6-flash"),
 }));
 
 const mockUseChat = {

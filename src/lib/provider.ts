@@ -6,10 +6,11 @@ import {
 } from "@ai-sdk/provider";
 import {
   DEFAULT_MODEL,
-  GEMINI_FREE_MODELS,
+  fallbackModelIds,
   modelProvider,
   resolveProviderModel,
 } from "./models";
+import { createGemini3CompatFetch } from "./gemini-3-compat";
 
 // Cache for provider instances to avoid recreating them on every request
 const providerInstanceCache = new Map<string, LanguageModelV1>();
@@ -657,7 +658,14 @@ export function buildGoogleModel(modelId: string): LanguageModelV1 {
   if (!apiKey) {
     throw new Error("GOOGLE_GENERATIVE_AI_API_KEY is not set");
   }
-  const provider = createGoogleGenerativeAI({ apiKey });
+  const provider = createGoogleGenerativeAI({
+    apiKey,
+    // Gemini 3.x bridge: injects thinkingLevel "minimal" and round-trips
+    // thought signatures — both unsupported by the pinned SDK, and their
+    // absence breaks 3.x generation (thinking burns the whole maxTokens
+    // budget; multi-step tool flows 400 on step 2).
+    fetch: createGemini3CompatFetch(),
+  });
   const model = provider.languageModel(modelId);
 
   // Cache the model instance
@@ -961,13 +969,13 @@ export function createRateLimitFallbackModel(
 
 // The model used by the chat route. Free tiers rate-limit per model (and
 // endpoints also flake with 5xx or retire models outright), so the primary
-// free model is backed by the remaining free Gemini models, with the canned
-// mock as the last resort. Real generation keeps working unless every free
-// Gemini model fails.
+// free model is backed by the remaining same-family free Gemini models, with
+// the canned mock as the last resort. Real generation keeps working unless
+// every free Gemini model in the family fails.
 /**
  * Builds the language model with fallback chain for the chat route.
- * Creates a wrapped model that rotates through the free Gemini models on
- * failure, with the mock as the last resort.
+ * Creates a wrapped model that rotates through the free Gemini models of the
+ * primary's thinking family on failure, with the mock as the last resort.
  *
  * @param modelId - Optional model ID override
  * @returns LanguageModelV1 with automatic failover
@@ -978,9 +986,14 @@ export function buildLanguageModel(modelId?: string): LanguageModelV1 {
 
   const requested = primary.modelId;
 
+  // The fallback chain must stay within the primary's thinking family:
+  // providerOptions (thinkingConfig) are request-level, so a rotation to the
+  // other family would receive an invalid thinking config. Gemini 2.5 models
+  // take thinkingBudget; 3.x models use thinkingLevel and can't disable
+  // thinking, so they get no thinking config at all.
   const freeChain: LanguageModelV1[] = [];
-  for (const m of GEMINI_FREE_MODELS) {
-    if (m.id !== requested) freeChain.push(buildGoogleModel(m.id));
+  for (const id of fallbackModelIds(requested)) {
+    freeChain.push(buildGoogleModel(id));
   }
 
   // Last resort: explain the free-tier limitation rather than emitting a

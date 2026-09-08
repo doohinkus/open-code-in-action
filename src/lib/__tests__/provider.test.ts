@@ -44,13 +44,13 @@ describe("getLanguageModel", () => {
     process.env.FORCE_MOCK_PROVIDER = "1";
     process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
 
-    const model = getLanguageModel("gemini-2.5-flash");
+    const model = getLanguageModel(DEFAULT_MODEL);
     expect(model).toBeInstanceOf(MockLanguageModel);
     expect(model.modelId).toBe("mock-" + DEFAULT_MODEL);
   });
 
   test("returns the mock provider when no provider is configured", () => {
-    const model = getLanguageModel("gemini-2.5-flash");
+    const model = getLanguageModel(DEFAULT_MODEL);
     expect(model).toBeInstanceOf(MockLanguageModel);
     expect(model.modelId).toBe("mock-" + DEFAULT_MODEL);
   });
@@ -693,6 +693,14 @@ describe("buildLanguageModel", () => {
     const model = buildLanguageModel();
     expect(model.provider).toBe("google.generative-ai");
     expect(model.modelId).toBe(DEFAULT_MODEL);
+  });
+
+  test("returns a wrapped Google model for a requested 2.5 model", () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
+
+    const model = buildLanguageModel("gemini-2.5-flash");
+    expect(model.provider).toBe("google.generative-ai");
+    expect(model.modelId).toBe("gemini-2.5-flash");
   });
 
   test("returns the mock provider when no provider is configured", () => {
