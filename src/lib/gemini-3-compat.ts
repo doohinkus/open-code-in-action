@@ -9,7 +9,7 @@ import { supportsThinkingBudget } from "./models";
 //    (medium) thinking consumes the entire maxTokens budget before the first
 //    tool call (observed: finishReason "length", 0 tool calls, ~38s on the
 //    free tier). This wrapper injects generationConfig.thinkingConfig.
-//    thinkingLevel "minimal" into outgoing requests.
+//    thinkingLevel "low" into outgoing requests.
 //
 // 2. Thought signatures. Gemini 3.x returns an opaque `thoughtSignature`
 //    alongside function calls and rejects follow-up requests whose history
@@ -23,7 +23,10 @@ import { supportsThinkingBudget } from "./models";
 //    performance, only a MISSING one is a hard 400. This is a bridge until
 //    an SDK that natively supports Gemini 3 (ai v5) lands.
 
-const MINIMAL_THINKING_LEVEL = "minimal";
+// "low" is the lowest thinking level that still produces thought summaries:
+// at "minimal" the model barely thinks, so includeThoughts yields nothing
+// and the chain of thought stays invisible.
+const THINKING_LEVEL = "low";
 
 // Keyed by function name; Gemini only hard-fails on missing signatures, so
 // the latest observed signature per tool is good enough for a bridge.
@@ -136,7 +139,13 @@ export function createGemini3CompatFetch(): typeof fetch {
         injectThoughtSignatures(body);
         body.generationConfig = {
           ...body.generationConfig,
-          thinkingConfig: { thinkingLevel: MINIMAL_THINKING_LEVEL },
+          thinkingConfig: {
+            thinkingLevel: THINKING_LEVEL,
+            // Stream thought summaries so the UI can show the model's chain
+            // of thought while it works (MessageList renders reasoning
+            // parts). Without this, thinking happens invisibly.
+            includeThoughts: true,
+          },
         };
         init = { ...init, body: JSON.stringify(body) };
       } catch {

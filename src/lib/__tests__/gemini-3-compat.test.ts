@@ -33,7 +33,7 @@ async function drain(response: Response): Promise<string> {
 }
 
 describe("createGemini3CompatFetch", () => {
-  test("injects minimal thinkingLevel into Gemini 3.x stream requests", async () => {
+  test("injects low thinkingLevel with thought summaries into Gemini 3.x stream requests", async () => {
     const mocked = stubFetch(async () => sseResponse([{}]));
     const f = createGemini3CompatFetch();
 
@@ -45,7 +45,10 @@ describe("createGemini3CompatFetch", () => {
 
     const init = mocked.mock.calls[0][1] as RequestInit;
     const body = JSON.parse(init.body as string);
-    expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: "minimal" });
+    expect(body.generationConfig.thinkingConfig).toEqual({
+      thinkingLevel: "low",
+      includeThoughts: true,
+    });
     expect(body.generationConfig.maxOutputTokens).toBe(100);
   });
 
@@ -60,7 +63,8 @@ describe("createGemini3CompatFetch", () => {
 
     const init = mocked.mock.calls[0][1] as RequestInit;
     expect(JSON.parse(init.body as string).generationConfig.thinkingConfig).toEqual({
-      thinkingLevel: "minimal",
+      thinkingLevel: "low",
+      includeThoughts: true,
     });
   });
 
