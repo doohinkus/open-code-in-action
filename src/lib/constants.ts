@@ -38,15 +38,12 @@ export const RATE_LIMIT_MAX_REQUESTS = 30;
 
 /**
  * Stall timeout: if no stream activity for this duration while generating,
- * abort the request so the UI doesn't hang indefinitely.
+ * abort the request so the UI doesn't hang indefinitely. Generous on purpose:
+ * Gemini 3.x can think silently for a minute+ per step, and server-side
+ * fallback rotation can retry across models without emitting anything, so
+ * quiet stretches of 2-3 minutes are legitimate.
  */
-export const STALL_TIMEOUT_MS = 130_000;
-
-/**
- * Resource warning timeout: after this long of a single generation,
- * nudge the user to stop or simplify.
- */
-export const RESOURCE_WARNING_TIMEOUT_MS = 35_000;
+export const STALL_TIMEOUT_MS = 240_000;
 
 /**
  * Maximum steps for real AI providers (allows multi-file builds).
@@ -62,6 +59,14 @@ export const MAX_STEPS_MOCK = 4;
  * Maximum tokens per AI call (non-test requests).
  */
 export const MAX_TOKENS = 8_000;
+
+/**
+ * Maximum tokens per AI call for Gemini 3.x models. Those models always
+ * think (thinking tokens count against this cap) and burn ~4-5k tokens even
+ * at thinkingLevel "minimal", so the 8k default would cut them off with
+ * finishReason "length" before the first tool call.
+ */
+export const MAX_TOKENS_GEMINI_3 = 24_000;
 
 /**
  * Maximum tokens for test-connection requests (minimal response).
@@ -98,11 +103,6 @@ export const COMPACTED_MESSAGE_MAX_LEN = 300;
  * Default toast auto-dismiss duration (3 seconds).
  */
 export const TOAST_DEFAULT_DURATION_MS = 3000;
-
-/**
- * Extended toast duration for important warnings (8 seconds).
- */
-export const TOAST_WARNING_DURATION_MS = 8000;
 
 // ─── Share ───────────────────────────────────────────────────────────────────
 

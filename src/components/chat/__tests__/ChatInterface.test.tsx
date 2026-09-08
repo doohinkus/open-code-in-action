@@ -21,9 +21,12 @@ vi.mock("@/components/ui/scroll-area", () => ({
 
 // Mock the child components
 vi.mock("../MessageList", () => ({
-  MessageList: ({ messages, isLoading }: any) => (
+  MessageList: ({ messages, isLoading, thinkingLabel }: any) => (
     <div data-testid="message-list">
       {messages.length} messages, loading: {isLoading.toString()}
+      {thinkingLabel && (
+        <div data-testid="thinking-label">{thinkingLabel}</div>
+      )}
     </div>
   ),
 }));
@@ -54,7 +57,7 @@ vi.mock("../ModelSelector", () => ({
 }));
 
 vi.mock("@/lib/model-selector", () => ({
-  getStoredModel: vi.fn(() => "gemini-2.5-flash"),
+  getStoredModel: vi.fn(() => "gemini-3.6-flash"),
 }));
 
 const mockUseChat = {
@@ -111,6 +114,84 @@ test("passes correct props to MessageList", () => {
   const messageList = screen.getByTestId("message-list");
   expect(messageList.textContent).toContain("2 messages");
   expect(messageList.textContent).toContain("loading: true");
+});
+
+describe("thinking placeholder", () => {
+  test("shows a thinking label while submitted with no assistant content", () => {
+    (useChat as any).mockReturnValue({
+      ...mockUseChat,
+      messages: [{ id: "1", role: "user", content: "Create a counter component" }],
+      status: "submitted",
+    });
+
+    render(
+      <ToastProvider>
+        <ChatInterface />
+      </ToastProvider>
+    );
+
+    expect(screen.getByTestId("thinking-label").textContent).toBe(
+      'Thinking about "Create a counter component"…'
+    );
+  });
+
+  test("truncates long user messages in the thinking label", () => {
+    const long = "a".repeat(100);
+    (useChat as any).mockReturnValue({
+      ...mockUseChat,
+      messages: [{ id: "1", role: "user", content: long }],
+      status: "streaming",
+    });
+
+    render(
+      <ToastProvider>
+        <ChatInterface />
+      </ToastProvider>
+    );
+
+    const label = screen.getByTestId("thinking-label").textContent;
+    expect(label).toBe(`Thinking about "${"a".repeat(60)}…"…`);
+  });
+
+  test("hides the thinking label once the assistant streams content", () => {
+    (useChat as any).mockReturnValue({
+      ...mockUseChat,
+      messages: [
+        { id: "1", role: "user", content: "Create a counter component" },
+        {
+          id: "2",
+          role: "assistant",
+          content: "",
+          parts: [{ type: "reasoning", reasoning: "Let me think..." }],
+        },
+      ],
+      status: "streaming",
+    });
+
+    render(
+      <ToastProvider>
+        <ChatInterface />
+      </ToastProvider>
+    );
+
+    expect(screen.queryByTestId("thinking-label")).toBeNull();
+  });
+
+  test("shows no thinking label when idle", () => {
+    (useChat as any).mockReturnValue({
+      ...mockUseChat,
+      messages: [{ id: "1", role: "user", content: "Create a counter component" }],
+      status: "ready",
+    });
+
+    render(
+      <ToastProvider>
+        <ChatInterface />
+      </ToastProvider>
+    );
+
+    expect(screen.queryByTestId("thinking-label")).toBeNull();
+  });
 });
 
 test("passes correct props to MessageInput", () => {

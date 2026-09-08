@@ -32,6 +32,7 @@ vi.mock("@/lib/provider", () => ({
 
 vi.mock("@/lib/models", () => ({
   isAllowedModel: vi.fn(() => false),
+  supportsThinkingBudget: vi.fn(() => false),
 }));
 
 vi.mock("@/lib/message-compaction", () => ({

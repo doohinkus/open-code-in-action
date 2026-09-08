@@ -10,6 +10,7 @@ interface MessageListProps {
   messages: Message[];
   isLoading?: boolean;
   onStarterPrompt?: (prompt: string) => void;
+  thinkingLabel?: string;
 }
 
 interface MessageItemProps {
@@ -199,7 +200,7 @@ const MessageItem = React.memo(function MessageItem({ message, isLoading, isLast
   );
 });
 
-export function MessageList({ messages, isLoading, onStarterPrompt }: MessageListProps) {
+export function MessageList({ messages, isLoading, onStarterPrompt, thinkingLabel }: MessageListProps) {
   if (messages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full px-4 text-center">
@@ -241,6 +242,21 @@ export function MessageList({ messages, isLoading, onStarterPrompt }: MessageLis
             isLast={index === messages.length - 1}
           />
         ))}
+        {thinkingLabel && (
+          <div className="flex gap-3 justify-start animate-in fade-in slide-in-from-bottom-1 duration-300">
+            <div className="flex-shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/15 flex items-center justify-center">
+                <Bot className="h-4 w-4 text-primary animate-pulse" />
+              </div>
+            </div>
+            <div className="rounded-2xl px-4 py-3 shadow-sm bg-card text-foreground border border-border">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
+                <span className="text-sm text-muted-foreground">{thinkingLabel}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

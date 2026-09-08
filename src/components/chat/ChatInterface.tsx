@@ -13,6 +13,12 @@ import { mapErrorMessage } from "@/lib/chat-errors";
 
 export { mapErrorMessage };
 
+function truncateForThinkingLabel(content: string): string {
+  const collapsed = content.replace(/\s+/g, " ").trim();
+  const quoted = `"${collapsed.length > 60 ? `${collapsed.slice(0, 60)}…` : collapsed}"`;
+  return quoted;
+}
+
 export function ChatInterface() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const {
@@ -105,6 +111,27 @@ export function ChatInterface() {
     }
   }, [messages]);
 
+  // While the request is in flight but the assistant hasn't produced any
+  // reasoning, text, or tool content yet, show a generic "Thinking about
+  // <the user's message>…" placeholder instead of dead air. Real thought
+  // summaries (the Reasoning box) replace it as soon as they stream.
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
+  const lastMessage = messages[messages.length - 1];
+  const assistantHasContent =
+    lastMessage?.role === "assistant" &&
+    !!lastMessage.parts?.some(
+      (p) =>
+        (p.type === "reasoning" && p.reasoning?.trim()) ||
+        (p.type === "text" && p.text?.trim()) ||
+        p.type === "tool-invocation"
+    );
+  const thinkingLabel =
+    (status === "submitted" || status === "streaming") &&
+    lastUserMessage &&
+    !assistantHasContent
+      ? `Thinking about ${truncateForThinkingLabel(lastUserMessage.content)}…`
+      : undefined;
+
   return (
     <div className="flex flex-col h-full p-4 overflow-hidden">
       <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-hidden">
@@ -113,6 +140,7 @@ export function ChatInterface() {
             messages={messages}
             isLoading={status === "streaming"}
             onStarterPrompt={handleStarterPrompt}
+            thinkingLabel={thinkingLabel}
           />
         </div>
       </ScrollArea>

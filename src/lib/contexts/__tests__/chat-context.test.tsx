@@ -5,6 +5,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import { useFileSystem } from "../file-system-context";
 import { useChat as useAIChat } from "@ai-sdk/react";
 import * as anonTracker from "@/lib/anon-work-tracker";
+import { STALL_TIMEOUT_MS } from "@/lib/constants";
 
 // Mock dependencies
 vi.mock("../file-system-context", () => ({
@@ -21,7 +22,7 @@ vi.mock("@/lib/anon-work-tracker", () => ({
 }));
 
 vi.mock("@/lib/model-selector", () => ({
-  getStoredModel: vi.fn(() => "gemini-2.5-flash"),
+  getStoredModel: vi.fn(() => "gemini-3.6-flash"),
 }));
 
 // Helper component to access chat context
@@ -268,7 +269,7 @@ describe("ChatContext", () => {
       requestBody: {},
     });
 
-    expect(body.model).toBe("gemini-2.5-flash");
+    expect(body.model).toBe("gemini-3.6-flash");
   });
 
   function renderAndCaptureVfsFetch() {
@@ -383,7 +384,7 @@ describe("ChatContext", () => {
     );
 
     act(() => {
-      vi.advanceTimersByTime(131_000);
+      vi.advanceTimersByTime(STALL_TIMEOUT_MS + 1_000);
     });
 
     expect(mockStop).toHaveBeenCalled();
@@ -572,54 +573,5 @@ describe("ChatContext", () => {
     });
 
     expect(mockReload).not.toHaveBeenCalled();
-  });
-
-  test("warns about AI resource usage after 35s of generation", () => {
-    vi.useFakeTimers();
-
-    (useAIChat as any).mockReturnValue({
-      ...mockUseAIChat,
-      status: "streaming",
-    });
-
-    render(
-      <ToastProvider>
-      <ChatProvider>
-        <TestComponent />
-      </ChatProvider>
-      </ToastProvider>
-    );
-
-    expect(screen.queryByText(/using lots of AI resources/i)).toBeNull();
-
-    act(() => {
-      vi.advanceTimersByTime(40_000);
-    });
-
-    // Shown exactly once.
-    expect(screen.getAllByText(/using lots of AI resources/i)).toHaveLength(1);
-  });
-
-  test("does not warn for a quick generation", () => {
-    vi.useFakeTimers();
-
-    (useAIChat as any).mockReturnValue({
-      ...mockUseAIChat,
-      status: "streaming",
-    });
-
-    render(
-      <ToastProvider>
-      <ChatProvider>
-        <TestComponent />
-      </ChatProvider>
-      </ToastProvider>
-    );
-
-    act(() => {
-      vi.advanceTimersByTime(10_000);
-    });
-
-    expect(screen.queryByText(/using lots of AI resources/i)).toBeNull();
   });
 });
