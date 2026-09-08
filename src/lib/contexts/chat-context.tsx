@@ -16,11 +16,7 @@ import { setHasAnonWork, getOrCreateAnonSessionKey } from "@/lib/anon-work-track
 import { getStoredModel } from "@/lib/model-selector";
 import { useToast } from "@/components/ui/toast";
 import { mapErrorMessage } from "@/lib/chat-errors";
-import {
-  STALL_TIMEOUT_MS,
-  RESOURCE_WARNING_TIMEOUT_MS,
-  TOAST_WARNING_DURATION_MS,
-} from "@/lib/constants";
+import { STALL_TIMEOUT_MS } from "@/lib/constants";
 
 /**
  * Props for the ChatProvider component.
@@ -177,8 +173,6 @@ export function ChatProvider({
   // True when the user (or the stall watchdog) stopped generation explicitly —
   // never auto-retry after an explicit stop.
   const userStoppedRef = useRef(false);
-  // True once the "long generation" warning toast has fired this turn.
-  const resourceWarnedRef = useRef(false);
   const { toast } = useToast();
   const prevErrorStatusRef = useRef(status);
 
@@ -235,7 +229,6 @@ export function ChatProvider({
       fixAttemptCount.current = 0;
       autoRetriedRef.current = false;
       userStoppedRef.current = false;
-      resourceWarnedRef.current = false;
       setGenerationTimedOut(false);
       setGenerationInterrupted(false);
       setIsFixingErrors(false);
@@ -245,7 +238,9 @@ export function ChatProvider({
   );
 
   // Watchdog: if no stream activity for STALL_TIMEOUT_MS while generating,
-  // abort the request so the UI doesn't hang indefinitely.
+  // abort the request so the UI doesn't hang indefinitely. Deliberately
+  // generous: Gemini 3.x thinking and server-side model rotation can be
+  // silent for minutes without anything being wrong.
   useEffect(() => {
     if (status !== "submitted" && status !== "streaming") return;
 
@@ -256,26 +251,6 @@ export function ChatProvider({
 
     return () => clearTimeout(timer);
   }, [status, messages, handleStop]);
-
-  // Resource-usage warning: after RESOURCE_WARNING_TIMEOUT_MS of a generation,
-  // nudge the user to stop or simplify. Fires once per turn and is NOT reset
-  // by stream activity, so long real-provider generations get a heads-up while
-  // it's still easy to cancel.
-  useEffect(() => {
-    if (status !== "submitted" && status !== "streaming") return;
-
-    const timer = setTimeout(() => {
-      if (resourceWarnedRef.current) return;
-      resourceWarnedRef.current = true;
-      toast(
-        "This component is using lots of AI resources—consider using the red stop button and simplifying.",
-        "info",
-        TOAST_WARNING_DURATION_MS
-      );
-    }, RESOURCE_WARNING_TIMEOUT_MS);
-
-    return () => clearTimeout(timer);
-  }, [status, toast]);
 
   const requestFix = useCallback(
     (errorText: string) => {
