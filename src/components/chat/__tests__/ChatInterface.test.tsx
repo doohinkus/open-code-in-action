@@ -54,7 +54,7 @@ vi.mock("../ModelSelector", () => ({
 }));
 
 vi.mock("@/lib/model-selector", () => ({
-  getStoredModel: vi.fn(() => "big-pickle"),
+  getStoredModel: vi.fn(() => "gemini-2.5-flash"),
 }));
 
 const mockUseChat = {
@@ -289,7 +289,7 @@ describe("mapErrorMessage", () => {
     );
   });
 
-  test("maps the Zen 504 idle timeout to the switch-models hint", () => {
+  test("maps the 504 idle timeout to the switch-models hint", () => {
     expect(
       mapErrorMessage('{"error":"Streaming response failed: [504] Upstream idle timeout exceeded"}')
     ).toBe("The AI provider timed out while streaming. Try again or switch models.");

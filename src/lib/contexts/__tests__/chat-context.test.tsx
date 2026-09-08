@@ -21,7 +21,7 @@ vi.mock("@/lib/anon-work-tracker", () => ({
 }));
 
 vi.mock("@/lib/model-selector", () => ({
-  getStoredModel: vi.fn(() => "big-pickle"),
+  getStoredModel: vi.fn(() => "gemini-2.5-flash"),
 }));
 
 // Helper component to access chat context
@@ -268,7 +268,7 @@ describe("ChatContext", () => {
       requestBody: {},
     });
 
-    expect(body.model).toBe("big-pickle");
+    expect(body.model).toBe("gemini-2.5-flash");
   });
 
   function renderAndCaptureVfsFetch() {

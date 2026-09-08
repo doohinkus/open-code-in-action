@@ -1,10 +1,8 @@
 import { describe, test, expect } from "vitest";
 import {
   GEMINI_FREE_MODELS,
-  ZEN_FREE_MODELS,
   ALL_FREE_MODELS,
   DEFAULT_MODEL,
-  ZEN_DEFAULT_MODEL,
   isAllowedModel,
   isGeminiModel,
   modelProvider,
@@ -14,9 +12,8 @@ import {
 } from "@/lib/models";
 
 describe("models", () => {
-  test("defaults to gemini-2.5-flash with a separate Zen default", () => {
+  test("defaults to gemini-2.5-flash", () => {
     expect(DEFAULT_MODEL).toBe("gemini-2.5-flash");
-    expect(ZEN_DEFAULT_MODEL).toBe("big-pickle");
   });
 
   test("lists only free models with unique ids", () => {
@@ -29,7 +26,7 @@ describe("models", () => {
 
   test("tags every model with a known provider", () => {
     for (const m of ALL_FREE_MODELS) {
-      expect(["google", "zen"]).toContain(m.provider);
+      expect(m.provider).toBe("google");
     }
   });
 
@@ -53,16 +50,15 @@ describe("models", () => {
 
   test("resolves names for known and unknown models", () => {
     expect(modelName("gemini-2.5-flash")).toBe("Gemini 2.5 Flash");
-    expect(modelName("big-pickle")).toBe("Big Pickle Free");
     expect(modelName("unknown-model")).toBe("unknown-model");
   });
 
   test("maps model ids to their providers", () => {
     expect(modelProvider("gemini-2.5-flash")).toBe("google");
-    expect(modelProvider("mimo-v2.5-free")).toBe("zen");
+    expect(modelProvider("big-pickle")).toBeUndefined();
     expect(modelProvider("hy3-free")).toBeUndefined();
     expect(isGeminiModel("gemini-2.5-flash")).toBe(true);
-    expect(isGeminiModel("mimo-v2.5-free")).toBe(false);
+    expect(isGeminiModel("big-pickle")).toBe(false);
     expect(isGeminiModel("unknown-model")).toBe(false);
   });
 
@@ -71,17 +67,12 @@ describe("models", () => {
       "gemini-2.5-flash",
       "gemini-2.5-flash-lite",
     ]);
-    expect(ZEN_FREE_MODELS.map((m) => m.id)).toEqual([
-      "big-pickle",
-      "ling-3.0-flash-fin-free",
-      "mimo-v2.5-free",
-      "nemotron-3.5-lightning-free",
-    ]);
+    expect(ALL_FREE_MODELS).toEqual(GEMINI_FREE_MODELS);
   });
 
   test("resolves free models against the unified allowlist", () => {
     expect(resolveFreeModel("gemini-2.5-flash-lite", "x")).toBe("gemini-2.5-flash-lite");
-    expect(resolveFreeModel("big-pickle", "x")).toBe("big-pickle");
+    expect(resolveFreeModel("big-pickle", "x")).toBe("x");
     expect(resolveFreeModel("gpt-5.4-mini", "x")).toBe("x");
     expect(resolveFreeModel(undefined, "x")).toBe("x");
   });
@@ -91,7 +82,6 @@ describe("models", () => {
       "gemini-2.5-flash"
     );
     expect(resolveProviderModel("big-pickle", "google", "fallback")).toBe("fallback");
-    expect(resolveProviderModel("gemini-2.5-flash", "zen", "fallback")).toBe("fallback");
-    expect(resolveProviderModel(undefined, "zen", "fallback")).toBe("fallback");
+    expect(resolveProviderModel(undefined, "google", "fallback")).toBe("fallback");
   });
 });

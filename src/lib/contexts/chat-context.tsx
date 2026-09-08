@@ -50,8 +50,8 @@ interface ChatContextType {
   generationInterrupted: boolean;
 }
 
-// Zen's free tier dies mid-stream with an idle timeout (e.g. "Streaming
-// response failed: [504] Upstream idle timeout exceeded") or ends the stream
+// The provider can die mid-stream with an idle timeout (e.g. "Streaming
+// response failed: [504] Upstream idle timeout exceeded") or end the stream
 // with no finish reason. Both are transient — one automatic retry usually
 // succeeds once the rate-limit window resets or the chain rotates models.
 function isProviderTimeoutError(raw: string): boolean {
@@ -213,7 +213,7 @@ export function ChatProvider({
     return () => clearTimeout(timer);
   }, [status, error]);
 
-  // Same recovery for streams that end with finishReason "unknown" (the Zen
+  // Same recovery for streams that end with finishReason "unknown" (the
   // connection drops without an explicit error part).
   useEffect(() => {
     if (!generationInterrupted || autoRetriedRef.current) return;
