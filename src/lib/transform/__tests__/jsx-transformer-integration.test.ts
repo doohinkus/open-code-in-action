@@ -100,7 +100,9 @@ export default () => <div>Party</div>;`],
   const result = createImportMap(files);
   const parsed = JSON.parse(result.importMap);
 
-  expect(parsed.imports).toHaveProperty("confetti", "https://esm.sh/confetti");
+  expect(parsed.imports["confetti"]).toBe(
+    "https://esm.sh/confetti?external=react,react-dom"
+  );
 });
 
 test("integration: conflicting CDN named imports from the same package both bind", () => {

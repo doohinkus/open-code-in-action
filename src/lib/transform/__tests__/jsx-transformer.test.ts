@@ -203,6 +203,27 @@ test("createImportMap resolves CSS import paths correctly", () => {
   expect(result.styles).toContain("body { background: white; }");
 });
 
+test("createImportMap keeps React external in third-party CDN imports", () => {
+  // Packages that depend on React (e.g. lucide-react) must resolve React
+  // through the pinned import map, not esm.sh's bundled copy — a second
+  // React instance crashes hooks with "Cannot read properties of null
+  // (reading 'useContext')".
+  const files = new Map([
+    ["/App.jsx", `import { Check } from 'lucide-react'; import confetti from 'confetti'; export default function App() { return <Check />; }`],
+  ]);
+
+  const result = createImportMap(files);
+  const parsed = JSON.parse(result.importMap);
+  expect(parsed.imports["lucide-react"]).toMatch(
+    /^https:\/\/esm\.sh\/lucide-react\?external=react/
+  );
+  expect(parsed.imports["confetti"]).toMatch(
+    /^https:\/\/esm\.sh\/confetti\?external=react/
+  );
+  // The pinned React entries are never overwritten by the scan.
+  expect(parsed.imports["react"]).toContain("esm.sh/react@19.2.4");
+});
+
 test("createPreviewHTML generates valid HTML", () => {
   const importMap = JSON.stringify({
     imports: {

@@ -4,6 +4,7 @@ import { streamText, appendResponseMessages } from "ai";
 import * as Sentry from "@sentry/nextjs";
 import { buildStrReplaceTool } from "@/lib/tools/str-replace";
 import { buildFileManagerTool } from "@/lib/tools/file-manager";
+import { repairToolCall } from "@/lib/tools/tool-repair";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import {
@@ -478,6 +479,11 @@ export async function POST(req: Request) {
       str_replace_editor: buildStrReplaceTool(fileSystem),
       file_manager: buildFileManagerTool(fileSystem),
     },
+    // Free models (notably Qwen/GPT-OSS) emit numbers/booleans as strings,
+    // failing the strict inline tool schemas with "Invalid tool input".
+    // Repair the known loose shapes instead of losing the turn — without
+    // this the user just sees a raw validation-error toast.
+    experimental_repairToolCall: async ({ toolCall }) => repairToolCall(toolCall),
     onFinish: async ({ response, usage, finishReason, steps }) => {
       const toolCallCount = steps.reduce(
         (acc, step) => acc + (step.toolCalls?.length ?? 0),
