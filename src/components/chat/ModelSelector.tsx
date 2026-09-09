@@ -15,7 +15,21 @@ import { useToast } from "@/components/ui/toast";
 import { ALL_FREE_MODELS, modelName } from "@/lib/models";
 import { getStoredModel, setStoredModel } from "@/lib/model-selector";
 
-const PROVIDER_GROUP = { provider: "google" as const, label: "Google Gemini" };
+const PROVIDER_LABELS: Record<string, string> = {
+  google: "Google Gemini",
+  groq: "Groq",
+};
+
+// Free models grouped by provider, following ALL_FREE_MODELS order: groups
+// appear in the order they first appear in the list (Groq first), and models
+// keep the list's fallback priority order within each group.
+const PROVIDER_GROUP_LIST = [...new Set(ALL_FREE_MODELS.map((m) => m.provider))].map(
+  (provider) => ({
+    provider,
+    label: PROVIDER_LABELS[provider] ?? provider,
+    models: ALL_FREE_MODELS.filter((m) => m.provider === provider),
+  })
+);
 
 export function ModelSelector() {
   const { toast } = useToast();
@@ -43,16 +57,20 @@ export function ModelSelector() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel>Model</DropdownMenuLabel>
-        <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          {PROVIDER_GROUP.label}
-        </DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={model} onValueChange={handleSelect}>
-          {ALL_FREE_MODELS.filter((m) => m.provider === PROVIDER_GROUP.provider).map((m) => (
-            <DropdownMenuRadioItem key={m.id} value={m.id}>
-              <span className="truncate">{m.name}</span>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+        {PROVIDER_GROUP_LIST.map((group) => (
+          <div key={group.provider}>
+            <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {group.label}
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={model} onValueChange={handleSelect}>
+              {group.models.map((m) => (
+                <DropdownMenuRadioItem key={m.id} value={m.id}>
+                  <span className="truncate">{m.name}</span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </div>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

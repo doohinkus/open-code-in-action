@@ -491,12 +491,19 @@ export function createImportMap(files: Map<string, string>): {
   errors: Array<{ path: string; error: string }>;
   bundleCode: string;
 } {
+  // React is pinned to an exact, already-built version. The loose "@19"
+  // alias redirects to the newest release, which routes through esm.sh's
+  // on-demand build pipeline — that endpoint reliably times out (observed:
+  // 408s), leaving the preview blank. Exact version URLs are served from
+  // esm.sh's CDN cache instantly. Bump deliberately, and only after testing
+  // the new URL set renders.
+  const REACT_VERSION = "19.2.4";
   const imports: Record<string, string> = {
-    react: "https://esm.sh/react@19",
-    "react-dom": "https://esm.sh/react-dom@19",
-    "react-dom/client": "https://esm.sh/react-dom@19/client",
-    "react/jsx-runtime": "https://esm.sh/react@19/jsx-runtime",
-    "react/jsx-dev-runtime": "https://esm.sh/react@19/jsx-dev-runtime",
+    react: `https://esm.sh/react@${REACT_VERSION}`,
+    "react-dom": `https://esm.sh/react-dom@${REACT_VERSION}`,
+    "react-dom/client": `https://esm.sh/react-dom@${REACT_VERSION}/client`,
+    "react/jsx-runtime": `https://esm.sh/react@${REACT_VERSION}/jsx-runtime`,
+    "react/jsx-dev-runtime": `https://esm.sh/react@${REACT_VERSION}/jsx-dev-runtime`,
   };
 
   const existingFiles = new Set(files.keys());
@@ -518,7 +525,12 @@ export function createImportMap(files: Map<string, string>): {
           : imp.split("/")[0];
         if (!allThirdPartyImports.has(baseName)) {
           allThirdPartyImports.add(baseName);
-          imports[imp] = `https://esm.sh/${imp}`;
+          // Don't override the pinned React entries — a loose
+          // "https://esm.sh/react" overwrites them with the flaky
+          // on-demand-build alias (observed 408s → blank preview).
+          if (!imports[imp]) {
+            imports[imp] = `https://esm.sh/${imp}`;
+          }
         }
       }
     }
@@ -534,7 +546,9 @@ export function createImportMap(files: Map<string, string>): {
           : imp.split("/")[0];
         if (!allThirdPartyImports.has(baseName)) {
           allThirdPartyImports.add(baseName);
-          imports[imp] = `https://esm.sh/${imp}`;
+          if (!imports[imp]) {
+            imports[imp] = `https://esm.sh/${imp}`;
+          }
         }
       }
     }
@@ -934,45 +948,49 @@ ${rootCentering}    }
     window.__bundleUrl = URL.createObjectURL(__blob);
   </script>
   <script${nonce ? ` nonce="${nonce}"` : ''} type="module">
-    import React from 'react';
-    import ReactDOM from 'react-dom/client';
-
     const __postError = (message, stack) => {
       try {
         parent.postMessage({ type: 'uigen:error', message: String(message), stack: stack ? String(stack) : '' }, '*');
       } catch (e) {}
     };
 
-    class ErrorBoundary extends React.Component {
-      constructor(props) {
-        super(props);
-        this.state = { hasError: false, error: null, componentStack: null };
-      }
-
-      static getDerivedStateFromError(error) {
-        return { hasError: true, error };
-      }
-
-      componentDidCatch(error, errorInfo) {
-        console.error('Error caught by boundary:', error, errorInfo);
-        const stack = errorInfo && errorInfo.componentStack ? String(errorInfo.componentStack) : null;
-        this.setState({ componentStack: stack });
-        __postError(error && error.message ? error.message : String(error), stack);
-      }
-
-      render() {
-        if (this.state.hasError) {
-          const children = [
-            React.createElement('h2', null, 'Something went wrong'),
-            React.createElement('pre', null, this.state.error && this.state.error.toString ? this.state.error.toString() : String(this.state.error))
-          ];
-          if (this.state.componentStack) {
-            children.push(React.createElement('pre', { className: 'error-stack' }, this.state.componentStack));
-          }
-          return React.createElement('div', { className: 'error-boundary' }, children);
+    // React/ReactDOM are imported dynamically inside loadApp rather than
+    // statically at the top of this module: a static import failure (esm.sh
+    // occasionally answers 408/timeouts) kills the whole module script before
+    // any try/catch exists, leaving a blank preview with no error report.
+    function __makeErrorBoundary(React) {
+      class ErrorBoundary extends React.Component {
+        constructor(props) {
+          super(props);
+          this.state = { hasError: false, error: null, componentStack: null };
         }
-        return this.props.children;
+
+        static getDerivedStateFromError(error) {
+          return { hasError: true, error };
+        }
+
+        componentDidCatch(error, errorInfo) {
+          console.error('Error caught by boundary:', error, errorInfo);
+          const stack = errorInfo && errorInfo.componentStack ? String(errorInfo.componentStack) : null;
+          this.setState({ componentStack: stack });
+          __postError(error && error.message ? error.message : String(error), stack);
+        }
+
+        render() {
+          if (this.state.hasError) {
+            const children = [
+              React.createElement('h2', null, 'Something went wrong'),
+              React.createElement('pre', null, this.state.error && this.state.error.toString ? this.state.error.toString() : String(this.state.error))
+            ];
+            if (this.state.componentStack) {
+              children.push(React.createElement('pre', { className: 'error-stack' }, this.state.componentStack));
+            }
+            return React.createElement('div', { className: 'error-boundary' }, children);
+          }
+          return this.props.children;
+        }
       }
+      return ErrorBoundary;
     }
 
     const __escapeHtml = (str) => str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
@@ -985,19 +1003,56 @@ ${rootCentering}    }
       __postError(reason && reason.message ? reason.message : String(reason), reason && reason.stack);
     });
 
+    // CDN hiccups (esm.sh 408/timeouts) are transient — retry both the React
+    // libraries and the bundle import a few times before giving up.
+    const __MAX_ATTEMPTS = 3;
+    const __RETRY_DELAY_MS = 1500;
+    const __sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    async function __coreLibs() {
+      const results = await Promise.all([
+        import('react'),
+        import('react-dom/client'),
+      ]);
+      const React = results[0].default;
+      const ReactDOM = results[1].default;
+      if (!React || !ReactDOM) {
+        throw new Error('React runtime loaded without a default export');
+      }
+      return { React, ReactDOM };
+    }
+
     async function loadApp() {
+      let React, ReactDOM, mod;
       try {
-        const mod = await import(window.__bundleUrl);
+        for (let attempt = 1; attempt <= __MAX_ATTEMPTS; attempt++) {
+          try {
+            ({ React, ReactDOM } = await __coreLibs());
+            mod = await import(window.__bundleUrl);
+            break;
+          } catch (attemptError) {
+            if (attempt === __MAX_ATTEMPTS) throw attemptError;
+            await __sleep(__RETRY_DELAY_MS);
+          }
+        }
+      } catch (error) {
+        if (window.__bundleUrl) URL.revokeObjectURL(window.__bundleUrl);
+        console.error('Failed to load app:', error);
+        __postError(error && error.message ? error.message : String(error), error && error.stack);
+        document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error && error.toString ? error.toString() : String(error)) + '</pre></div>';
+        return;
+      }
+
+      try {
         URL.revokeObjectURL(window.__bundleUrl);
         const App = mod.default || mod.App;
         if (!App) {
           throw new Error('No default export or App export found in entry point');
         }
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(React.createElement(ErrorBoundary, null, React.createElement(App)));
+        root.render(React.createElement(__makeErrorBoundary(React), null, React.createElement(App)));
       } catch (error) {
-        if (window.__bundleUrl) URL.revokeObjectURL(window.__bundleUrl);
-        console.error('Failed to load app:', error);
+        console.error('Failed to render app:', error);
         __postError(error && error.message ? error.message : String(error), error && error.stack);
         document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error && error.toString ? error.toString() : String(error)) + '</pre></div>';
       }

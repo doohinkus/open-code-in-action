@@ -69,6 +69,17 @@ export const MAX_TOKENS = 8_000;
 export const MAX_TOKENS_GEMINI_3 = 24_000;
 
 /**
+ * Maximum tokens per AI call for Groq free-tier models. Groq bills prompt +
+ * completion tokens against tight free-tier token-per-minute quotas, so this
+ * stays far below the Gemini 3.x cap. Truncation mid-tool-call is costly —
+ * cut-off JSON arguments fail to parse and kill the turn ("Failed to parse
+ * tool call arguments as JSON") — and gpt-oss reasoning tokens count toward
+ * this cap, so it must leave headroom above typical component builds.
+ * Override with MAX_TOKENS_GROQ env var if Groq raises provider limits.
+ */
+export const MAX_TOKENS_GROQ_DEFAULT = 16_384;
+
+/**
  * Maximum tokens for test-connection requests (minimal response).
  */
 export const MAX_TOKENS_TEST = 64;

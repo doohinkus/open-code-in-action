@@ -163,6 +163,31 @@ describe("createGemini3CompatFetch", () => {
     expect(body.contents[0].parts[0].thoughtSignature).toBe("block-sig");
   });
 
+  test("always gives bare cross-provider functionCall parts a signature", async () => {
+    // History built by a different provider (e.g. Groq) contains functionCall
+    // parts Gemini never generated. A missing signature is a hard 400; a
+    // mismatched one is tolerated. So every bare call must leave the bridge
+    // with either a real harvested signature or the documented dummy
+    // ("skip_thought_signature_validator") — never bare.
+    const f = createGemini3CompatFetch();
+    const mocked = stubFetch(async () => new Response("{}"));
+
+    await f(
+      `${BASE}/gemini-3.6-flash:streamGenerateContent?alt=sse`,
+      postInit({
+        contents: [
+          { role: "model", parts: [{ functionCall: { name: "str_replace_editor", args: {} } }] },
+        ],
+      })
+    );
+
+    const init = mocked.mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(init.body as string);
+    const part = body.contents[0].parts[0];
+    expect(typeof part.thoughtSignature).toBe("string");
+    expect(part.thoughtSignature.length).toBeGreaterThan(0);
+  });
+
   test("never breaks the caller's stream when harvesting fails", async () => {
     const broken = new Response(
       new ReadableStream<Uint8Array>({

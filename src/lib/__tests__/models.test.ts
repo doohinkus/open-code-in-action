@@ -1,7 +1,9 @@
 import { describe, test, expect } from "vitest";
 import {
   GEMINI_FREE_MODELS,
+  GROQ_FREE_MODELS,
   ALL_FREE_MODELS,
+  DEFAULT_GROQ_MODEL,
   DEFAULT_MODEL,
   fallbackModelIds,
   isAllowedModel,
@@ -18,6 +20,10 @@ describe("models", () => {
     expect(DEFAULT_MODEL).toBe("gemini-3.6-flash");
   });
 
+  test("defaults Groq to gpt-oss-120b", () => {
+    expect(DEFAULT_GROQ_MODEL).toBe("openai/gpt-oss-120b");
+  });
+
   test("lists only free models with unique ids", () => {
     const ids = ALL_FREE_MODELS.map((m) => m.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -28,7 +34,7 @@ describe("models", () => {
 
   test("tags every model with a known provider", () => {
     for (const m of ALL_FREE_MODELS) {
-      expect(m.provider).toBe("google");
+      expect(["google", "groq"]).toContain(m.provider);
     }
   });
 
@@ -57,9 +63,11 @@ describe("models", () => {
 
   test("maps model ids to their providers", () => {
     expect(modelProvider("gemini-3.5-flash")).toBe("google");
+    expect(modelProvider("openai/gpt-oss-120b")).toBe("groq");
     expect(modelProvider("big-pickle")).toBeUndefined();
     expect(modelProvider("hy3-free")).toBeUndefined();
     expect(isGeminiModel("gemini-3.5-flash")).toBe(true);
+    expect(isGeminiModel("openai/gpt-oss-120b")).toBe(false);
     expect(isGeminiModel("big-pickle")).toBe(false);
     expect(isGeminiModel("unknown-model")).toBe(false);
   });
@@ -70,7 +78,12 @@ describe("models", () => {
       "gemini-3.5-flash",
       "gemini-3.5-flash-lite",
     ]);
-    expect(ALL_FREE_MODELS).toEqual(GEMINI_FREE_MODELS);
+    expect(GROQ_FREE_MODELS.map((m) => m.id)).toEqual([
+      "openai/gpt-oss-120b",
+      "openai/gpt-oss-20b",
+      "qwen/qwen3.6-27b",
+    ]);
+    expect(ALL_FREE_MODELS).toEqual([...GROQ_FREE_MODELS, ...GEMINI_FREE_MODELS]);
   });
 
   test("resolves free models against the unified allowlist", () => {
@@ -128,5 +141,13 @@ describe("fallbackModelIds", () => {
         expect(supportsThinkingBudget(id)).toBe(supportsThinkingBudget(m.id));
       }
     }
+  });
+
+  test("returns Gemini models only (cross-provider chains are built separately)", () => {
+    expect(fallbackModelIds("openai/gpt-oss-120b")).toEqual([
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+    ]);
   });
 });

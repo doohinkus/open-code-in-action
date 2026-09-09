@@ -6,11 +6,16 @@ import { buildStrReplaceTool } from "@/lib/tools/str-replace";
 import { buildFileManagerTool } from "@/lib/tools/file-manager";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { buildLanguageModel, isGoogleConfigured } from "@/lib/provider";
+import {
+  buildLanguageModel,
+  isGoogleConfigured,
+  isGroqConfigured,
+  groqMaxTokens,
+} from "@/lib/provider";
 import { generationPrompt } from "@/lib/prompts/generation";
 import { prepareModelMessages } from "@/lib/message-compaction";
 import { logger, getRequestId, hashIp } from "@/lib/observability/logger";
-import { isAllowedModel, supportsThinkingBudget } from "@/lib/models";
+import { isAllowedModel, modelProvider, supportsThinkingBudget } from "@/lib/models";
 import {
   isAllowedOrigin,
   allowedOriginFor,
@@ -126,8 +131,8 @@ function hasRealProvider(): boolean {
   if (process.env.FORCE_MOCK_PROVIDER?.trim() === "1") {
     return false;
   }
-  // Real generation is available when Google AI Studio (Gemini) is configured.
-  return isGoogleConfigured();
+  // Real generation is available when any free provider has an API key.
+  return isGoogleConfigured() || isGroqConfigured();
 }
 
 // Stream errors can be Error instances or plain provider objects (e.g.
@@ -408,14 +413,18 @@ export async function POST(req: Request) {
   // steps to prevent its canned 4-step sequence from repeating.
   const maxSteps = isTestRequest ? 1 : hasRealProvider() ? MAX_STEPS_REAL : MAX_STEPS_MOCK;
   // Cap per-call output so a single step can't run away; test requests stay
-  // tiny. 8k is plenty for a full component/game step on 2.5/mock, while
-  // Gemini 3.x needs more headroom because its (unavoidable) thinking tokens
-  // count against the cap.
+  // tiny. The cap is chosen for the primary's provider: 8k is plenty on
+  // 2.5/mock, Gemini 3.x needs more headroom because its (unavoidable)
+  // thinking tokens count against the cap, and Groq's free tier caps
+  // completion far lower. Cross-provider fallback members substitute their
+  // own cap per call (createRateLimitFallbackModel).
   const maxTokens = isTestRequest
     ? MAX_TOKENS_TEST
-    : activeModelId && supportsThinkingBudget(activeModelId)
-      ? MAX_TOKENS
-      : MAX_TOKENS_GEMINI_3;
+    : activeModelId && modelProvider(activeModelId) === "groq"
+      ? groqMaxTokens()
+      : activeModelId && supportsThinkingBudget(activeModelId)
+        ? MAX_TOKENS
+        : MAX_TOKENS_GEMINI_3;
 
   const reasoningOptions: Record<string, any> = {};
   if (

@@ -136,10 +136,15 @@ test("createImportMap includes React CDN imports", () => {
   const result = createImportMap(files);
   const parsed = JSON.parse(result.importMap);
 
-  expect(parsed.imports).toHaveProperty("react", "https://esm.sh/react@19");
-  expect(parsed.imports).toHaveProperty("react-dom", "https://esm.sh/react-dom@19");
-  expect(parsed.imports).toHaveProperty("react-dom/client", "https://esm.sh/react-dom@19/client");
-  expect(parsed.imports).toHaveProperty("react/jsx-runtime", "https://esm.sh/react@19/jsx-runtime");
+  // React is pinned to an exact version (see createImportMap): loose "@19"
+  // aliases hit esm.sh's flaky on-demand build pipeline.
+  expect(parsed.imports).toMatchObject({
+    react: expect.stringMatching(/^https:\/\/esm\.sh\/react@\d+\.\d+\.\d+$/),
+    "react-dom": expect.stringMatching(/^https:\/\/esm\.sh\/react-dom@\d+\.\d+\.\d+$/),
+    "react-dom/client": expect.stringMatching(/^https:\/\/esm\.sh\/react-dom@\d+\.\d+\.\d+\/client$/),
+    "react/jsx-runtime": expect.stringMatching(/^https:\/\/esm\.sh\/react@\d+\.\d+\.\d+\/jsx-runtime$/),
+  });
+  expect(parsed.imports["react"]).toContain("esm.sh/react@19.2.4");
 });
 
 test("createImportMap transforms JavaScript and TypeScript files", () => {

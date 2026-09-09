@@ -270,11 +270,43 @@ test("handles str_replace_editor create command", () => {
 
   expect(mockFileSystem.createFileWithParents).toHaveBeenCalledWith(
     "/test.js",
-    "console.log('test');"
+    "console.log('test');",
+    false
   );
   expect(mockFileSystem.createFile).toHaveBeenCalledWith(
     "/test.js",
     "console.log('test');"
+  );
+  expect(result.current.refreshTrigger).toBe(initialTrigger + 1);
+});
+
+test("passes overwrite through for a whole-file replacement", () => {
+  mockFileSystem.createFileWithParents.mockReturnValue("File replaced");
+  mockFileSystem.createFile.mockReturnValue({});
+  mockFileSystem.readFile.mockReturnValue(null);
+
+  const { result } = renderHook(() => useFileSystem(), {
+    wrapper: ({ children }) => <FileSystemProvider>{children}</FileSystemProvider>,
+  });
+
+  const initialTrigger = result.current.refreshTrigger;
+
+  act(() => {
+    result.current.handleToolCall({
+      toolName: "str_replace_editor",
+      args: {
+        command: "create",
+        path: "/App.jsx",
+        file_text: "export default function App() { return null; }",
+        overwrite: true,
+      },
+    });
+  });
+
+  expect(mockFileSystem.createFileWithParents).toHaveBeenCalledWith(
+    "/App.jsx",
+    "export default function App() { return null; }",
+    true
   );
   expect(result.current.refreshTrigger).toBe(initialTrigger + 1);
 });

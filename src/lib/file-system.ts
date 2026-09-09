@@ -495,10 +495,20 @@ export class VirtualFileSystem {
     );
   }
 
-  createFileWithParents(path: string, content: string = ""): string {
-    // Check if file already exists
+  createFileWithParents(path: string, content: string = "", overwrite = false): string {
+    // Check if file already exists. An explicit overwrite replaces the whole
+    // file (useful when regenerating a component); otherwise keep the guard
+    // that steers the model toward targeted str_replace edits.
     if (this.exists(path)) {
-      return `Error: File already exists: ${path}`;
+      if (!overwrite) {
+        return (
+          `Error: File already exists: ${path}. ` +
+          `To replace it entirely, call create again with "overwrite": true. ` +
+          `To make a small edit, use the str_replace command instead.`
+        );
+      }
+      this.updateFile(path, content);
+      return `File replaced: ${path}`;
     }
 
     // Create parent directories if they don't exist
