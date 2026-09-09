@@ -478,6 +478,20 @@ export { __AppComponent as App };
   };
 }
 
+// esm.sh URL for a third-party (bare) import. `?external=react,react-dom`
+// makes esm.sh emit bare-specifier imports for React libraries instead of
+// bundling their own React copy, so everything resolves through the pinned
+// import map's single React instance. Without it, packages like lucide-react
+// ship a second React and crash with "Cannot read properties of null
+// (reading 'useContext')". Note: subpath specifiers in the list (e.g.
+// react/jsx-runtime) make esm.sh 404 the URL — only bare packages are
+// accepted there; jsx-runtime is only referenced by bundled code, which
+// keeps react external transitively anyway.
+const ESM_SH_EXTERNAL = "react,react-dom";
+function esmShUrl(importPath: string): string {
+  return `https://esm.sh/${importPath}?external=${ESM_SH_EXTERNAL}`;
+}
+
 /**
  * Creates an import map and bundled code from a set of files.
  * Handles local imports, CSS imports, and CDN imports (via esm.sh).
@@ -529,7 +543,7 @@ export function createImportMap(files: Map<string, string>): {
           // "https://esm.sh/react" overwrites them with the flaky
           // on-demand-build alias (observed 408s → blank preview).
           if (!imports[imp]) {
-            imports[imp] = `https://esm.sh/${imp}`;
+            imports[imp] = esmShUrl(imp);
           }
         }
       }
@@ -547,7 +561,7 @@ export function createImportMap(files: Map<string, string>): {
         if (!allThirdPartyImports.has(baseName)) {
           allThirdPartyImports.add(baseName);
           if (!imports[imp]) {
-            imports[imp] = `https://esm.sh/${imp}`;
+            imports[imp] = esmShUrl(imp);
           }
         }
       }

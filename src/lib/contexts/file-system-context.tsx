@@ -186,13 +186,14 @@ export function FileSystemProvider({
         switch (command) {
           case "create":
             if (path && file_text !== undefined) {
-              // overwrite must mirror the server tool: a create with
-              // overwrite replaces the file, otherwise an existing file
+              // overwrite must mirror the server tool (string "true" is
+              // accepted for models that emit booleans as strings): a create
+              // with overwrite replaces the file, otherwise an existing file
               // yields the "already exists" error and nothing is applied.
               const result = fileSystem.createFileWithParents(
                 path,
                 file_text,
-                overwrite === true
+                overwrite === true || overwrite === "true"
               );
               if (!result.startsWith("Error:")) {
                 createFile(path, file_text);
