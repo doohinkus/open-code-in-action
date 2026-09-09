@@ -376,12 +376,23 @@ test("createFileWithParents creates parent directories", () => {
   expect(fs.readFile("/src/components/Button.tsx")).toBe("content");
 });
 
-test("createFileWithParents returns error for existing file", () => {
+test("createFileWithParents returns a guidance error for existing files", () => {
   const fs = new VirtualFileSystem();
   fs.createFile("/test.txt", "content");
 
   const result = fs.createFileWithParents("/test.txt", "new content");
-  expect(result).toBe("Error: File already exists: /test.txt");
+  expect(result).toContain("Error: File already exists: /test.txt");
+  expect(result).toContain("overwrite");
+  expect(fs.readFile("/test.txt")).toBe("content");
+});
+
+test("createFileWithParents overwrites an existing file when asked", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "old");
+
+  const result = fs.createFileWithParents("/test.txt", "new", true);
+  expect(result).toBe("File replaced: /test.txt");
+  expect(fs.readFile("/test.txt")).toBe("new");
 });
 
 test("replaceInFile replaces all occurrences", () => {

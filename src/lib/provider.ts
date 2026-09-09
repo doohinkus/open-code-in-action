@@ -1,19 +1,30 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
   LanguageModelV1,
   LanguageModelV1StreamPart,
   LanguageModelV1Message,
 } from "@ai-sdk/provider";
 import {
+  ALL_FREE_MODELS,
   DEFAULT_MODEL,
-  fallbackModelIds,
+  DEFAULT_GROQ_MODEL,
   modelProvider,
   resolveProviderModel,
+  supportsThinkingBudget,
 } from "./models";
 import { createGemini3CompatFetch } from "./gemini-3-compat";
+import { createReasoningNormalizingFetch } from "./reasoning-normalizer";
+import { MAX_TOKENS_GROQ_DEFAULT } from "./constants";
 
 // Cache for provider instances to avoid recreating them on every request
 const providerInstanceCache = new Map<string, LanguageModelV1>();
+
+// Test helper: provider instances are cached module-globally, and tests must
+// start from a clean cache so env-dependent behavior is observed.
+export function resetProviderInstanceCache(): void {
+  providerInstanceCache.clear();
+}
 
 /**
  * Mock language model for testing and fallback scenarios.
@@ -76,7 +87,6 @@ export class MockLanguageModel implements LanguageModelV1 {
     "Unable to complete the component. This application runs on free tier models " +
     "which have computation and usage limitations, and the AI provider was " +
     "rate-limited or timed out. Please try again later or switch to a different free model.";
-
   private getFallbackMessageCode(): string {
     return `export default function App() {
   return (
@@ -225,7 +235,7 @@ export class MockLanguageModel implements LanguageModelV1 {
 
     // Step 3: Create App.jsx
     if (toolMessageCount === 0) {
-      const text = `This is a static response. Configure a Google AI Studio key (GOOGLE_GENERATIVE_AI_API_KEY) in .env to generate with free Gemini models, or keep mock mode for canned components. Let me create an App.jsx file to display the component.`;
+      const text = `This is a static response. Configure a free provider key in .env to generate real components — Google AI Studio (GOOGLE_GENERATIVE_AI_API_KEY) for Gemini, or Groq (GROQ_API_KEY) — or keep mock mode for canned components. Let me create an App.jsx file to display the component.`;
       for (const char of text) {
         yield { type: "text-delta", textDelta: char };
         await this.delay(15);
@@ -596,9 +606,10 @@ export default function App() {
  * Gets the language model for a given model ID.
  * Returns mock provider if forced or if no free provider is configured.
  *
- * Provider: Google AI Studio (Gemini) — the only supported real provider.
- * A specific configured model id (e.g. the UI selection) always wins when the
- * provider is available; otherwise the Gemini default is used.
+ * Providers: Google AI Studio (Gemini) is primary; Groq is the secondary
+ * OpenAI-compatible provider. A specific configured model id (e.g. the UI
+ * selection) always wins when its provider is available; otherwise a
+ * provider default is served.
  *
  * @param modelId - Optional model ID override
  * @returns LanguageModelV1 instance
@@ -611,30 +622,43 @@ export function getLanguageModel(modelId?: string): LanguageModelV1 {
     return new MockLanguageModel("mock-" + DEFAULT_MODEL);
   }
 
-  if (!isGoogleConfigured()) {
+  if (!isProviderConfigured("google") && !isProviderConfigured("groq")) {
     console.log(
-      "No AI provider is configured (GOOGLE_GENERATIVE_AI_API_KEY). Using " +
-        "the mock provider — responses will be canned."
+      "No AI provider is configured (GOOGLE_GENERATIVE_AI_API_KEY / GROQ_API_KEY). " +
+        "Using the mock provider — responses will be canned."
     );
     return new MockLanguageModel("mock-" + DEFAULT_MODEL);
   }
 
   const requested = modelId?.trim() || undefined;
-  if (requested && modelProvider(requested) === "google") {
-    return buildGoogleModel(requested);
+  if (requested) {
+    const requestedProvider = modelProvider(requested);
+    if (requestedProvider === "google") {
+      return buildGoogleModel(requested);
+    }
+    if (requestedProvider === "groq") {
+      if (isProviderConfigured("groq")) {
+        return buildGroqModel(requested);
+      }
+      console.log(`Groq model "${requested}" requested but GROQ_API_KEY is not set.`);
+    }
   }
 
-  // The requested model isn't a free Gemini model (or nothing was requested):
-  // serve the Gemini default.
-  const envModel = process.env.GEMINI_MODEL?.trim();
-  const resolved = resolveProviderModel(envModel, "google", DEFAULT_MODEL);
-  if (envModel && envModel !== resolved) {
-    console.log(
-      `GEMINI_MODEL "${envModel}" is not a free Gemini model. ` +
-        `Falling back to "${resolved}".`
-    );
+  // The requested model isn't a selectable free model, or belongs to an
+  // unconfigured provider: serve the default of a configured provider.
+  if (isProviderConfigured("google")) {
+    const envModel = process.env.GEMINI_MODEL?.trim();
+    const resolved = resolveProviderModel(envModel, "google", DEFAULT_MODEL);
+    if (envModel && envModel !== resolved) {
+      console.log(
+        `GEMINI_MODEL "${envModel}" is not a free Gemini model. ` +
+          `Falling back to "${resolved}".`
+      );
+    }
+    return buildGoogleModel(resolved);
   }
-  return buildGoogleModel(resolved);
+
+  return buildGroqModel(DEFAULT_GROQ_MODEL);
 }
 
 function googleApiKey(): string | undefined {
@@ -673,6 +697,72 @@ export function buildGoogleModel(modelId: string): LanguageModelV1 {
 
   return model;
 }
+
+const GROQ_BASE_URL_DEFAULT = "https://api.groq.com/openai/v1";
+
+function groqApiKey(): string | undefined {
+  return process.env.GROQ_API_KEY?.trim() || undefined;
+}
+
+export function isGroqConfigured(): boolean {
+  return !!groqApiKey();
+}
+
+function groqBaseUrl(): string {
+  const raw = process.env.GROQ_BASE_URL?.trim();
+  return raw || GROQ_BASE_URL_DEFAULT;
+}
+
+export function buildGroqModel(modelId: string): LanguageModelV1 {
+  const cacheKey = "groq:" + modelId;
+  const cached = providerInstanceCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const apiKey = groqApiKey();
+  if (!apiKey) {
+    throw new Error("GROQ_API_KEY is not set");
+  }
+  const provider = createOpenAICompatible({
+    name: "groq",
+    baseURL: groqBaseUrl(),
+    apiKey,
+    // Groq's OpenAI-compatible endpoints stream reasoning as `reasoning`,
+    // which the pinned @ai-sdk/openai-compatible doesn't recognize (it looks
+    // for `reasoning_content`). The normalizer renames the field so thought
+    // summaries stream to the UI; it is a no-op when the field is absent.
+    fetch: createReasoningNormalizingFetch(),
+  });
+  const model = provider.languageModel(modelId);
+
+  providerInstanceCache.set(cacheKey, model);
+
+  return model;
+}
+
+// Per-call token cap for Groq models. Groq caps max_completion_tokens far
+// below the Gemini 3.x limit, so Groq chain members must not inherit the
+// request-level cap chosen for a Gemini primary.
+export function groqMaxTokens(): number {
+  const raw = process.env.MAX_TOKENS_GROQ?.trim();
+  const parsed = raw ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : MAX_TOKENS_GROQ_DEFAULT;
+}
+
+// Whether a free provider has its API key configured on the server.
+export function isProviderConfigured(provider: "google" | "groq"): boolean {
+  return provider === "google" ? isGoogleConfigured() : isGroqConfigured();
+}
+
+// Chain member helpers. Cross-provider members declare a per-model
+// maxTokens cap because request-level caps differ per provider (e.g. Groq
+// free-tier completion caps are far lower than the Gemini 3.x cap).
+const googleMember = (id: string): FallbackSpec => ({ model: buildGoogleModel(id) });
+const groqMember = (id: string): FallbackSpec => ({
+  model: buildGroqModel(id),
+  maxTokens: groqMaxTokens(),
+});
 
 // Provider errors surface in several shapes: APICallError (an Error subclass
 // with a statusCode), Error instances, or plain provider objects. The plain
@@ -765,7 +855,7 @@ export function isRetryableUpstreamError(error: unknown): boolean {
     if (typeof record.statusCode === "number" && record.statusCode >= 500) return true;
   }
   const message = errorMessage(error);
-  return /unavailable|overloaded|server error|server_error|503|502|504|idle timeout|timed out/i.test(message);
+  return /unavailable|overloaded|server error|server_error|503|502|504|idle timeout|timed out|missing a thought_signature/i.test(message);
 }
 
 /**
@@ -791,21 +881,54 @@ export function isRetryableUpstreamError(error: unknown): boolean {
  * On retryable errors, rotates through the fallback chain.
  * Tracks failed models to skip them on subsequent streamText steps.
  *
+ * Chain entries may optionally declare a per-model `maxTokens` override:
+ * `maxTokens` is a request-level streamText setting applied to whichever
+ * chain member serves the call, but providers differ (e.g. Groq free-tier
+ * completion caps vs the Gemini 3.x cap), so cross-provider members declare
+ * their own cap and the wrapper substitutes it into every call.
+ *
  * @param primary - The primary language model
- * @param fallbacks - Array of fallback models to try on failure
+ * @param fallbacks - Fallback specs (model, or { model, maxTokens })
  * @returns Wrapped model with automatic failover
  */
+export interface FallbackChainMember {
+  model: LanguageModelV1;
+  maxTokens?: number;
+}
+
+export type FallbackSpec = LanguageModelV1 | FallbackChainMember;
+
+function toChainMember(spec: FallbackSpec): FallbackChainMember {
+  if ("model" in spec) return spec;
+  return { model: spec as LanguageModelV1 };
+}
+
+// Substitute a member-declared maxTokens cap into the request options; a
+// member without one keeps the request-level setting untouched.
+function optionsFor(
+  member: FallbackChainMember,
+  options: Parameters<LanguageModelV1["doStream"]>[0]
+) {
+  if (member.maxTokens === undefined) return options;
+  return { ...options, maxTokens: member.maxTokens };
+}
+
 export function createRateLimitFallbackModel(
   primary: LanguageModelV1,
-  fallbacks: LanguageModelV1[]
+  fallbacks: FallbackSpec[]
 ): LanguageModelV1 {
   if (primary.provider === "mock") return primary;
-  const chain = [primary, ...fallbacks];
+  const entries = [toChainMember(primary), ...fallbacks.map(toChainMember)];
 
-  const logRotation = (from: LanguageModelV1, to: LanguageModelV1) => {
+  const logRotation = (
+    from: { provider: string; modelId: string },
+    to: { provider: string; modelId: string },
+    error?: unknown
+  ) => {
     console.log(
-      `Model "${from.provider}:${from.modelId}" failed; ` +
-        `trying "${to.provider}:${to.modelId}".`
+      `Model "${from.provider}:${from.modelId}" failed` +
+        (error ? ` (${errorMessage(error)})` : "") +
+        `; trying "${to.provider}:${to.modelId}".`
     );
   };
 
@@ -817,15 +940,15 @@ export function createRateLimitFallbackModel(
   // The first chain index that hasn't failed yet. Since the mock fallback is
   // last and never fails, this always resolves.
   const firstUsableIndex = (): number => {
-    for (let i = 0; i < chain.length; i++) {
+    for (let i = 0; i < entries.length; i++) {
       if (!failedIndices.has(i)) return i;
     }
-    return chain.length - 1;
+    return entries.length - 1;
   };
 
   // The next chain index after `after` that hasn't failed yet, or -1.
   const nextUsableIndex = (after: number): number => {
-    for (let i = after + 1; i < chain.length; i++) {
+    for (let i = after + 1; i < entries.length; i++) {
       if (!failedIndices.has(i)) return i;
     }
     return -1;
@@ -840,16 +963,16 @@ export function createRateLimitFallbackModel(
 
     async doGenerate(options) {
       let lastError: unknown = null;
-      for (let i = firstUsableIndex(); i < chain.length; i++) {
+      for (let i = firstUsableIndex(); i < entries.length; i++) {
         if (failedIndices.has(i)) continue;
         try {
-          return await chain[i].doGenerate(options);
+          return await entries[i].model.doGenerate(optionsFor(entries[i], options));
         } catch (error) {
           if (!isRetryableUpstreamError(error)) throw error;
           failedIndices.add(i);
           lastError = error;
           const next = nextUsableIndex(i);
-          if (next !== -1) logRotation(chain[i], chain[next]);
+          if (next !== -1) logRotation(entries[i].model, entries[next].model, error);
         }
       }
       throw lastError;
@@ -863,13 +986,13 @@ export function createRateLimitFallbackModel(
         // call fails before any chunk is produced). Rotate immediately.
         let result: Awaited<ReturnType<LanguageModelV1["doStream"]>>;
         try {
-          result = await chain[index].doStream(options);
+          result = await entries[index].model.doStream(optionsFor(entries[index], options));
         } catch (error) {
           if (isRetryableUpstreamError(error)) {
             failedIndices.add(index);
             const next = nextUsableIndex(index);
             if (next !== -1) {
-              logRotation(chain[index], chain[next]);
+              logRotation(entries[index].model, entries[next].model, error);
               return startModelStream(next);
             }
           }
@@ -914,7 +1037,11 @@ export function createRateLimitFallbackModel(
                   if (!contentStarted && isRetryableUpstreamError(value.error)) {
                     failedIndices.add(index);
                     if (nextUsableIndex(index) !== -1) {
-                      logRotation(chain[index], chain[nextUsableIndex(index)]);
+                      logRotation(
+                        entries[index].model,
+                        entries[nextUsableIndex(index)].model,
+                        value.error
+                      );
                       return pumpNext();
                     }
                   }
@@ -942,7 +1069,11 @@ export function createRateLimitFallbackModel(
                 if (!contentStarted && isRetryableUpstreamError(error)) {
                   failedIndices.add(index);
                   if (nextUsableIndex(index) !== -1) {
-                    logRotation(chain[index], chain[nextUsableIndex(index)]);
+                    logRotation(
+                      entries[index].model,
+                      entries[nextUsableIndex(index)].model,
+                      error
+                    );
                     return pumpNext();
                   }
                 }
@@ -969,13 +1100,17 @@ export function createRateLimitFallbackModel(
 
 // The model used by the chat route. Free tiers rate-limit per model (and
 // endpoints also flake with 5xx or retire models outright), so the primary
-// free model is backed by the remaining same-family free Gemini models, with
-// the canned mock as the last resort. Real generation keeps working unless
-// every free Gemini model in the family fails.
+// free model is backed by the remaining free models: its own provider's first
+// (fallback priority order), then other configured providers, with the canned
+// mock as the last resort. Gemini 2.5-family primaries stay within their
+// thinking family (providerOptions are request-level); 3.x primaries carry no
+// provider options and may rotate across providers.
 /**
  * Builds the language model with fallback chain for the chat route.
- * Creates a wrapped model that rotates through the free Gemini models of the
- * primary's thinking family on failure, with the mock as the last resort.
+ * Rotates through the remaining free models of the primary's provider and
+ * then other configured providers on failure, with the mock as the last
+ * resort. Groq members carry a per-member maxTokens cap (request-level
+ * caps differ per provider).
  *
  * @param modelId - Optional model ID override
  * @returns LanguageModelV1 with automatic failover
@@ -984,16 +1119,23 @@ export function buildLanguageModel(modelId?: string): LanguageModelV1 {
   const primary = getLanguageModel(modelId);
   if (primary.provider === "mock") return primary;
 
-  const requested = primary.modelId;
+  const primaryProvider = modelProvider(primary.modelId);
 
-  // The fallback chain must stay within the primary's thinking family:
-  // providerOptions (thinkingConfig) are request-level, so a rotation to the
-  // other family would receive an invalid thinking config. Gemini 2.5 models
-  // take thinkingBudget; 3.x models use thinkingLevel and can't disable
-  // thinking, so they get no thinking config at all.
-  const freeChain: LanguageModelV1[] = [];
-  for (const id of fallbackModelIds(requested)) {
-    freeChain.push(buildGoogleModel(id));
+  const freeChain: FallbackSpec[] = [];
+  for (const m of ALL_FREE_MODELS) {
+    if (m.id === primary.modelId) continue;
+    const sameProvider = m.provider === primaryProvider;
+    if (sameProvider) {
+      freeChain.push(m.provider === "groq" ? groqMember(m.id) : googleMember(m.id));
+      continue;
+    }
+    // Cross-provider rotation is only safe when no Google-specific
+    // request-level options (thinkingBudget) exist for the primary.
+    const sameGeminiFamily =
+      supportsThinkingBudget(m.id) === supportsThinkingBudget(primary.modelId);
+    if (m.provider === "google" && !sameGeminiFamily) continue;
+    if (!isProviderConfigured(m.provider)) continue;
+    freeChain.push(m.provider === "groq" ? groqMember(m.id) : googleMember(m.id));
   }
 
   // Last resort: explain the free-tier limitation rather than emitting a

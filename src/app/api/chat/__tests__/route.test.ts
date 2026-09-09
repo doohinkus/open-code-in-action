@@ -28,11 +28,14 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/provider", () => ({
   buildLanguageModel: vi.fn(() => ({ modelId: "test-model", provider: "mock" })),
   isGoogleConfigured: vi.fn(() => false),
+  isGroqConfigured: vi.fn(() => false),
+  groqMaxTokens: vi.fn(() => 8192),
 }));
 
 vi.mock("@/lib/models", () => ({
   isAllowedModel: vi.fn(() => false),
   supportsThinkingBudget: vi.fn(() => false),
+  modelProvider: vi.fn(() => undefined),
 }));
 
 vi.mock("@/lib/message-compaction", () => ({

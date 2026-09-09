@@ -2,13 +2,17 @@ import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import {
   getLanguageModel,
   buildLanguageModel,
+  buildGroqModel,
+  groqMaxTokens,
   MockLanguageModel,
   createRateLimitFallbackModel,
+  resetProviderInstanceCache,
   isRateLimitError,
   isRetryableUpstreamError,
   isDeadModelError,
 } from "@/lib/provider";
-import { DEFAULT_MODEL } from "@/lib/models";
+import { MAX_TOKENS_GROQ_DEFAULT } from "@/lib/constants";
+import { DEFAULT_MODEL, DEFAULT_GROQ_MODEL } from "@/lib/models";
 
 import type {
   LanguageModelV1,
@@ -23,6 +27,8 @@ function clearProviderEnv() {
       key.startsWith("OPENAI_COMPATIBLE_") ||
       key.startsWith("GOOGLE_") ||
       key.startsWith("GEMINI_") ||
+      key.startsWith("GROQ_") ||
+      key === "MAX_TOKENS_GROQ" ||
       key === "ANTHROPIC_API_KEY" ||
       key === "FORCE_MOCK_PROVIDER"
     ) {
@@ -33,6 +39,7 @@ function clearProviderEnv() {
 
 beforeEach(() => {
   clearProviderEnv();
+  resetProviderInstanceCache();
 });
 
 afterEach(() => {
@@ -132,6 +139,82 @@ describe("getLanguageModel (Gemini)", () => {
   });
 });
 
+describe("getLanguageModel (Groq)", () => {
+  test("serves the Groq default when only GROQ_API_KEY is configured", () => {
+    process.env.GROQ_API_KEY = "gsk-test";
+
+    const model = getLanguageModel();
+    expect(model.modelId).toBe(DEFAULT_GROQ_MODEL);
+    expect(model.provider).toBe("groq.chat");
+  });
+
+  test("serves the requested Groq model when Groq is configured", () => {
+    process.env.GROQ_API_KEY = "gsk-test";
+
+    const model = getLanguageModel("openai/gpt-oss-20b");
+    expect(model.modelId).toBe("openai/gpt-oss-20b");
+    expect(model.provider).toBe("groq.chat");
+  });
+
+  test("preferred provider is Gemini when both keys are set and nothing requested", () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
+    process.env.GROQ_API_KEY = "gsk-test";
+
+    const model = getLanguageModel();
+    expect(model.modelId).toBe(DEFAULT_MODEL);
+    expect(model.provider).toBe("google.generative-ai");
+  });
+
+  test("falls back to the Gemini default when a Groq id is requested without a Groq key", () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
+
+    const model = getLanguageModel("openai/gpt-oss-120b");
+    expect(model.modelId).toBe(DEFAULT_MODEL);
+    expect(model.provider).toBe("google.generative-ai");
+  });
+
+  test("serves a Groq id when Gemini is unconfigured, even with both being keys", () => {
+    process.env.GROQ_API_KEY = "gsk-test";
+
+    const model = getLanguageModel("qwen/qwen3.6-27b");
+    expect(model.modelId).toBe("qwen/qwen3.6-27b");
+    expect(model.provider).toBe("groq.chat");
+  });
+});
+
+describe("buildGroqModel", () => {
+  test("throws when GROQ_API_KEY is missing", () => {
+    expect(() => buildGroqModel("openai/gpt-oss-120b")).toThrow("GROQ_API_KEY");
+  });
+
+  test("builds a cached OpenAI-compatible model", () => {
+    process.env.GROQ_API_KEY = "gsk-test";
+
+    const a = buildGroqModel("openai/gpt-oss-120b");
+    const b = buildGroqModel("openai/gpt-oss-120b");
+    expect(b).toBe(a);
+    expect(a.provider).toBe("groq.chat");
+    expect(a.modelId).toBe("openai/gpt-oss-120b");
+    expect(a.specificationVersion).toBe("v1");
+  });
+});
+
+describe("groqMaxTokens", () => {
+  test("defaults to the Groq cap when MAX_TOKENS_GROQ is unset", () => {
+    expect(groqMaxTokens()).toBeGreaterThan(0);
+  });
+
+  test("honors a positive MAX_TOKENS_GROQ override", () => {
+    process.env.MAX_TOKENS_GROQ = "12000";
+    expect(groqMaxTokens()).toBe(12000);
+  });
+
+  test("ignores invalid overrides", () => {
+    process.env.MAX_TOKENS_GROQ = "not-a-number";
+    expect(groqMaxTokens()).toBe(MAX_TOKENS_GROQ_DEFAULT);
+  });
+});
+
 describe("isRateLimitError", () => {
   test("matches rate-limit messages", () => {
     expect(isRateLimitError(new Error("Rate limit exceeded. Please try again later."))).toBe(true);
@@ -220,6 +303,26 @@ describe("isRetryableUpstreamError", () => {
     expect(isRetryableUpstreamError(error)).toBe(true);
   });
 
+  test("treats a Gemini 3 thought-signature rejection as retryable", () => {
+    // Cross-provider history (e.g. Groq-built functionCall parts) can trip
+    // Google's signature validation with a hard 400. The chain must rotate
+    // past it instead of failing the whole turn.
+    expect(
+      isRetryableUpstreamError(
+        new Error(
+          "Function call is missing a thought_signature in functionCall parts."
+        )
+      )
+    ).toBe(true);
+    expect(
+      isRetryableUpstreamError({
+        statusCode: 400,
+        message:
+          '400 "Function call is missing a thought_signature in functionCall parts."',
+      })
+    ).toBe(true);
+  });
+
   test("matches nested 5xx provider error objects", () => {
     expect(isRetryableUpstreamError({ error: { type: "server_error" } })).toBe(true);
     expect(isRetryableUpstreamError({ statusCode: 503 })).toBe(true);
@@ -294,6 +397,59 @@ describe("createRateLimitFallbackModel", () => {
   test("returns the mock primary unchanged", () => {
     const mock = new MockLanguageModel("mock-x");
     expect(createRateLimitFallbackModel(mock, [mock])).toBe(mock);
+  });
+
+  test("applies a per-member maxTokens override to fallback calls", async () => {
+    const seen: Record<string, unknown>[] = [];
+    const primary = fakeGenerateModel((options) => {
+      seen.push(options);
+      throw new Error("Rate limit exceeded. Please try again later.");
+    });
+    const fallback = fakeGenerateModel((options) => {
+      seen.push(options);
+      return {
+        text: "fallback output",
+        toolCalls: [],
+        finishReason: "stop" as const,
+        usage: { promptTokens: 1, completionTokens: 1 },
+        warnings: [],
+        rawCall: { rawPrompt: [], rawSettings: {} },
+      };
+    });
+
+    // The request-level cap belongs to the primary provider; the Groq-class
+    // fallback member overrides it with its own cap.
+    const wrapped = createRateLimitFallbackModel(primary, [
+      { model: fallback, maxTokens: 8192 },
+    ]);
+    await wrapped.doGenerate({ ...GENERATE_OPTIONS, maxTokens: 24000 } as any);
+    expect(seen.length).toBe(2);
+    expect(seen[0].maxTokens).toBe(24000);
+    expect(seen[1].maxTokens).toBe(8192);
+  });
+
+  test("members without a maxTokens override keep the request-level cap", async () => {
+    const seen: Record<string, unknown>[] = [];
+    const primary = fakeGenerateModel((options) => {
+      seen.push(options);
+      throw new Error("Rate limit exceeded. Please try again later.");
+    });
+    const fallback = fakeGenerateModel((options) => {
+      seen.push(options);
+      return {
+        text: "fallback output",
+        toolCalls: [],
+        finishReason: "stop" as const,
+        usage: { promptTokens: 1, completionTokens: 1 },
+        warnings: [],
+        rawCall: { rawPrompt: [], rawSettings: {} },
+      };
+    });
+
+    const wrapped = createRateLimitFallbackModel(primary, [{ model: fallback }]);
+    await wrapped.doGenerate({ ...GENERATE_OPTIONS, maxTokens: 24000 } as any);
+    expect(seen[0].maxTokens).toBe(24000);
+    expect(seen[1].maxTokens).toBe(24000);
   });
 
   test("doGenerate returns the fallback result on a rate-limit error", async () => {

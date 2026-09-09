@@ -22,6 +22,11 @@ export const buildStrReplaceTool = (fileSystem: VirtualFileSystem) => {
           description:
             "Required for 'create' command: the full file content",
         },
+        overwrite: {
+          type: "boolean",
+          description:
+            "For 'create' command on an existing file: pass true to replace the file entirely. Omit to get an error prompting you to edit with str_replace instead.",
+        },
         insert_line: {
           type: "number",
           description:
@@ -47,7 +52,7 @@ export const buildStrReplaceTool = (fileSystem: VirtualFileSystem) => {
       required: ["command", "path"],
     }),
     execute: async (args: unknown) => {
-      const { command, path, file_text, insert_line, new_str, old_str, view_range } = args as Record<string, unknown>;
+      const { command, path, file_text, overwrite, insert_line, new_str, old_str, view_range } = args as Record<string, unknown>;
       switch (command as string) {
         case "view":
           return fileSystem.viewFile(
@@ -56,7 +61,11 @@ export const buildStrReplaceTool = (fileSystem: VirtualFileSystem) => {
           );
 
         case "create":
-          return fileSystem.createFileWithParents(path as string, (file_text as string) || "");
+          return fileSystem.createFileWithParents(
+            path as string,
+            (file_text as string) || "",
+            overwrite === true
+          );
 
         case "str_replace":
           return fileSystem.replaceInFile(path as string, (old_str as string) || "", (new_str as string) || "");

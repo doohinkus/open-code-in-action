@@ -181,12 +181,19 @@ export function FileSystemProvider({
 
       // Handle str_replace_editor tool
       if (toolName === "str_replace_editor" && args) {
-        const { command, path, file_text, old_str, new_str, insert_line } = args;
+        const { command, path, file_text, overwrite, old_str, new_str, insert_line } = args;
 
         switch (command) {
           case "create":
             if (path && file_text !== undefined) {
-              const result = fileSystem.createFileWithParents(path, file_text);
+              // overwrite must mirror the server tool: a create with
+              // overwrite replaces the file, otherwise an existing file
+              // yields the "already exists" error and nothing is applied.
+              const result = fileSystem.createFileWithParents(
+                path,
+                file_text,
+                overwrite === true
+              );
               if (!result.startsWith("Error:")) {
                 createFile(path, file_text);
               }

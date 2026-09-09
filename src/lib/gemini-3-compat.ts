@@ -32,6 +32,14 @@ const THINKING_LEVEL = "low";
 // the latest observed signature per tool is good enough for a bridge.
 const signatureByTool = new Map<string, string>();
 
+// Documented dummy signatures for functionCall parts that were not generated
+// by Gemini (e.g. history built by a different provider such as Groq):
+// https://ai.google.dev/gemini-api/docs/thought-signatures. A mismatched
+// signature is accepted with degraded reasoning performance; only a MISSING
+// one is a hard 400. Prefer a real observed signature, fall back to the
+// documented dummy.
+const DUMMY_THOUGHT_SIGNATURE = "skip_thought_signature_validator";
+
 function geminiModelIdFromUrl(url: string): string | undefined {
   return /\/models\/([\w.-]+):(streamGenerateContent|generateContent)/.exec(url)?.[1];
 }
@@ -44,7 +52,8 @@ function injectThoughtSignatures(body: { contents?: unknown }): void {
       const call = (part as { functionCall?: { name?: unknown } })?.functionCall;
       if (!call || typeof call.name !== "string") continue;
       if ((part as { thoughtSignature?: unknown }).thoughtSignature) continue;
-      const signature = signatureByTool.get(call.name) ?? lastSignature;
+      const signature =
+        signatureByTool.get(call.name) ?? lastSignature ?? DUMMY_THOUGHT_SIGNATURE;
       if (signature) {
         (part as { thoughtSignature?: string }).thoughtSignature = signature;
       }
