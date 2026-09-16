@@ -42,7 +42,7 @@ describe("repairStrReplaceArgs", () => {
 });
 
 describe("repairToolCall", () => {
-  test("repairs a Qwen-shaped create with string overwrite", () => {
+  test("repairs a loose-shape create with string overwrite", () => {
     const toolCall = {
       toolCallId: "c1",
       toolName: "str_replace_editor",

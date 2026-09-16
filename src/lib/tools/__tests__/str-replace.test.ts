@@ -37,7 +37,7 @@ describe("buildStrReplaceTool", () => {
     expect(fs.readFile("/App.jsx")).toBe("new content");
   });
 
-  test("create accepts the loose string 'true' (Qwen/GPT-OSS shape)", async () => {
+  test("create accepts the loose string 'true' (GPT-OSS shape)", async () => {
     const fs = new VirtualFileSystem();
     fs.createFile("/App.jsx", "old");
 

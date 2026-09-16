@@ -3,7 +3,7 @@ import type { LanguageModelV1FunctionToolCall } from "@ai-sdk/provider";
 /**
  * Repairs tool calls whose arguments violate the strict inline JSON schema.
  *
- * Free models (notably Qwen and GPT-OSS) emit numbers/booleans as strings
+ * Free models (notably GPT-OSS) emit numbers/booleans as strings
  * (`"insert_line": "1"`, `"overwrite": "true"`), which fails schema
  * validation — in ai SDK v4 that surfaces as an invalid_tool_input error and
  * kills the turn with a raw toast. streamText's `experimental_repairToolCall`

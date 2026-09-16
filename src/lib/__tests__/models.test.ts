@@ -81,7 +81,6 @@ describe("models", () => {
     expect(GROQ_FREE_MODELS.map((m) => m.id)).toEqual([
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
-      "qwen/qwen3.6-27b",
     ]);
     expect(ALL_FREE_MODELS).toEqual([...GROQ_FREE_MODELS, ...GEMINI_FREE_MODELS]);
   });

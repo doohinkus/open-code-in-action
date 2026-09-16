@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Check } from "lucide-react";
+import { Download, BookOpen, Copy, Check } from "lucide-react";
 import { downloadProjectZip } from "@/lib/download-zip";
+import { downloadStorybookProjectZip } from "@/lib/export-storybook";
 import { useToast } from "@/components/ui/toast";
 
 interface ShareActionsProps {
@@ -21,6 +22,14 @@ export function ShareActions({ files }: ShareActionsProps) {
     downloadProjectZip(new Map(Object.entries(files)), "oc_project.zip");
   };
 
+  const handleDownloadStorybook = () => {
+    if (!hasFiles) return;
+    downloadStorybookProjectZip(
+      new Map(Object.entries(files)),
+      "oc_project-storybook.zip"
+    );
+  };
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -34,14 +43,18 @@ export function ShareActions({ files }: ShareActionsProps) {
 
   return (
     <div className="flex items-center gap-2">
+      <Button variant="outline" className="h-8 gap-2" onClick={handleDownload} disabled={!hasFiles}>
+        <Download className="h-4 w-4" />
+        Download
+      </Button>
       <Button
         variant="outline"
         className="h-8 gap-2"
-        onClick={handleDownload}
+        onClick={handleDownloadStorybook}
         disabled={!hasFiles}
       >
-        <Download className="h-4 w-4" />
-        Download
+        <BookOpen className="h-4 w-4" />
+        Storybook
       </Button>
       <Button variant="outline" className="h-8 gap-2" onClick={handleCopy}>
         {copied ? (

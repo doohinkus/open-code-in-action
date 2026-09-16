@@ -479,7 +479,7 @@ export async function POST(req: Request) {
       str_replace_editor: buildStrReplaceTool(fileSystem),
       file_manager: buildFileManagerTool(fileSystem),
     },
-    // Free models (notably Qwen/GPT-OSS) emit numbers/booleans as strings,
+    // Free models (notably GPT-OSS) emit numbers/booleans as strings,
     // failing the strict inline tool schemas with "Invalid tool input".
     // Repair the known loose shapes instead of losing the turn — without
     // this the user just sees a raw validation-error toast.
