@@ -31,6 +31,7 @@
 - **Auth**: Neon Auth (`@neondatabase/auth`), `src/lib/auth.ts` + `src/lib/auth/server.ts`. Cookie name: `__Secure-neon-auth.session_token`. Middleware protects `/api/projects` and `/api/filesystem`
 - **Sign-in**: Google-only, no email/password or sign-up. Header "Sign In" redirects to Google OAuth via `authClient.signIn.social` in `src/hooks/use-auth.ts`; `signOut`/`getUser` live in `src/actions/index.ts`. Email/password must stay disabled on the Neon Auth gateway
 - **Component structure (left→right)**: Chat panel (35%) | Preview/Code tabs (65%). Code view splits further into FileTree (30%) + Monaco editor (70%)
+- **Storybook export**: `src/lib/export-storybook.ts` — builds a runnable Storybook 9 (react-vite) + Vite + Tailwind v4 project ZIP from the VFS when downloading; rewrites `@/` imports to relative paths and generates stories for `App.jsx` + `components/*`. Versions pinned in `SB_VERSION` are verified by actually running `storybook build` on the output.
 - **Path aliases**: `@/` → `./src/*`, `@/components/ui` for shadcn, `@/lib/utils` for `cn()` helper
 
 ## Important Constraints

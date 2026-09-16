@@ -148,6 +148,7 @@ Push to main
 3. View generated components in real-time preview
 4. Switch to Code view to see and edit the generated files
 5. Continue iterating with the AI to refine your components
+6. Download your work: raw source files as a ZIP, or as a runnable Storybook 9 project (React + Vite + Tailwind).
 
 ## Features
 
@@ -156,6 +157,7 @@ Push to main
 - Virtual file system (no files written to disk)
 - Syntax highlighting and code editor
 - Component persistence for registered users
+- Download as a runnable Storybook project with generated stories (`src/lib/export-storybook.ts`)
 
 ## Tech Stack
 
