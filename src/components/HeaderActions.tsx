@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, LogOut, FolderOpen, ChevronDown, Download, MoreVertical, Save, Pencil, Trash2, Check, X } from "lucide-react";
+import { Plus, LogOut, FolderOpen, ChevronDown, Download, BookOpen, MoreVertical, Save, Pencil, Trash2, Check, X } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { signOut } from "@/actions";
 import { useAuth } from "@/hooks/use-auth";
@@ -17,6 +17,7 @@ import { useToast } from "@/components/ui/toast";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 import { useChat } from "@/lib/contexts/chat-context";
 import { downloadProjectZip } from "@/lib/download-zip";
+import { downloadStorybookProjectZip } from "@/lib/export-storybook";
 import {
   Popover,
   PopoverContent,
@@ -123,6 +124,12 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
     const files = getFSFiles();
     if (files.size === 0) return;
     downloadProjectZip(files, "project.zip");
+  };
+
+  const handleDownloadStorybook = () => {
+    const files = getFSFiles();
+    if (files.size === 0) return;
+    downloadStorybookProjectZip(files, "project-storybook.zip");
   };
 
   const handleNewDesign = async () => {
@@ -355,10 +362,24 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
 
       {/* Desktop actions */}
       <div className="hidden lg:flex items-center gap-2">
-        <Button variant="outline" className="h-8 gap-2" onClick={handleDownload} disabled={!canDownload}>
-          <Download className="h-4 w-4" />
-          Download
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="h-8 gap-2" disabled={!canDownload}>
+              <Download className="h-4 w-4" />
+              Download
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleDownload} disabled={!canDownload}>
+              <Download className="h-4 w-4" />
+              Download ZIP (source files)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleDownloadStorybook} disabled={!canDownload}>
+              <BookOpen className="h-4 w-4" />
+              Download Storybook project
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {user ? (
           <>
@@ -442,7 +463,12 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
 
             <DropdownMenuItem onClick={handleDownload} disabled={!canDownload}>
               <Download className="h-4 w-4" />
-              Download
+              Download ZIP (source files)
+            </DropdownMenuItem>
+
+            <DropdownMenuItem onClick={handleDownloadStorybook} disabled={!canDownload}>
+              <BookOpen className="h-4 w-4" />
+              Download Storybook project
             </DropdownMenuItem>
 
             {user ? (
