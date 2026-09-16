@@ -31,7 +31,6 @@ export const GROQ_FREE_MODELS: ModelInfo[] = [
     name: "GPT-OSS 20B (Groq)",
     provider: "groq",
   },
-  { id: "qwen/qwen3.6-27b", name: "Qwen3.6 27B (Groq)", provider: "groq" },
 ];
 
 // All selectable free models, listed Groq first (per UI ordering), in

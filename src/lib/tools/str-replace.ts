@@ -2,8 +2,8 @@ import { tool, jsonSchema } from "ai";
 import { VirtualFileSystem } from "@/lib/file-system";
 
 // The inline schema stays strict: Google's function_declarations proto
-// rejects type unions ("number"|"string"). Free models (notably Qwen and
-// GPT-OSS) still emit numbers/booleans as strings, invalidating their own
+// rejects type unions ("number"|"string"). Free models (notably GPT-OSS)
+// still emit numbers/booleans as strings, invalidating their own
 // tool calls — streamText repairs those via experimental_repairToolCall
 // (see src/lib/tools/tool-repair.ts and its wiring in the chat route), and
 // execute() additionally coerces so repaired and unrepaired payloads both

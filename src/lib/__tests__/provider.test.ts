@@ -176,8 +176,8 @@ describe("getLanguageModel (Groq)", () => {
   test("serves a Groq id when Gemini is unconfigured, even with both being keys", () => {
     process.env.GROQ_API_KEY = "gsk-test";
 
-    const model = getLanguageModel("qwen/qwen3.6-27b");
-    expect(model.modelId).toBe("qwen/qwen3.6-27b");
+    const model = getLanguageModel("openai/gpt-oss-20b");
+    expect(model.modelId).toBe("openai/gpt-oss-20b");
     expect(model.provider).toBe("groq.chat");
   });
 });
