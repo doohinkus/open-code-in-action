@@ -35,6 +35,10 @@ interface ChatContextType {
   messages: Message[];
   input: string;
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  // Programmatic input updates (voice transcript, @-mentions, starter
+  // prompts) — avoids threading synthetic ChangeEvent objects through the
+  // AI SDK's handleInputChange.
+  setInput: (value: string) => void;
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   status: string;
   error: Error | undefined;
@@ -136,6 +140,7 @@ export function ChatProvider({
     messages,
     input,
     handleInputChange,
+    setInput,
     handleSubmit: originalHandleSubmit,
     status,
     error,
@@ -292,12 +297,20 @@ export function ChatProvider({
     }
   }, [status, validateCurrentFiles, setIsFixingErrors, append, generationTimedOut, generationInterrupted]);
 
-  // Track anonymous work
+  // Track anonymous work. Persist only on turn completion (status "ready"):
+  // during streaming useChat emits an update per chunk, and serializing the
+  // whole VFS + writing sessionStorage on each one stalls the main thread.
   useEffect(() => {
-    if (!projectId && messages.length > 0) {
-      setHasAnonWork(messages, fileSystem.serialize());
+    if (!projectId && messages.length > 0 && status === "ready") {
+      // Degrade gracefully: serialize may throw on unsupported shapes and
+      // sessionStorage has a quota — a full anon project can exceed it.
+      try {
+        setHasAnonWork(messages, fileSystem.serialize());
+      } catch {
+        // Ignore — anonymous persistence is best-effort.
+      }
     }
-  }, [messages, fileSystem, projectId]);
+  }, [messages, fileSystem, projectId, status]);
 
   return (
     <ChatContext.Provider
@@ -306,6 +319,7 @@ export function ChatProvider({
         messages,
         input,
         handleInputChange,
+        setInput,
         handleSubmit,
         status,
         error,

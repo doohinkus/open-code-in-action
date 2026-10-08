@@ -7,7 +7,8 @@ import { useInspection } from "@/lib/contexts/inspection-context";
 
 interface MessageInputProps {
   input: string;
-  handleInputChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
+  handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  setInput: (value: string) => void;
   handleSubmit: (e: FormEvent<HTMLFormElement>) => void;
   isLoading: boolean;
   onStop?: () => void;
@@ -16,6 +17,7 @@ interface MessageInputProps {
 export function MessageInput({
   input,
   handleInputChange,
+  setInput,
   handleSubmit,
   isLoading,
   onStop,
@@ -38,11 +40,8 @@ export function MessageInput({
   useEffect(() => {
     if (!transcript) return;
 
-    const syntheticEvent = {
-      target: { value: transcript },
-    } as ChangeEvent<HTMLTextAreaElement>;
-    handleInputChange(syntheticEvent);
-  }, [transcript, handleInputChange]);
+    setInput(transcript);
+  }, [transcript, setInput]);
 
   useEffect(() => {
     if (!isListening && transcript) {
@@ -55,13 +54,10 @@ export function MessageInput({
     if (taggedElements.length > prevTagCountRef.current) {
       const newest = taggedElements[taggedElements.length - 1];
       const mention = `@${newest.label} `;
-      const syntheticEvent = {
-        target: { value: (input || "") + mention },
-      } as ChangeEvent<HTMLTextAreaElement>;
-      handleInputChange(syntheticEvent);
+      setInput((input || "") + mention);
     }
     prevTagCountRef.current = taggedElements.length;
-  }, [taggedElements, input, handleInputChange]);
+  }, [taggedElements, input, setInput]);
 
   useEffect(() => {
     if (taggedElements.length === 0) {
@@ -80,10 +76,7 @@ export function MessageInput({
       } else if (newValue.includes(mentionAlt)) {
         newValue = newValue.replace(mentionAlt, "");
       }
-      const syntheticEvent = {
-        target: { value: newValue },
-      } as ChangeEvent<HTMLTextAreaElement>;
-      handleInputChange(syntheticEvent);
+      setInput(newValue);
     }
     removeTag(id);
   };

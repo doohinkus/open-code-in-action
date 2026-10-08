@@ -30,7 +30,6 @@ const MessageItem = React.memo(function MessageItem({ message, isLoading, isLast
   const parts = message.parts;
   return (
     <div
-      key={message.id || message.content}
       data-role={message.role}
       className={cn(
         "flex gap-3 animate-in fade-in slide-in-from-bottom-1 duration-300",
@@ -236,7 +235,7 @@ export function MessageList({ messages, isLoading, onStarterPrompt, thinkingLabe
       <div className="space-y-5 max-w-4xl mx-auto w-full">
         {messages.map((message, index) => (
           <MessageItem
-            key={message.id || message.content}
+            key={message.id ?? index}
             message={message}
             isLoading={isLoading ?? false}
             isLast={index === messages.length - 1}

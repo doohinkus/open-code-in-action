@@ -18,13 +18,30 @@ export function getOrCreateAnonSessionKey(): string {
   return key;
 }
 
-export function setHasAnonWork(messages: any[], fileSystemData: any) {
+export function setHasAnonWork(
+  messages: unknown[],
+  fileSystemData: Record<string, unknown>
+): void {
   if (typeof window === "undefined") return;
-  
-  // Only set if there's actual content
-  if (messages.length > 0 || Object.keys(fileSystemData).length > 1) { // > 1 because root "/" always exists
+
+  // Only set if there's actual content. > 1 because root "/" always exists.
+  if (messages.length > 0 || Object.keys(fileSystemData).length > 1) {
     sessionStorage.setItem(STORAGE_KEY, "true");
-    sessionStorage.setItem(DATA_KEY, JSON.stringify({ messages, fileSystemData }));
+    // sessionStorage has a ~5 MB quota; a big generated project can exceed
+    // it. Anonymous persistence is best-effort — never break the chat flow
+    // with an uncaught QuotaExceededError.
+    try {
+      sessionStorage.setItem(DATA_KEY, JSON.stringify({ messages, fileSystemData }));
+    } catch (error) {
+      // Data was partially saved before; leave the flag alone and drop the
+      // oversized payload rather than surfacing storage errors mid-chat.
+      if (error instanceof Error && error.name === "QuotaExceededError") return;
+      try {
+        sessionStorage.setItem(STORAGE_KEY, "true");
+      } catch {
+        // Ignore storage failures entirely.
+      }
+    }
   }
 }
 

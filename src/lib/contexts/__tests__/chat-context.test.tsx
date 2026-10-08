@@ -65,6 +65,7 @@ describe("ChatContext", () => {
     messages: [],
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     status: "idle",
     stop: vi.fn(),
@@ -181,6 +182,7 @@ describe("ChatContext", () => {
     (useAIChat as any).mockReturnValue({
       ...mockUseAIChat,
       messages: mockMessages,
+      status: "ready",
     });
 
     render(
