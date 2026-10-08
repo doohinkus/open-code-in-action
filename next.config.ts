@@ -10,7 +10,8 @@ import type { NextConfig } from "next";
 // The sandboxed preview iframe uses srcdoc, whose document HTTP-inherits this
 // policy AND applies its own meta CSP — both are enforced, so the preview's
 // CDN needs (cdn.tailwindcss.com runtime, esm.sh modules, blob module URLs)
-// must stay listed here.
+// must stay listed here. cdn.jsdelivr.net serves Monaco's loader and styles
+// (@monaco-editor/react defaults to it).
 const isDev = process.env.NODE_ENV === "development";
 // Monaco's loader evaluates worker code at runtime; 'unsafe-eval' stays in
 // dev. Production drops it — if a runtime feature later needs Function
@@ -20,11 +21,11 @@ const scriptEval = isDev ? "'unsafe-eval'" : "";
 
 const csp = [
   `default-src 'self'`,
-  `script-src 'self' 'unsafe-inline' ${scriptEval} https://cdn.tailwindcss.com https://esm.sh blob:`,
-  `style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com`,
+  `script-src 'self' 'unsafe-inline' ${scriptEval} https://cdn.tailwindcss.com https://esm.sh https://cdn.jsdelivr.net blob:`,
+  `style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net`,
   `img-src 'self' data: blob: https:`,
   `connect-src 'self' https://cdn.tailwindcss.com https://esm.sh https://*.ingest.sentry.io blob:`,
-  `font-src 'self' https://cdn.tailwindcss.com`,
+  `font-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net`,
   `frame-src 'self'`,
   `frame-ancestors 'self'`,
   `base-uri 'self'`,

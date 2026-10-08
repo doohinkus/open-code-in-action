@@ -1013,10 +1013,9 @@ ${rootCentering}    }
   ` : ''}
   ${errors.length === 0 && bundleCode ? `
   <script${nonce ? ` nonce="${nonce}"` : ''}>
-    const __bundleSrc = ${escapeScriptString(bundleCode)};
-    const __blob = new Blob([__bundleSrc], {type: 'application/javascript'});
+    window.__bundleSrc = ${escapeScriptString(bundleCode)};
+    const __blob = new Blob([window.__bundleSrc], {type: 'application/javascript'});
     window.__bundleUrl = URL.createObjectURL(__blob);
-    window.__bundleSrcProcessed = true;
   </script>
   <script${nonce ? ` nonce="${nonce}"` : ''} type="module">
     const __rootEl = document.getElementById('root');
