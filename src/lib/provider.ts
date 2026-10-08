@@ -979,6 +979,15 @@ export function createRateLimitFallbackModel(
     },
 
     async doStream(options) {
+      // Registry of live upstream readers: rotation abandons the failed one
+      // and consumer cancellation (abort/disconnect) must abort all of them —
+      // without this, superseded provider HTTP requests leak per turn.
+      const activeReaders = new Set<ReadableStreamDefaultReader<LanguageModelV1StreamPart>>();
+      const cancelReader = (reader: ReadableStreamDefaultReader<LanguageModelV1StreamPart>) => {
+        activeReaders.delete(reader);
+        reader.cancel().catch(() => {});
+      };
+
       const startModelStream = async (
         index: number
       ): Promise<Awaited<ReturnType<LanguageModelV1["doStream"]>>> => {
@@ -1000,15 +1009,23 @@ export function createRateLimitFallbackModel(
         }
 
         const reader = result.stream.getReader();
+        activeReaders.add(reader);
 
         const stream = new ReadableStream<LanguageModelV1StreamPart>({
           async start(controller) {
             let contentStarted = false;
 
-            const pumpNext = async () => {
+            const pumpNext = async (cause?: unknown) => {
+              // The current stream failed — abandon it so the provider's
+              // HTTP request is released instead of streaming to nobody.
+              cancelReader(reader);
               const next = nextUsableIndex(index);
               if (next === -1) {
-                controller.error(new Error("All AI provider models failed"));
+                // Preserve the original upstream cause (e.g. 429) instead of
+                // masking it with the generic "all failed" message.
+                controller.error(
+                  new Error("All AI provider models failed", { cause })
+                );
                 return;
               }
               const nextStream = await startModelStream(next);
@@ -1022,6 +1039,8 @@ export function createRateLimitFallbackModel(
                 controller.close();
               } catch (error) {
                 controller.error(error);
+              } finally {
+                activeReaders.delete(nextReader);
               }
             };
 
@@ -1042,7 +1061,7 @@ export function createRateLimitFallbackModel(
                         entries[nextUsableIndex(index)].model,
                         value.error
                       );
-                      return pumpNext();
+                      return pumpNext(value.error);
                     }
                   }
                   controller.enqueue(value);
@@ -1074,7 +1093,7 @@ export function createRateLimitFallbackModel(
                       entries[nextUsableIndex(index)].model,
                       error
                     );
-                    return pumpNext();
+                    return pumpNext(error);
                   }
                 }
                 controller.error(error);
@@ -1082,6 +1101,14 @@ export function createRateLimitFallbackModel(
             };
 
             await pump();
+          },
+          // Client disconnect / SDK abort must release the upstream provider
+          // requests (pending reads otherwise keep them alive until finish).
+          cancel() {
+            for (const active of activeReaders) {
+              active.cancel().catch(() => {});
+            }
+            activeReaders.clear();
           },
         });
 

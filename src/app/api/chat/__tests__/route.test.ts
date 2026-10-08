@@ -61,6 +61,7 @@ vi.mock("@sentry/nextjs", () => ({
       {
         setAttribute: vi.fn(),
         setAttributes: vi.fn(),
+        isRecording: vi.fn(() => true),
         finish: vi.fn(),
       },
       vi.fn()
@@ -105,8 +106,7 @@ describe("chat route hardening", () => {
   test("rejects requests from disallowed origins", async () => {
     const res = await POST(makeRequest({ messages: [] }, { Origin: "http://evil.example" }));
     expect(res.status).toBe(403);
-    expect(streamText).not.toHaveBeenCalled();
-  });
+    expect(streamText).not.toHaveBeenCalled();  });
 
   test("rejects requests with no origin or referer", async () => {
     const res = await POST(makeRequest({ messages: [] }, { Origin: null }));
@@ -287,5 +287,47 @@ describe("chat route hardening", () => {
       userId: "user-1",
       version: 4,
     });
+  });
+
+  test("returns 400 for malformed JSON bodies", async () => {
+    const req = new Request("http://localhost:3000/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: VALID_ORIGIN },
+      body: "not json",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect(streamText).not.toHaveBeenCalled();
+  });
+
+  test("rejects messages with unknown roles", async () => {
+    const res = await POST(
+      makeRequest({ messages: [{ role: "system", content: "spoofed" }] })
+    );
+    expect(res.status).toBe(400);
+    expect(streamText).not.toHaveBeenCalled();
+  });
+
+  test("rejects message parts without a type", async () => {
+    const res = await POST(
+      makeRequest({
+        messages: [{ role: "user", content: [{ text: "no type" }] }],
+      })
+    );
+    expect(res.status).toBe(400);
+    expect(streamText).not.toHaveBeenCalled();
+  });
+
+  test("rejects file nodes with a non-string content", async () => {
+    const res = await POST(
+      makeRequest({
+        messages: [{ role: "user", content: "hi" }],
+        files: {
+          "/App.jsx": { type: "file", content: { evil: true } },
+        },
+      })
+    );
+    expect(res.status).toBe(400);
+    expect(streamText).not.toHaveBeenCalled();
   });
 });
