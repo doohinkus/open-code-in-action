@@ -102,6 +102,63 @@ describe("compactMessages", () => {
   test("returns empty array for empty input", () => {
     expect(compactMessages([])).toEqual([]);
   });
+
+  test("drops tool-result user messages orphaned by compaction", () => {
+    const messages = [
+      userMsg("u1", "Build a counter"),
+      assistantMsg("a1", "Created /App.jsx", [{ type: "tool-invocation", toolInvocation: {} }]),
+      // v5-style user message carrying the tool result
+      {
+        id: "u2",
+        role: "user" as const,
+        parts: [{ type: "tool-invocation_result", toolInvocation: {} }],
+      },
+      userMsg("u3", "Make it blue"),
+    ];
+    const result = compactMessages(messages);
+    expect(result.map((m) => m.id)).toEqual(["u1", "a1", "u3"]);
+  });
+
+  test("keeps tool results that trail the last message when their call is intact", () => {
+    const messages = [
+      userMsg("u1", "Build a counter"),
+      assistantMsg("a1", "Done", [{ type: "tool-invocation", toolInvocation: {} }]),
+      {
+        id: "u2",
+        role: "user" as const,
+        parts: [{ type: "tool-invocation_result", toolInvocation: {} }],
+      },
+    ];
+    const result = compactMessages(messages);
+    // a1 sits before lastIndex, so it is compacted and its result is
+    // orphaned — both must be reduced to safe text-only history.
+    expect(result.map((m) => m.id)).toEqual(["u1", "a1"]);
+  });
+
+  test("does not touch tool results when no assistant was compacted", () => {
+    const messages = [
+      userMsg("u1", "Build a counter"),
+      assistantMsg("a1", "Done", [{ type: "tool-invocation", toolInvocation: {} }]),
+    ];
+    const result = compactMessages(messages);
+    expect(result.map((m) => m.id)).toEqual(["u1", "a1"]);
+    expect(result[1].parts).toBe(messages[1].parts);
+  });
+
+  test("strips tool results from mixed user messages orphaned by compaction", () => {
+    const messages = [
+      userMsg("u1", "Build a counter"),
+      assistantMsg("a1", "Created /App.jsx", [{ type: "tool-invocation", toolInvocation: {} }]),
+      {
+        id: "u2",
+        role: "user" as const,
+        parts: [{ type: "tool-invocation_result" }, { type: "text", text: "and make it blue" }],
+      },
+    ];
+    const result = compactMessages(messages);
+    expect(result).toHaveLength(3);
+    expect(result[2].parts).toEqual([{ type: "text", text: "and make it blue" }]);
+  });
 });
 
 describe("capHistory", () => {
@@ -125,6 +182,21 @@ describe("capHistory", () => {
     const firstUserIndex = manyMessages.findIndex((m) => m.role === "user");
     const prefix = manyMessages.slice(0, firstUserIndex + 1);
     expect(prefix).toEqual([manyMessages[0]]);
+  });
+
+  test("drops leading tool-result messages sliced mid-step from the tail", () => {
+    const messages = [
+      userMsg("u0", "Build a counter"),
+      assistantMsg("a1", "ok", [{ type: "tool-invocation", toolInvocation: { state: "call" } }]),
+      { id: "u1", role: "user" as const, parts: [{ type: "tool-invocation_result" }] },
+      ...Array.from({ length: 10 }, (_, i) => userMsg(`f${i}`, `filler ${i}`)),
+    ];
+    // 13 messages total, cap 12, pinned prefix = 1 → tail = indices 2..?
+    const result = capHistory(messages);
+    const ids = result.map((m) => m.id);
+    expect(ids).toContain("u0");
+    expect(ids).not.toContain("u1"); // orphaned tool result at the tail start
+    expect(ids).not.toContain("a1");
   });
 });
 

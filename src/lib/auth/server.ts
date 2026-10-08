@@ -1,3 +1,4 @@
+import "server-only";
 import { createNeonAuth } from "@neondatabase/auth/next/server";
 
 let _auth: ReturnType<typeof createNeonAuth> | null = null;
