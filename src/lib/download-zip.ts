@@ -76,11 +76,9 @@ export function createZipBlob(files: Map<string, string>): Blob {
   return new Blob([...localParts, ...central, eocd] as BlobPart[], { type: "application/zip" });
 }
 
-export function downloadProjectZip(
-  files: Map<string, string>,
-  filename = "project.zip"
-) {
-  const blob = createZipBlob(files);
+// Shared by the plain project ZIP and the Storybook export; keeps the
+// object-URL/anchor dance in one place.
+export function triggerBlobDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -89,4 +87,12 @@ export function downloadProjectZip(
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+export function downloadProjectZip(
+  files: Map<string, string>,
+  filename = "project.zip"
+) {
+  const blob = createZipBlob(files);
+  triggerBlobDownload(blob, filename);
 }

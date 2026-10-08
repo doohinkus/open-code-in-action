@@ -39,7 +39,7 @@ global.URL.createObjectURL = vi.fn((blob) => {
 
 test("transformJSX transforms TypeScript files with correct presets", () => {
   const code = `const Component = () => <div>Hello</div>;`;
-  const result = transformJSX(code, "test.tsx", new Set());
+  const result = transformJSX(code, "test.tsx");
 
   expect(result.error).toBeUndefined();
   expect(result.code).toContain("import { jsx as _jsx } from 'react/jsx-runtime'");
@@ -49,7 +49,7 @@ test("transformJSX transforms TypeScript files with correct presets", () => {
 
 test("transformJSX handles JavaScript files without TypeScript preset", () => {
   const code = `const Component = () => <div>Hello</div>;`;
-  const result = transformJSX(code, "test.jsx", new Set());
+  const result = transformJSX(code, "test.jsx");
 
   expect(result.error).toBeUndefined();
   expect(result.code).toContain("import { jsx as _jsx } from 'react/jsx-runtime'");
@@ -64,7 +64,7 @@ test("transformJSX collects imports from code", () => {
     import Component from './Component';
     import { utils } from '../utils';
   `;
-  const result = transformJSX(code, "test.jsx", new Set());
+  const result = transformJSX(code, "test.jsx");
 
   expect(result.missingImports).toContain("react");
   expect(result.missingImports).toContain("./Component");
@@ -77,7 +77,7 @@ test("transformJSX injects React import when code uses React namespace without i
   const [count, setCount] = React.useState(0);
   return <div>{count}</div>;
 };`;
-  const result = transformJSX(code, "App.jsx", new Set());
+  const result = transformJSX(code, "App.jsx");
 
   expect(result.error).toBeUndefined();
   expect(result.code).toContain("import React from 'react'");
@@ -89,7 +89,7 @@ export default function Counter() {
   const [count, setCount] = React.useState(0);
   return <div>{count}</div>;
 };`;
-  const result = transformJSX(code, "App.jsx", new Set());
+  const result = transformJSX(code, "App.jsx");
 
   expect(result.error).toBeUndefined();
   expect(result.code).not.toMatch(/import React from 'react'/);
@@ -100,7 +100,7 @@ test("transformJSX handles transform errors gracefully", () => {
     throw new Error("Transform failed");
   });
 
-  const result = transformJSX("invalid code", "test.jsx", new Set());
+  const result = transformJSX("invalid code", "test.jsx");
 
   expect(result.code).toBe("");
   expect(result.error).toBe("Transform failed");
@@ -244,6 +244,15 @@ test("createPreviewHTML generates valid HTML", () => {
 test("createPreviewHTML includes Tailwind CSS", () => {
   const html = createPreviewHTML("/App.jsx", "{}");
   expect(html).toContain("https://cdn.tailwindcss.com");
+});
+
+test("createPreviewHTML escapes </style breakout attempts in user CSS", () => {
+  const css = "body { color: red } </style><script>alert(1)</script>";
+  const html = createPreviewHTML("/App.jsx", "{}", css);
+
+  // The injected styles stay inside the <style> element
+  expect(html).not.toContain("</style><script>alert(1)</script>");
+  expect(html).toContain("<\\/style><script>alert(1)</script>");
 });
 
 test("createPreviewHTML centers generated components in the viewport", () => {
@@ -563,7 +572,7 @@ test("transformJSX detects CSS imports", () => {
 
     export default function App() { return <div>App</div>; }
   `;
-  const result = transformJSX(code, "App.jsx", new Set());
+  const result = transformJSX(code, "App.jsx");
 
   expect(result.cssImports).toBeDefined();
   expect(result.cssImports).toContain("./styles.css");
@@ -578,7 +587,7 @@ test("transformJSX removes CSS imports from transformed code", () => {
 
     export default function App() { return <div>App</div>; }
   `;
-  const result = transformJSX(code, "App.jsx", new Set());
+  const result = transformJSX(code, "App.jsx");
 
   expect(result.code).not.toContain("import './styles.css'");
   expect(result.code).toContain("React");
@@ -590,7 +599,7 @@ test("transformJSX handles CSS imports with different quotes", () => {
     import "./double.css";
     import '@/styles/globals.css';
   `;
-  const result = transformJSX(code, "App.jsx", new Set());
+  const result = transformJSX(code, "App.jsx");
 
   expect(result.cssImports).toContain("./single.css");
   expect(result.cssImports).toContain("./double.css");

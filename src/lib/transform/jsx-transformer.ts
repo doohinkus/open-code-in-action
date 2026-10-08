@@ -14,15 +14,31 @@ export interface TransformResult {
   cssImports?: Set<string>;
 }
 
-// Simple hash function for cache keys (not cryptographic, just for dedup)
+// Single grammar for all import parsing and stripping below: these copies
+// previously drifted (e.g. namespace support differed between the parse and
+// strip passes), so an import could be registered in the import map yet
+// survive bundle rewriting. Group 1 is the default binding, group 2 is the
+// module specifier. Factories return fresh stateful regexes (/g lastIndex).
+const importFrom = (): RegExp =>
+  new RegExp(
+    /import\s+(?:type\s+)?(?:(\w+)\s*,\s*)?(?:(?:{[^}]*}|\*\s+as\s+\w+)?|(?:\w+))?\s*(?:,\s*(?:{[^}]*}|\*\s+as\s+\w+))?\s*from\s*['"]([^'"]+)['"]\s*;?/.source,
+    "g"
+  );
+
+const importSideEffect = (): RegExp =>
+  new RegExp(/import\s+['"]([^'"]+)['"]\s*;?/.source, "g");
+
+// Hash function for cache keys (not cryptographic, just for dedup). FNV-1a
+// with a length component: hashing a stale filename+code must never return
+// another code version's transform, so collisions must be astronomically rare.
 function hashString(str: string): string {
-  let hash = 0;
+  let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
   }
-  return hash.toString(36);
+  h ^= Math.imul(str.length, 0x01000193);
+  return `${str.length.toString(36)}:${h.toString(36)}`;
 }
 
 // Cache for transformed code: key = hash(filename + code), value = TransformResult
@@ -35,7 +51,8 @@ function getTransformCacheKey(filename: string, code: string): string {
 
 function pruneTransformCache(): void {
   if (transformCache.size > TRANSFORM_CACHE_MAX_SIZE) {
-    // Remove oldest entries (first 20% of the map)
+    // Evict oldest-inserted entries; hot keys are refreshed to the tail on
+    // every hit (LRU), so a hot working set is not evicted by stale entries.
     const keysToDelete = Array.from(transformCache.keys()).slice(0, Math.floor(TRANSFORM_CACHE_MAX_SIZE * 0.2));
     for (const key of keysToDelete) {
       transformCache.delete(key);
@@ -60,18 +77,15 @@ export { ${componentName} };
  *
  * @param code - The source code to transform
  * @param filename - The filename (used to determine TypeScript vs JavaScript)
- * @param existingFiles - Set of existing file paths (for import resolution)
  * @returns Transform result with code, imports, and any errors
  */
-export function transformJSX(
-  code: string,
-  filename: string,
-  existingFiles: Set<string>
-): TransformResult {
-  // Check cache first
+export function transformJSX(code: string, filename: string): TransformResult {
+  // Check cache first. Re-inserting the key moves it to the tail (LRU touch).
   const cacheKey = getTransformCacheKey(filename, code);
   const cached = transformCache.get(cacheKey);
   if (cached) {
+    transformCache.delete(cacheKey);
+    transformCache.set(cacheKey, cached);
     return cached;
   }
 
@@ -80,8 +94,8 @@ export function transformJSX(
     const isTypeScript = filename.endsWith(".ts") || filename.endsWith(".tsx");
 
     let processedCode = code;
-    const importRegex =
-      /import\s+(?:{[^}]+}|[^,\s]+)?\s*(?:,\s*{[^}]+})?\s+from\s+['"]([^'"]+)['"]/g;
+    const importRegex = importFrom();
+
     const imports = new Set<string>();
     const cssImports = new Set<string>();
 
@@ -105,8 +119,8 @@ export function transformJSX(
 
     let match;
     while ((match = importRegex.exec(code)) !== null) {
-      if (!match[1].endsWith('.css')) {
-        imports.add(match[1]);
+      if (!match[2].endsWith('.css')) {
+        imports.add(match[2]);
       }
     }
 
@@ -259,7 +273,6 @@ export function createBundleFromFiles(files: Map<string, string>): {
   const transformed = new Map<string, string>();
   const errors: Array<{ path: string; error: string }> = [];
   let collectedStyles = "";
-  const filePaths = new Set(files.keys());
 
   // First pass: transform all JS/TS files
   for (const [path, content] of files) {
@@ -269,7 +282,7 @@ export function createBundleFromFiles(files: Map<string, string>): {
       path.endsWith(".ts") ||
       path.endsWith(".tsx")
     ) {
-      const { code, error, cssImports } = transformJSX(content, path, filePaths);
+      const { code, error, cssImports } = transformJSX(content, path);
 
       if (error) {
         errors.push({ path, error });
@@ -311,10 +324,10 @@ export function createBundleFromFiles(files: Map<string, string>): {
   const sideEffectImports = new Set<string>();
 
   function parseAndCollectImports(code: string): void {
-    const importRegex = /import\s+(?:{[^}]+}|[^,\s]+|\*\s+as\s+\w+)?\s*(?:,\s*(?:{[^}]+}|\*\s+as\s+\w+))?\s+from\s+['"]([^'"]+)['"]\s*;?\s*/g;
+    const importRegex = importFrom();
     let match;
     while ((match = importRegex.exec(code)) !== null) {
-      const source = match[1];
+      const source = match[2];
       if (isLocalImport(source) || source.endsWith('.css')) continue;
 
       const clause = match[0].trim();
@@ -352,7 +365,7 @@ export function createBundleFromFiles(files: Map<string, string>): {
       }
     }
 
-    const sideEffectRegex = /import\s+['"]([^'"]+)['"]\s*;?\s*/g;
+    const sideEffectRegex = importSideEffect();
     while ((match = sideEffectRegex.exec(code)) !== null) {
       const source = match[1];
       if (!isLocalImport(source) && !source.endsWith('.css')) {
@@ -399,12 +412,10 @@ export function createBundleFromFiles(files: Map<string, string>): {
     let rewritten = code.replace(cssImportRemoveRegex, "");
 
     // Remove ALL import statements (local and CDN) — CDN imports are
-    // deduplicated and emitted once above
-    rewritten = rewritten.replace(
-      /import\s+(?:{[^}]*}|\w+(?:\s*,\s*{[^}]*})?|\*\s+as\s+\w+)?\s*(?:,\s*(?:{[^}]*}|\*\s+as\s+\w+))?\s*from\s+['"][^'"]+['"]\s*;?\s*/g,
-      ""
-    );
-    rewritten = rewritten.replace(/import\s+['"][^'"]+['"]\s*;?\s*/g, "");
+    // deduplicated and emitted once above. Uses the shared grammar so
+    // stripping always matches what was parsed.
+    rewritten = rewritten.replace(importFrom(), "");
+    rewritten = rewritten.replace(importSideEffect(), "");
 
     // Strip all `export` keywords from declarations
     // export default function X -> function X
@@ -520,7 +531,6 @@ export function createImportMap(files: Map<string, string>): {
     "react/jsx-dev-runtime": `https://esm.sh/react@${REACT_VERSION}/jsx-dev-runtime`,
   };
 
-  const existingFiles = new Set(files.keys());
   const allThirdPartyImports = new Set<string>();
   let collectedStyles = "";
 
@@ -528,11 +538,10 @@ export function createImportMap(files: Map<string, string>): {
   for (const [path, content] of files) {
     if (!path.endsWith(".js") && !path.endsWith(".jsx") && !path.endsWith(".ts") && !path.endsWith(".tsx")) continue;
 
-    const importRegex =
-      /import\s+(?:{[^}]+}|[^,\s]+)?\s*(?:,\s*{[^}]+})?\s+from\s+['"]([^'"]+)['"]/g;
+    const importRegex = importFrom();
     let match;
     while ((match = importRegex.exec(content)) !== null) {
-      const imp = match[1];
+      const imp = match[2];
       if (isCdnImport(imp) && !imp.endsWith(".css")) {
         const baseName = imp.split("/")[0].startsWith("@")
           ? imp.split("/").slice(0, 2).join("/")
@@ -551,7 +560,7 @@ export function createImportMap(files: Map<string, string>): {
 
     // Side-effect imports (no `from` clause) also need import-map entries,
     // e.g. `import 'confetti'`.
-    const sideEffectRegex = /import\s+['"]([^'"]+)['"]/g;
+    const sideEffectRegex = importSideEffect();
     while ((match = sideEffectRegex.exec(content)) !== null) {
       const imp = match[1];
       if (isCdnImport(imp) && !imp.endsWith(".css")) {
@@ -591,6 +600,13 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+// Keeps generated CSS from breaking out of the <style> element: `</style><script>…`
+// inside a user/generator-authored stylesheet would otherwise execute script
+// inside the preview iframe.
+function escapeStyleTagContent(css: string): string {
+  return css.replace(/<\/style/gi, "<\\/style");
 }
 
 // Markers that indicate a component intends to fill the whole viewport with
@@ -909,7 +925,7 @@ ${rootCentering}    }
       color: #991b1b;
     }
   </style>
-  ${styles ? `<style>\n${styles}</style>` : ''}
+  ${styles ? `<style>\n${escapeStyleTagContent(styles)}</style>` : ''}
   <script type="importmap"${nonce ? ` nonce="${nonce}"` : ''}>
     ${importMap.replace(/</g, "\\u003c")}
   </script>
@@ -1089,7 +1105,6 @@ export function validateFiles(
   files: Map<string, string>
 ): Array<{ path: string; error: string }> {
   const errors: Array<{ path: string; error: string }> = [];
-  const filePaths = new Set(files.keys());
   for (const [path, content] of files) {
     if (
       path.endsWith(".js") ||
@@ -1097,7 +1112,7 @@ export function validateFiles(
       path.endsWith(".ts") ||
       path.endsWith(".tsx")
     ) {
-      const { error } = transformJSX(content, path, filePaths);
+      const { error } = transformJSX(content, path);
       if (error) {
         errors.push({ path, error });
       }
