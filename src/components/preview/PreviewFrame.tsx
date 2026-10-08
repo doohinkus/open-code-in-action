@@ -93,6 +93,24 @@ export function PreviewFrame() {
     }
   }, []);
 
+  // Ref callback instead of a plain ref: whenever the iframe element is
+  // (re)mounted — e.g. the "Generating preview…" chrome replacing the pane
+  // during generation, or mobile tab switches — refs like iframeReadyRef
+  // keep values from the PREVIOUS instance. Without the reset below, the
+  // first rebuild after a remount takes the hot-swap path and posts the
+  // update into a fresh about:blank document that has no module runtime —
+  // the preview then stays blank until something else forces a rebuild.
+  const attachIframe = useCallback(
+    (node: HTMLIFrameElement | null) => {
+      iframeRef.current = node;
+      if (!node) return;
+      iframeReadyRef.current = false;
+      lastSignatureRef.current = null;
+      baselineImportsRef.current = null;
+    },
+    []
+  );
+
   useEffect(() => {
     if (!isInspectMode) return;
     updateIframeRect();
@@ -442,7 +460,7 @@ export function PreviewFrame() {
         <MousePointerClick className="h-4 w-4" />
       </button>
       <iframe
-        ref={iframeRef}
+        ref={attachIframe}
         className="w-full h-full border-0 bg-background"
         title="Preview"
       />
