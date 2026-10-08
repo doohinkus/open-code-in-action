@@ -22,6 +22,23 @@ interface PreviewErrorInfo {
   stack?: string;
 }
 
+// Stable-context signature for hot-swap eligibility: when only the bundle
+// changed, the iframe can receive a `uigen:update` message instead of a full
+// srcdoc rebuild. Anything else (styles, errors, theme, entry point, import
+// map key/value changes) requires a document rebuild.
+type PreviewSignature = string;
+
+function makePreviewSignature(
+  entryPoint: string,
+  styles: string,
+  errors: Array<{ path: string; error: string }>,
+  importMap: string,
+  theme: string,
+  centerComponent: boolean
+): string {
+  return JSON.stringify([entryPoint, styles, errors, importMap, theme, centerComponent]);
+}
+
 function PreviewChrome({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-full flex items-center justify-center p-8 bg-muted/40 relative overflow-hidden">
@@ -61,6 +78,13 @@ export function PreviewFrame() {
   const [isFirstLoad, setIsFirstLoad] = useState(true);
   const [iframeRect, setIframeRect] = useState<DOMRect | null>(null);
 
+  // Hot-swap state: the iframe runtime confirms readiness with a
+  // `uigen:ready` message; importMap entries act as the add-only baseline
+  // for supplemental importmap shims.
+  const iframeReadyRef = useRef(false);
+  const lastSignatureRef = useRef<string | null>(null);
+  const baselineImportsRef = useRef<Record<string, string> | null>(null);
+
   const isGenerating = status === "streaming" || status === "submitted";
 
   const updateIframeRect = useCallback(() => {
@@ -99,6 +123,9 @@ export function PreviewFrame() {
         Sentry.captureException(error, {
           tags: { source: "preview-sandbox" },
         });
+      } else if (data.type === "uigen:ready") {
+        // The fresh document's update channel is live.
+        iframeReadyRef.current = true;
       } else if (data.type === "uigen:element-hover") {
         setHoveredElement({
           id: data.id,
@@ -196,29 +223,79 @@ export function PreviewFrame() {
             return;
           }
 
-          const nonce = crypto.randomUUID();
           const centerComponent = !isFullScreenComponent(
             files.get(foundEntryPoint) ?? ""
           );
-          const previewHTML = createPreviewHTML(
+          const theme = resolvedTheme === "dark" ? "dark" : "light";
+          const signature = makePreviewSignature(
             foundEntryPoint,
-            importMap,
             styles,
             errors,
-            bundleCode,
-            nonce,
-            centerComponent,
-            resolvedTheme === "dark" ? "dark" : "light"
+            importMap,
+            theme,
+            centerComponent
           );
 
           if (iframeRef.current) {
             const iframe = iframeRef.current;
 
+            if (
+              errors.length === 0 &&
+              iframeReadyRef.current &&
+              lastSignatureRef.current === signature &&
+              baselineImportsRef.current
+            ) {
+              // Hot-swap: only the bundle changed. Deliver it to the live
+              // document instead of tearing down srcdoc (which would
+              // re-download the Tailwind CDN runtime and remount everything).
+              // If the import map can't be parsed or has a changed entry,
+              // fall through to a full rebuild (add-only map rule).
+              const prevImports = baselineImportsRef.current;
+              let nextImports: Record<string, string> | null = null;
+              let importMapValid = true;
+              try {
+                nextImports = JSON.parse(importMap).imports ?? null;
+              } catch {
+                importMapValid = false;
+              }
+              if (importMapValid && nextImports) {
+                const newEntries: Record<string, string> = {};
+                for (const key of Object.keys(nextImports)) {
+                  if (!(key in prevImports)) newEntries[key] = nextImports[key];
+                }
+                iframe.contentWindow?.postMessage(
+                  { type: "uigen:update", bundleSrc: bundleCode, newImportEntries: newEntries },
+                  "*"
+                );
+                setError(null);
+                setPreviewError(null);
+                return;
+              }
+            }
+
+            const nonce = crypto.randomUUID();
+            const previewHTML = createPreviewHTML(
+              foundEntryPoint,
+              importMap,
+              styles,
+              errors,
+              bundleCode,
+              nonce,
+              centerComponent,
+              theme
+            );
             iframe.setAttribute(
               "sandbox",
               "allow-scripts"
             );
             iframe.srcdoc = previewHTML;
+            lastSignatureRef.current = signature;
+            try {
+              baselineImportsRef.current = JSON.parse(importMap).imports ?? {};
+            } catch {
+              baselineImportsRef.current = null;
+            }
+            iframeReadyRef.current = false;
 
             setError(null);
             setPreviewError(null);

@@ -238,7 +238,7 @@ test("createPreviewHTML generates valid HTML", () => {
   expect(html).toContain('<div id="root"></div>');
   expect(html).toContain('type="importmap"');
   expect(html).toContain(importMap);
-  expect(html).toContain("loadApp()");
+  expect(html).toContain("loadApp(window.__bundleSrc)");
 });
 
 test("createPreviewHTML includes Tailwind CSS", () => {

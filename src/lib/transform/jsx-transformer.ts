@@ -510,12 +510,52 @@ function esmShUrl(importPath: string): string {
  * @param files - Map of file paths to their content
  * @returns Object with importMap JSON, collected styles, syntax errors, and bundled code
  */
-export function createImportMap(files: Map<string, string>): {
+interface ImportMapResult {
   importMap: string;
   styles: string;
   errors: Array<{ path: string; error: string }>;
   bundleCode: string;
-} {
+}
+
+// Whole-pipeline cache: bundle rewriting runs ~15 regex passes over the full
+// transformed source of every file, so an unchanged tree should skip straight
+// to the cached result. Keyed on a content-aware hash of the file map.
+const importMapCache = new Map<string, ImportMapResult>();
+const IMPORT_MAP_CACHE_MAX_SIZE = 50;
+
+function makeFileMapKey(files: Map<string, string>): string {
+  const paths = [...files.keys()].sort();
+  let hashOfParts = 0x811c9dc5;
+  for (const path of paths) {
+    const content = files.get(path)!;
+    const mixed = path + "\0" + content;
+    for (let i = 0; i < mixed.length; i++) {
+      hashOfParts ^= mixed.charCodeAt(i);
+      hashOfParts = Math.imul(hashOfParts, 0x01000193) >>> 0;
+    }
+    hashOfParts ^= Math.imul(mixed.length + 1, 0x01000193);
+  }
+  return `${files.size}:${hashOfParts.toString(36)}`;
+}
+
+export function createImportMap(files: Map<string, string>): ImportMapResult {
+  const cacheKey = makeFileMapKey(files);
+  const cached = importMapCache.get(cacheKey);
+  if (cached) {
+    importMapCache.delete(cacheKey);
+    importMapCache.set(cacheKey, cached);
+    return cached;
+  }
+  const result = buildImportMap(files);
+  importMapCache.set(cacheKey, result);
+  if (importMapCache.size > IMPORT_MAP_CACHE_MAX_SIZE) {
+    const oldest = importMapCache.keys().next().value;
+    if (oldest !== undefined) importMapCache.delete(oldest);
+  }
+  return result;
+}
+
+function buildImportMap(files: Map<string, string>): ImportMapResult {
   // React is pinned to an exact, already-built version. The loose "@19"
   // alias redirects to the newest release, which routes through esm.sh's
   // on-demand build pipeline — that endpoint reliably times out (observed:
@@ -976,8 +1016,10 @@ ${rootCentering}    }
     const __bundleSrc = ${escapeScriptString(bundleCode)};
     const __blob = new Blob([__bundleSrc], {type: 'application/javascript'});
     window.__bundleUrl = URL.createObjectURL(__blob);
+    window.__bundleSrcProcessed = true;
   </script>
   <script${nonce ? ` nonce="${nonce}"` : ''} type="module">
+    const __rootEl = document.getElementById('root');
     const __postError = (message, stack) => {
       try {
         parent.postMessage({ type: 'uigen:error', message: String(message), stack: stack ? String(stack) : '' }, '*');
@@ -1052,13 +1094,22 @@ ${rootCentering}    }
       return { React, ReactDOM };
     }
 
-    async function loadApp() {
+    async function __loadApp(bundleSrc) {
       let React, ReactDOM, mod;
       try {
         for (let attempt = 1; attempt <= __MAX_ATTEMPTS; attempt++) {
           try {
             ({ React, ReactDOM } = await __coreLibs());
-            mod = await import(window.__bundleUrl);
+            // A fresh blob URL per attempt/update: browsers cache failed
+            // module loads per URL, so retrying the same URL would replay
+            // a transient failure forever.
+            const blob = new Blob([bundleSrc], {type: 'application/javascript'});
+            const url = URL.createObjectURL(blob);
+            if (window.__bundleUrl && window.__bundleUrl !== url) {
+              try { URL.revokeObjectURL(window.__bundleUrl); } catch (e) {}
+            }
+            window.__bundleUrl = url;
+            mod = await import(url);
             break;
           } catch (attemptError) {
             if (attempt === __MAX_ATTEMPTS) throw attemptError;
@@ -1066,11 +1117,13 @@ ${rootCentering}    }
           }
         }
       } catch (error) {
-        if (window.__bundleUrl) URL.revokeObjectURL(window.__bundleUrl);
+        if (window.__bundleUrl) {
+          try { URL.revokeObjectURL(window.__bundleUrl); } catch (e) {}
+        }
         console.error('Failed to load app:', error);
         __postError(error && error.message ? error.message : String(error), error && error.stack);
-        document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error && error.toString ? error.toString() : String(error)) + '</pre></div>';
-        return;
+        __rootEl.innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error && error.toString ? error.toString() : String(error)) + '</pre></div>';
+        return false;
       }
 
       try {
@@ -1079,16 +1132,54 @@ ${rootCentering}    }
         if (!App) {
           throw new Error('No default export or App export found in entry point');
         }
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(React.createElement(__makeErrorBoundary(React), null, React.createElement(App)));
+        // Reuse the same root across hot-swap updates: recreating it on the
+        // same container throws, and the import map's single pinned React
+        // means the module instance is shared anyway.
+        if (!window.__uigenRoot) {
+          window.__uigenRoot = ReactDOM.createRoot(__rootEl);
+        }
+        window.__uigenRoot.render(React.createElement(__makeErrorBoundary(React), null, React.createElement(App)));
+        return true;
       } catch (error) {
         console.error('Failed to render app:', error);
         __postError(error && error.message ? error.message : String(error), error && error.stack);
-        document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error && error.toString ? error.toString() : String(error)) + '</pre></div>';
+        __rootEl.innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error && error.toString ? error.toString() : String(error)) + '</pre></div>';
+        return false;
       }
     }
+    window.__uigenLoadApp = __loadApp;
 
-    loadApp();
+    // Hot-swap channel: the host can deliver a new bundle without tearing
+    // down the document (which would re-download the Tailwind CDN runtime
+    // and remount everything). Import-map CAN only add keys, so changed or
+    // removed entries force a full document rebuild on the host side.
+    window.addEventListener('message', (e) => {
+      const data = e.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type !== 'uigen:update') return;
+      void (async () => {
+        try {
+          const { bundleSrc, newImportEntries } = data;
+          if (newImportEntries && Object.keys(newImportEntries).length > 0) {
+            const shim = document.createElement('script');
+            shim.type = 'importmap';
+            shim.textContent = JSON.stringify({ imports: newImportEntries });
+            document.head.appendChild(shim);
+          }
+          const ok = await __loadApp(bundleSrc);
+          try { parent.postMessage({ type: 'uigen:update-done', ok }, '*'); } catch (err) {}
+        } catch (err) {
+          __postError(err && err.message ? err.message : String(err), err && err.stack);
+          try { parent.postMessage({ type: 'uigen:update-done', ok: false }, '*'); } catch (e) {}
+        }
+      })();
+    });
+
+    // Confirm the update channel is live before registering anything that
+    // awaits the network, so no early update message is lost.
+    try { parent.postMessage({ type: 'uigen:ready' }, '*'); } catch (e) {}
+
+    __loadApp(window.__bundleSrc);
   </script>` : ''}
   ${createInspectionScript(nonce || '')}
 </body>

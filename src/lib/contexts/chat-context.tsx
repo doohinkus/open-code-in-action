@@ -8,6 +8,7 @@ import {
   useRef,
   useCallback,
   useState,
+  useMemo,
 } from "react";
 import { useChat as useAIChat } from "@ai-sdk/react";
 import { Message } from "ai";
@@ -312,25 +313,46 @@ export function ChatProvider({
     }
   }, [messages, fileSystem, projectId, status]);
 
+  // Memoized context value: without this, the whole consumer tree
+  // (ChatInterface, PreviewFrame, activity log…) re-renders on every stream
+  // chunk even when its consumed slice didn't change.
+  const contextValue = useMemo(
+    () => ({
+      projectId,
+      messages,
+      input,
+      handleInputChange,
+      setInput,
+      handleSubmit,
+      status,
+      error,
+      reload,
+      append,
+      stop: handleStop,
+      requestFix,
+      generationTimedOut,
+      generationInterrupted,
+    }),
+    [
+      projectId,
+      messages,
+      input,
+      handleInputChange,
+      setInput,
+      handleSubmit,
+      status,
+      error,
+      reload,
+      append,
+      handleStop,
+      requestFix,
+      generationTimedOut,
+      generationInterrupted,
+    ]
+  );
+
   return (
-    <ChatContext.Provider
-      value={{
-        projectId,
-        messages,
-        input,
-        handleInputChange,
-        setInput,
-        handleSubmit,
-        status,
-        error,
-        reload,
-        append,
-        stop: handleStop,
-        requestFix,
-        generationTimedOut,
-        generationInterrupted,
-      }}
-    >
+    <ChatContext.Provider value={contextValue}>
       {children}
     </ChatContext.Provider>
   );
