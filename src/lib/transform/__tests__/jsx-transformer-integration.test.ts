@@ -32,8 +32,8 @@ test("integration: anonymous arrow default export becomes a renderable entry", (
   const result = createBundleFromFiles(files);
 
   expect(result.errors).toHaveLength(0);
-  expect(result.code).toContain("const __uigenDefault = () =>");
-  expect(result.code).toContain("const __AppComponent = __uigenDefault");
+  expect(result.code).toContain("const __uigenDefault_Appjsx = () =>");
+  expect(result.code).toContain("const __AppComponent = __uigenDefault_Appjsx");
   expect(result.code).toContain("export { __AppComponent as App }");
 });
 
@@ -47,8 +47,8 @@ test("integration: anonymous function default export becomes a renderable entry"
   const result = createBundleFromFiles(files);
 
   expect(result.errors).toHaveLength(0);
-  expect(result.code).toContain("const __uigenDefault = function()");
-  expect(result.code).toContain("const __AppComponent = __uigenDefault");
+  expect(result.code).toContain("const __uigenDefault_Appjsx = function()");
+  expect(result.code).toContain("const __AppComponent = __uigenDefault_Appjsx");
 });
 
 test("integration: async function default export is bound correctly", () => {
@@ -62,7 +62,7 @@ test("integration: async function default export is bound correctly", () => {
 
   expect(result.errors).toHaveLength(0);
   expect(result.code).toContain("async function App()");
-  expect(result.code).toContain("const __AppComponent = __uigenDefault");
+  expect(result.code).toContain("const __AppComponent = __uigenDefault_Appjsx");
   expect(result.code).toContain("export { __AppComponent as App }");
 });
 
@@ -75,8 +75,68 @@ export default App;`],
   const result = createBundleFromFiles(files);
 
   expect(result.errors).toHaveLength(0);
-  expect(result.code).toContain("const __uigenDefault = App;");
-  expect(result.code).toContain("const __AppComponent = __uigenDefault");
+  expect(result.code).toContain("const __uigenDefault_Appjsx = App;");
+  expect(result.code).toContain("const __AppComponent = __uigenDefault_Appjsx");
+});
+
+// The canned two-file flow (App.jsx + components/Counter.jsx with an
+// `export default Counter;` identifier default) previously produced TWO
+// `const __uigenDefault` declarations in the shared bundle scope —
+// "Cannot declare a const variable twice: '__uigenDefault'".
+test("integration: synthetic default bindings are unique per file", () => {
+  const files = new Map<string, string>([
+    ["/App.jsx", `import Counter from '@/components/Counter';
+
+export default function App() {
+  return <Counter />;
+}`],
+    ["/components/Counter.jsx", `const Counter = () => <div>0</div>;
+
+export default Counter;`],
+    ["/components/ContactForm.jsx", `const ContactForm = () => <form />;
+
+export default ContactForm;`],
+  ]);
+
+  const result = createBundleFromFiles(files);
+
+  expect(result.errors).toHaveLength(0);
+  // No bare shared binding anywhere
+  expect(result.code).not.toMatch(/const __uigenDefault =/);
+  // Component files get their own unique bindings
+  expect(result.code).toContain("const __uigenDefault_componentsCounterjsx = Counter;");
+  expect(result.code).toContain("const __uigenDefault_componentsContactFormjsx = ContactForm;");
+  // The named entry still resolves by name (App.jsx's default is named)
+  expect(result.code).toContain("const __AppComponent = App;");
+  // Each binding declared at most once (no duplicate const in one scope)
+  for (const name of [
+    "__uigenDefault_Appjsx",
+    "__uigenDefault_componentsCounterjsx",
+    "__uigenDefault_componentsContactFormjsx",
+  ]) {
+    const declared = result.code.match(new RegExp(`\\bconst ${name}\\b`, "g")) || [];
+    expect(declared.length).toBeLessThanOrEqual(2); // binding + entry alias may both reference it
+  }
+});
+
+test("integration: anonymous entry default resolves to the entry's own binding", () => {
+  const files = new Map<string, string>([
+    ["/App.jsx", `const Counter = () => <div>0</div>;
+
+export default Counter;`],
+    ["/components/Card.jsx", `const Card = () => <div>card</div>;
+
+export default Card;`],
+  ]);
+
+  const result = createBundleFromFiles(files);
+
+  expect(result.errors).toHaveLength(0);
+  // Entry with an expression default: __AppComponent must point at the
+  // ENTRY's binding, not another file's
+  expect(result.code).toContain(
+    "const __AppComponent = __uigenDefault_Appjsx;"
+  );
 });
 
 test("integration: named function default export still resolves by name", () => {

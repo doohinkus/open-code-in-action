@@ -152,8 +152,22 @@ export function transformJSX(code: string, filename: string): TransformResult {
   return result;
 }
 
-function resolveRelativePath(fromDir: string, relativePath: string): string {
-  const parts = fromDir.split("/").filter(Boolean);
+// Per-file synthetic binding for anonymous/expression-style default exports.
+// All files are concatenated into ONE module scope, so a shared
+// `const __uigenDefault` collides as soon as two files each have an
+// identifier/arrow-style default (e.g. App.jsx + components/Counter.jsx
+// with `export default Counter;`) — "Cannot declare a const variable
+// twice". Suffixing the sanitized path makes every declaration unique;
+// the `__uigen` prefix keeps it clear of user identifiers.
+function uigenDefaultBinding(path: string): string {
+  return `__uigenDefault_${path.replace(/[^a-zA-Z0-9]/g, "").slice(0, 40)}`;
+}
+
+// Sentinel analyzeExports() uses for anonymous/expression defaults; the
+// bundler maps it to the owning file's unique binding.
+const UIGEN_DEFAULT_SENTINEL = "__uigenDefault";
+
+function resolveRelativePath(fromDir: string, relativePath: string): string {  const parts = fromDir.split("/").filter(Boolean);
   const relParts = relativePath.split("/");
 
   for (const part of relParts) {
@@ -212,7 +226,7 @@ function analyzeExports(code: string): FileExport {
   );
   if (asyncDefaultMatch) {
     info.hasDefault = true;
-    info.defaultExpr = asyncDefaultMatch[1] ?? "__uigenDefault";
+    info.defaultExpr = asyncDefaultMatch[1] ?? UIGEN_DEFAULT_SENTINEL;
   }
 
   // Check for export default function/class Name
@@ -226,7 +240,7 @@ function analyzeExports(code: string): FileExport {
   const anonymousFuncMatch = code.match(/export\s+default\s+(?:async\s+)?(function|class)\s*\(/);
   if (anonymousFuncMatch) {
     info.hasDefault = true;
-    info.defaultExpr = "__uigenDefault";
+    info.defaultExpr = UIGEN_DEFAULT_SENTINEL;
   }
 
   // Check for export default const Name =
@@ -238,12 +252,12 @@ function analyzeExports(code: string): FileExport {
 
   // Check for export default <expr> (any other default export: identifier
   // references, arrows, objects, etc.). The bundler rewrites these into a
-  // synthetic `const __uigenDefault = ...`, so the expression name always
-  // resolves to __uigenDefault.
+  // synthetic per-file `const __uigenDefault_<file> = ...`, so the
+  // expression name always resolves to the sentinel.
   const defaultRefMatch = code.match(/export\s+default\s+(?!function|class|const|let|var)([\s\S]*?);?\s*$/);
   if (defaultRefMatch) {
     info.hasDefault = true;
-    info.defaultExpr = "__uigenDefault";
+    info.defaultExpr = UIGEN_DEFAULT_SENTINEL;
   }
 
   // Named exports: export function X, export const X, export class X
@@ -417,27 +431,29 @@ export function createBundleFromFiles(files: Map<string, string>): {
     rewritten = rewritten.replace(importFrom(), "");
     rewritten = rewritten.replace(importSideEffect(), "");
 
-    // Strip all `export` keywords from declarations
+    // Strip all `export` keywords from declarations. Synthetic default
+    // bindings are per-file (unique) — see uigenDefaultBinding.
+    const defaultBinding = uigenDefaultBinding(path);
     // export default function X -> function X
     rewritten = rewritten.replace(/export\s+default\s+(function|class)\s+(\w+)/g, "$1 $2");
     // export default async function X -> async function X (named only)
     rewritten = rewritten.replace(/export\s+default\s+async\s+(function|class)\s+(\w+)/g, "async $1 $2");
-    // export default function/class (anonymous) -> const __uigenDefault = function/class
+    // export default function/class (anonymous) -> const __uigenDefault_<file> = function/class
     rewritten = rewritten.replace(
       /export\s+default\s+async\s+(function|class)\s*\(/g,
-      "const __uigenDefault = async $1("
+      `const ${defaultBinding} = async $1(`
     );
     rewritten = rewritten.replace(
       /export\s+default\s+(function|class)\s*\(/g,
-      "const __uigenDefault = $1("
+      `const ${defaultBinding} = $1(`
     );
     // export default const/let/var X = -> const/let/var X =
     rewritten = rewritten.replace(/export\s+default\s+(const|let|var)\s+(\w+)\s*=/g, "$1 $2 =");
     // export default <expr> (any other default: identifier refs, arrows,
-    // objects, async arrows, etc.) -> const __uigenDefault = <expr>;
+    // objects, async arrows, etc.) -> const __uigenDefault_<file> = <expr>;
     rewritten = rewritten.replace(
       /export\s+default\s+(?!function|class|const|let|var)\s*([\s\S]*?);?\s*$/gm,
-      "const __uigenDefault = $1;"
+      `const ${defaultBinding} = $1;`
     );
     // export function X -> function X
     rewritten = rewritten.replace(/export\s+(function|class)\s+(\w+)/g, "$1 $2");
@@ -462,14 +478,20 @@ export function createBundleFromFiles(files: Map<string, string>): {
   }
 
   // Find the entry point's default export name
-  const entryCode = transformed.get("/App.jsx") || transformed.get("/App.tsx") || "";
+  const entryPath = transformed.has("/App.jsx") ? "/App.jsx" : "/App.tsx";
+  const entryCode = transformed.get(entryPath) || "";
   const entryExports = analyzeExports(entryCode);
 
   // At the end of the bundle, re-export the entry point component
-  // for the host module script to import
-  if (entryExports.defaultExpr) {
+  // for the host module script to import. A sentinel default (anonymous or
+  // expression-style) resolves to the ENTRY file's own unique binding.
+  const entryDefaultExpr =
+    entryExports.defaultExpr === UIGEN_DEFAULT_SENTINEL
+      ? uigenDefaultBinding(entryPath)
+      : entryExports.defaultExpr;
+  if (entryDefaultExpr) {
     parts.push(`
-const __AppComponent = ${entryExports.defaultExpr};
+const __AppComponent = ${entryDefaultExpr};
 export default __AppComponent;
 export { __AppComponent as App };
 `);
