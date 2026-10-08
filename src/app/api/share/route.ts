@@ -16,8 +16,9 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
 
 function getClientIp(req: Request): string {
-  // Prefer the proxy-set x-real-ip over the client-influencable X-Forwarded-For.
-  return req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  // Trust only the proxy-set x-real-ip; x-forwarded-for is client-spoofable
+  // and let callers rotate "IPs" to bypass the rate limit entirely.
+  return req.headers.get("x-real-ip")?.trim() || "proxy-unverified";
 }
 
 function checkRateLimit(ip: string): boolean {

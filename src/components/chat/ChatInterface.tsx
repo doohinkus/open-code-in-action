@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, ChangeEvent } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { ModelSelector } from "./ModelSelector";
@@ -25,6 +25,7 @@ export function ChatInterface() {
     messages,
     input,
     handleInputChange,
+    setInput,
     handleSubmit,
     status,
     reload,
@@ -68,10 +69,16 @@ export function ChatInterface() {
         if (done) break;
         text += decoder.decode(value, { stream: true });
       }
-      const match = text.match(/(?:^|\n)3:"([^"]*)"/);
-      if (match) {
+      // Signal on the protocol-core text part (`0:"…"`) rather than the
+      // error-part index: the data-stream protocol's part numbering can
+      // change with SDK upgrades, while a healthy provider always emits at
+      // least one text delta for "Reply with only the word OK".
+      const hasOutput = /(?:^|\n)0:"/.test(text);
+      if (!hasOutput) {
+        // Best-effort error extraction for the toast message.
+        const errorMatch = text.match(/(?:^|\n)3:"([^"]*)"/);
         toast(
-          `Provider error: ${match[1] || "the AI provider returned an error while streaming"}`,
+          `Provider error: ${errorMatch?.[1] || "the AI provider returned no output"}`,
           "error"
         );
         setTestStatus("fail");
@@ -79,8 +86,9 @@ export function ChatInterface() {
         toast("Provider is healthy", "success");
         setTestStatus("pass");
       }
-    } catch (e: any) {
-      toast(`Connection failed: ${e.message}`, "error");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      toast(`Connection failed: ${message}`, "error");
       setTestStatus("fail");
     }
   }, [toast]);
@@ -92,12 +100,9 @@ export function ChatInterface() {
         append({ role: "user", content: prompt });
         return;
       }
-      const syntheticEvent = {
-        target: { value: prompt },
-      } as ChangeEvent<HTMLTextAreaElement>;
-      handleInputChange(syntheticEvent);
+      setInput(prompt);
     },
-    [append, handleInputChange, status]
+    [append, setInput, status]
   );
 
   useEffect(() => {
@@ -177,6 +182,7 @@ export function ChatInterface() {
         <MessageInput
           input={input}
           handleInputChange={handleInputChange}
+          setInput={setInput}
           handleSubmit={handleSubmit}
           isLoading={status === "submitted" || status === "streaming"}
           onStop={stop}

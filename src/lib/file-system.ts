@@ -389,61 +389,69 @@ export class VirtualFileSystem {
    *
    * @param data - Record of paths to FileNode objects
    */
-  deserialize(data: Record<string, string>): void {
-    // Clear existing files except root
-    this.files.clear();
-    this.root.children?.clear();
-    this.files.set("/", this.root);
-
-    // Sort paths to ensure parent directories are created first
-    const paths = Object.keys(data).sort();
-
-    for (const path of paths) {
-      const parts = path.split("/").filter(Boolean);
-      let currentPath = "";
-
-      // Create parent directories if they don't exist
-      for (let i = 0; i < parts.length - 1; i++) {
-        currentPath += "/" + parts[i];
-        if (!this.exists(currentPath)) {
-          this.createDirectory(currentPath);
-        }
-      }
-
-      // Create the file
-      this.createFile(path, data[path]);
-    }
-  }
-
   deserializeFromNodes(data: Record<string, FileNode>): void {
     // Clear existing files except root
     this.files.clear();
     this.root.children?.clear();
     this.files.set("/", this.root);
 
+    // Normalize keys first so repeated slashes / .. / trailing slashes can't
+    // desync the sort order or the parent-creation walk.
+    const normalized = new Map<string, FileNode>();
+    for (const [path, node] of Object.entries(data)) {
+      const key = this.normalizePath(path);
+      if (key === "/") continue;
+      if (normalized.has(key)) {
+        throw new Error(`Invalid file system data: duplicate path "${key}"`);
+      }
+      normalized.set(key, node);
+    }
+
+    // A file node cannot also be a parent — that would silently drop one side.
+    for (const [key, node] of normalized) {
+      if (node.type !== "file") continue;
+      const childPrefix = key + "/";
+      for (const other of normalized.keys()) {
+        if (other !== key && other.startsWith(childPrefix)) {
+          throw new Error(
+            `Invalid file system data: "${key}" is a file node but other nodes exist under it`
+          );
+        }
+      }
+    }
+
     // Sort paths to ensure parent directories are created first
-    const paths = Object.keys(data).sort();
+    const paths = [...normalized.keys()].sort();
 
     for (const path of paths) {
-      if (path === "/") continue; // Skip root
+      const node = normalized.get(path)!;
+      const nodeType = node.type === "directory" ? "directory" : "file";
 
-      const node = data[path];
+      // Create parent directories if they don't exist
       const parts = path.split("/").filter(Boolean);
       let currentPath = "";
 
-      // Create parent directories if they don't exist
       for (let i = 0; i < parts.length - 1; i++) {
         currentPath += "/" + parts[i];
-        if (!this.exists(currentPath)) {
-          this.createDirectory(currentPath);
+        if (this.exists(currentPath)) continue;
+        if (!this.createDirectory(currentPath)) {
+          throw new Error(
+            `Invalid file system data: "${currentPath}" exists as a file but is required as a directory for "${path}"`
+          );
         }
       }
 
       // Create the file or directory
-      if (node.type === "file") {
-        this.createFile(path, node.content || "");
-      } else if (node.type === "directory") {
-        this.createDirectory(path);
+      if (nodeType === "file") {
+        const created = this.createFile(path, typeof node.content === "string" ? node.content : "");
+        if (!created) {
+          throw new Error(`Invalid file system data: could not create "${path}"`);
+        }
+      } else {
+        const created = this.createDirectory(path);
+        if (!created) {
+          throw new Error(`Invalid file system data: could not create "${path}"`);
+        }
       }
     }
   }
@@ -496,35 +504,27 @@ export class VirtualFileSystem {
   }
 
   createFileWithParents(path: string, content: string = "", overwrite = false): string {
+    const normalized = this.normalizePath(path);
+
     // Check if file already exists. An explicit overwrite replaces the whole
     // file (useful when regenerating a component); otherwise keep the guard
     // that steers the model toward targeted str_replace edits.
-    if (this.exists(path)) {
+    if (this.exists(normalized)) {
       if (!overwrite) {
         return (
-          `Error: File already exists: ${path}. ` +
+          `Error: File already exists: ${normalized}. ` +
           `To replace it entirely, call create again with "overwrite": true. ` +
           `To make a small edit, use the str_replace command instead.`
         );
       }
-      this.updateFile(path, content);
-      return `File replaced: ${path}`;
+      this.updateFile(normalized, content);
+      return `File replaced: ${normalized}`;
     }
 
-    // Create parent directories if they don't exist
-    const parts = path.split("/").filter(Boolean);
-    let currentPath = "";
-
-    for (let i = 0; i < parts.length - 1; i++) {
-      currentPath += "/" + parts[i];
-      if (!this.exists(currentPath)) {
-        this.createDirectory(currentPath);
-      }
+    if (!this.createFile(normalized, content)) {
+      return `Error: Could not create file: ${normalized}`;
     }
-
-    // Create the file
-    this.createFile(path, content);
-    return `File created: ${path}`;
+    return `File created: ${normalized}`;
   }
 
   replaceInFile(path: string, oldStr: string, newStr: string): string {
@@ -551,11 +551,20 @@ export class VirtualFileSystem {
       ) || []
     ).length;
 
-    // Replace all occurrences
-    const updatedContent = content.split(oldStr).join(newStr || "");
+    // Like str_replace_editor, require a unique match: replacing every
+    // occurrence of an over-generic string can silently corrupt code.
+    if (occurrences > 1) {
+      return (
+        `Error: Found ${occurrences} occurrences of the string in ${path}. ` +
+        `Old_str must match exactly one location. Include surrounding ` +
+        `context to make it unique, or use a larger old_str.`
+      );
+    }
+
+    const updatedContent = content.replace(oldStr, newStr || "");
     this.updateFile(path, updatedContent);
 
-    return `Replaced ${occurrences} occurrence(s) of the string in ${path}`;
+    return `Replaced 1 occurrence of the string in ${path} — ${path} updated`;
   }
 
   insertInFile(path: string, insertLine: number, text: string): string {

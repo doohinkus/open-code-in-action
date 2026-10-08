@@ -6,6 +6,7 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useMemo,
 } from "react";
 import { VirtualFileSystem, FileNode } from "@/lib/file-system";
 import { validateFiles } from "@/lib/transform/jsx-transformer";
@@ -68,17 +69,23 @@ export function FileSystemProvider({
     return fs;
   });
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [vfsRevision, setVfsRevision] = useState(0);
+  // Both counters advance on every mutation, so track them as one state
+  // object: two separate setStates per operation double the re-renders.
+  const [versions, setVersions] = useState({ refresh: 0, revision: 0 });
   const [syntaxErrors, setSyntaxErrors] = useState<
     Array<{ path: string; error: string }>
   >([]);
   const [isFixingErrors, setIsFixingErrors] = useState(false);
 
   const triggerRefresh = useCallback(() => {
-    setRefreshTrigger((prev) => prev + 1);
-    setVfsRevision((prev) => prev + 1);
+    setVersions((prev) => ({
+      refresh: prev.refresh + 1,
+      revision: prev.revision + 1,
+    }));
   }, []);
+
+  const refreshTrigger = versions.refresh;
+  const vfsRevision = versions.revision;
 
   useEffect(() => {
     if (!selectedFile) {
@@ -252,29 +259,48 @@ export function FileSystemProvider({
     [fileSystem, createFile, updateFile, deleteFile, renameFile]
   );
 
+  const contextValue = useMemo(
+    () => ({
+      fileSystem,
+      selectedFile,
+      setSelectedFile,
+      createFile,
+      updateFile,
+      deleteFile,
+      renameFile,
+      getFileContent,
+      getAllFiles,
+      refreshTrigger,
+      vfsRevision,
+      handleToolCall,
+      reset,
+      syntaxErrors,
+      isFixingErrors,
+      setIsFixingErrors,
+      setSyntaxErrors,
+      validateCurrentFiles,
+    }),
+    [
+      fileSystem,
+      selectedFile,
+      createFile,
+      updateFile,
+      deleteFile,
+      renameFile,
+      getFileContent,
+      getAllFiles,
+      refreshTrigger,
+      vfsRevision,
+      handleToolCall,
+      reset,
+      syntaxErrors,
+      isFixingErrors,
+      validateCurrentFiles,
+    ]
+  );
+
   return (
-    <FileSystemContext.Provider
-      value={{
-        fileSystem,
-        selectedFile,
-        setSelectedFile,
-        createFile,
-        updateFile,
-        deleteFile,
-        renameFile,
-        getFileContent,
-        getAllFiles,
-        refreshTrigger,
-        vfsRevision,
-        handleToolCall,
-        reset,
-        syntaxErrors,
-        isFixingErrors,
-        setIsFixingErrors,
-        setSyntaxErrors,
-        validateCurrentFiles,
-      }}
-    >
+    <FileSystemContext.Provider value={contextValue}>
       {children}
     </FileSystemContext.Provider>
   );

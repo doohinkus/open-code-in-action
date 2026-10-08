@@ -1,15 +1,24 @@
-import { createZipBlob } from "@/lib/download-zip";
+"use client";
+
+import { createZipBlob, triggerBlobDownload } from "@/lib/download-zip";
 
 // Builds a runnable Storybook 9 (react-vite) project from the virtual file
 // system contents: the generated JSX sources are copied into src/, @/ imports
 // are rewritten to relative paths, and a CSF story is generated for /App.jsx
-// plus every /components/*.jsx file.
+// (or /App.tsx) plus every /components/*.{jsx,tsx} file.
 
 const SB_VERSION = "9.1.15"; // match what the scaffold itself was verified against
 
-function pascalCase(name: string): string {
-  const cleaned = name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9]+(.)?/g, (_, c) => (c ? c.toUpperCase() : ""));
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+// Story imports need a valid JS identifier; generated files may be named in
+// any casing (e.g. `my-comp.jsx`), so fall back to a safe binding name while
+// keeping the readable title separate.
+const RESERVED_WORDS = /^(await|break|case|catch|class|const|continue|default|delete|do|else|enum|export|extends|false|finally|for|function|if|implements|import|in|instanceof|interface|let|new|null|package|private|protected|public|return|static|super|switch|this|throw|true|try|typeof|var|void|while|with|yield)$/;
+
+function asIdentifier(name: string): string | null {
+  if (!/^[A-Za-z_$][\w$]*$/.test(name) || RESERVED_WORDS.test(name)) {
+    return null;
+  }
+  return name;
 }
 
 // '/components/Foo.jsx' -> ['Foo.jsx', '/components/Foo.jsx']
@@ -18,11 +27,13 @@ function componentName(path: string): string {
   return base.replace(/\.[^.]+$/, "");
 }
 
-// Detect the default-exported component name in a source file, falling back
-// to the file name. Handles the styles the generation prompt allows:
+// Detect the default-exported component name in a source file. Handles the
+// styles the generation prompt allows:
 //   export default function Foo() {}   export default Foo;
 //   const Foo = ...; export default Foo;
-function defaultExportName(source: string, path: string): string | null {
+// Returns null when no valid-identifier name can be detected (the file name
+// may not be usable as an identifier either, e.g. `my-comp.jsx`).
+function defaultExportName(source: string): string | null {
   const patterns = [
     /export\s+default\s+function\s+([A-Za-z_$][\w$]*)/,
     /export\s+default\s+class\s+([A-Za-z_$][\w$]*)/,
@@ -32,8 +43,7 @@ function defaultExportName(source: string, path: string): string | null {
     const m = source.match(re);
     if (m) return m[1];
   }
-  const file = componentName(path);
-  return /^[A-Z]/.test(file) ? file : null;
+  return null;
 }
 
 export type StorybookProject = Map<string, string>;
@@ -42,43 +52,47 @@ interface ComponentEntry {
   // storybook project path, e.g. src/App.jsx or src/components/Foo.jsx
   destPath: string;
   importPath: string; // specifier to use from stories
-  name: string; // component identifier for the story
+  name: string; // valid component identifier for the story import
+  title: string; // human-readable title (may not be an identifier)
   content: string;
 }
 
 // Rewrite '@/...' import specifiers to relative paths from the importing
 // file's Storybook-project location. VFS paths are '/'-rooted; Storybook
-// sources live under src/.
+// sources live under src/. Covers static, side-effect, and dynamic imports.
 function rewriteAliases(content: string, vfsPath: string): string {
-  const dest = "src" + (vfsPath === "/App.jsx" ? "/App.jsx" : vfsPath.slice(1));
+  const dest = `src/${vfsPath.slice(1)}`;
   const fromDir = dest.includes("/") ? dest.slice(0, dest.lastIndexOf("/")) : "src";
   const depth = fromDir.split("/").length - 1; // components under src/ need ../
   const root = depth === 0 ? "./" : "../".repeat(depth) + "src/";
   return content.replace(
-    /(from\s+|import\s+)['"]@\/([^'"]+)['"]/g,
+    /(from\s+|import\s*\(?\s*)['"]@\/([^'"]+)['"]/g,
     (_m, kw, spec) => `${kw}'${root}${spec}'`
   );
 }
 
+function isEntry(path: string): boolean {
+  return path === "/App.jsx" || path === "/App.tsx";
+}
+
+function isComponent(path: string): boolean {
+  return /^\/components\/[^/]+\.(jsx|tsx)$/.test(path);
+}
+
+const COMPONENT_SOURCE_RE = /\.(jsx|tsx)$/;
+
 function collectComponents(files: Map<string, string>): ComponentEntry[] {
   const entries: ComponentEntry[] = [];
-  const app = files.get("/App.jsx");
-  if (app !== undefined) {
-    entries.push({
-      destPath: "src/App.jsx",
-      importPath: "../App",
-      name: defaultExportName(app, "/App.jsx") ?? "App",
-      content: rewriteAliases(app, "/App.jsx"),
-    });
-  }
   for (const [path, content] of files) {
-    if (!/^\/components\/[^/]+\.jsx$/.test(path)) continue;
-    const spec = path.slice("/components/".length);
-    const norm = spec.replace(/\.[^.]+$/, "");
+    if (!isEntry(path) && !isComponent(path)) continue;
+    if (!COMPONENT_SOURCE_RE.test(path)) continue;
+    const ident = defaultExportName(content) ?? asIdentifier(componentName(path)) ?? "Component";
+    const title = componentName(path);
     entries.push({
-      destPath: `src/components/${spec}`,
-      importPath: `../components/${norm}`,
-      name: defaultExportName(content, path) ?? componentName(path),
+      destPath: `src/${path.slice(1)}`,
+      importPath: `../${path.slice(1).replace(/\.[^.]+$/, "")}`,
+      name: ident,
+      title,
       content: rewriteAliases(content, path),
     });
   }
@@ -90,7 +104,7 @@ function storyFile(entry: ComponentEntry): string {
     `import ${entry.name} from '${entry.importPath}';`,
     "",
     "export default {",
-    `  title: '${entry.name.replace(/([a-z0-9])([A-Z])/g, "$1 $2")}',`,
+    `  title: '${entry.title.replace(/([a-z0-9])([A-Z])/g, "$1 $2")}',`,
     "  component: " + entry.name + ",",
     "};",
     "",
@@ -168,7 +182,7 @@ export function buildStorybookProject(files: Map<string, string>): StorybookProj
   const entries = collectComponents(files);
 
   for (const [path, content] of files) {
-    if (path === "/App.jsx" || /^\/components\/[^/]+\.jsx$/.test(path)) {
+    if (isEntry(path) || isComponent(path)) {
       continue;
     }
     // Support files the AI may have created (e.g. /lib/util.jsx): copy
@@ -198,12 +212,5 @@ export function downloadStorybookProjectZip(
   filename = "project-storybook.zip"
 ) {
   const blob = createZipBlob(buildStorybookProject(files));
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  triggerBlobDownload(blob, filename);
 }

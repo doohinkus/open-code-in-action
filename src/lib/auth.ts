@@ -4,7 +4,6 @@ import { getAuth } from "./auth/server";
 export interface SessionPayload {
   userId: string;
   email: string;
-  expiresAt: Date;
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
@@ -13,7 +12,6 @@ export async function getSession(): Promise<SessionPayload | null> {
   return {
     userId: session.user.id,
     email: session.user.email ?? "",
-    expiresAt: new Date(),
   };
 }
 

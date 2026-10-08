@@ -71,14 +71,25 @@ export function MainContent({ user, project }: MainContentProps) {
     setMounted(true);
   }, []);
 
+  // Migration runs at most once per page load — without this a StrictMode
+  // double-invoke (or a re-render while the await is pending) could submit
+  // the anon work to createProject twice, creating duplicate projects.
+  const migrationInFlightRef = useRef(false);
+
   useEffect(() => {
     if (!user) {
+      if (migrationInFlightRef.current) return;
+      migrationInFlightRef.current = true;
       authClient
         .getSession()
         .then(async ({ data }) => {
           if (!data?.user) return;
           const anonWork = getAnonWorkData();
-          if (anonWork && anonWork.messages.length > 0) {
+          if (
+            anonWork &&
+            (anonWork.messages.length > 0 ||
+              Object.keys(anonWork.fileSystemData ?? {}).length > 0)
+          ) {
             try {
               const project = await createProject({
                 name: `Design from ${new Date().toLocaleTimeString()}`,

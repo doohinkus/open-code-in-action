@@ -14,6 +14,7 @@ import { renameProject } from "@/actions/rename-project";
 import { deleteProject } from "@/actions/delete-project";
 import { saveProject } from "@/actions/save-project";
 import { useToast } from "@/components/ui/toast";
+import { logger } from "@/lib/observability/logger";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 import { useChat } from "@/lib/contexts/chat-context";
 import { downloadProjectZip } from "@/lib/download-zip";
@@ -81,7 +82,11 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
     if (user && projectId) {
       getProjects()
         .then(setProjects)
-        .catch(console.error)
+        .catch((error) =>
+          logger.error("projects.load_failed", {
+            error: error instanceof Error ? error.message : String(error),
+          })
+        )
         .finally(() => setInitialLoading(false));
     }
   }, [user, projectId]);
@@ -89,7 +94,13 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
   // Refresh projects when popover opens
   useEffect(() => {
     if (user && projectsOpen) {
-      getProjects().then(setProjects).catch(console.error);
+      getProjects()
+        .then(setProjects)
+        .catch((error) =>
+          logger.error("projects.load_failed", {
+            error: error instanceof Error ? error.message : String(error),
+          })
+        );
     }
   }, [projectsOpen, user]);
 
@@ -100,7 +111,11 @@ export function HeaderActions({ user, projectId, messages = [], getAllFiles }: H
   const currentProject = projects.find((p) => p.id === projectId);
 
   const handleSignIn = async () => {
-    await signInWithGoogle();
+    try {
+      await signInWithGoogle();
+    } catch {
+      toast("Sign in failed. Please try again.", "error");
+    }
   };
 
   const handleSignOut = async () => {

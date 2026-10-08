@@ -13,6 +13,10 @@ export function useAuth() {
         provider: "google",
         callbackURL: window.location.origin,
       });
+    } catch (error) {
+      // Re-throw so callers (HeaderActions) can surface a toast; otherwise
+      // a blocked popup or provider outage fails silently.
+      throw error;
     } finally {
       setIsLoading(false);
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { FileNode } from "@/lib/file-system";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 import {
@@ -37,19 +37,21 @@ function FileIcon({ name }: { name: string }) {
   return <FileCode className="h-4 w-4 shrink-0 text-muted-foreground" />;
 }
 
-const FileTreeNode = React.memo(function FileTreeNode({ node, level }: FileTreeNodeProps) {
+function FileTreeNode({ node, level }: FileTreeNodeProps) {
   const { selectedFile, setSelectedFile } = useFileSystem();
   const [isExpanded, setIsExpanded] = useState(true);
 
-  const children = useMemo(() => {
-    if (node.type !== "directory" || !node.children) return [];
-    return Array.from(node.children.values()).sort((a, b) => {
-      if (a.type !== b.type) {
-        return a.type === "directory" ? -1 : 1;
-      }
-      return a.name.localeCompare(b.name);
-    });
-  }, [node]);
+  // Recomputed per render (deliberately not memoized): node objects are
+  // mutated in place, so memoizing on identity would serve stale children.
+  const children =
+    node.type === "directory" && node.children
+      ? Array.from(node.children.values()).sort((a, b) => {
+          if (a.type !== b.type) {
+            return a.type === "directory" ? -1 : 1;
+          }
+          return a.name.localeCompare(b.name);
+        })
+      : [];
 
   const handleClick = () => {
     if (node.type === "directory") {
@@ -106,21 +108,23 @@ const FileTreeNode = React.memo(function FileTreeNode({ node, level }: FileTreeN
       )}
     </div>
   );
-});
+}
 
 export function FileTree() {
-  const { fileSystem, refreshTrigger } = useFileSystem();
+  const { fileSystem } = useFileSystem();
   const rootNode = fileSystem.getNode("/");
 
-  const rootChildren = useMemo(() => {
-    if (!rootNode || !rootNode.children || rootNode.children.size === 0) return [];
-    return Array.from(rootNode.children.values()).sort((a, b) => {
-      if (a.type !== b.type) {
-        return a.type === "directory" ? -1 : 1;
-      }
-      return a.name.localeCompare(b.name);
-    });
-  }, [rootNode]);
+  // Computed per render (not memoized on identity): child node objects are
+  // produced from in-place-mutated maps, so identity memoization would go
+  // stale between mutations.
+  const rootChildren = rootNode?.children && rootNode.children.size > 0
+    ? Array.from(rootNode.children.values()).sort((a, b) => {
+        if (a.type !== b.type) {
+          return a.type === "directory" ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      })
+    : [];
 
   if (!rootNode || !rootNode.children || rootNode.children.size === 0) {
     return (
@@ -134,7 +138,10 @@ export function FileTree() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="py-2" key={refreshTrigger}>
+      {/* No remount key here: remounting on every VFS touch discarded
+          per-node expansion state. Trees are small, so re-rendering in
+          place (with fresh children computation) is cheap and keeps state. */}
+      <div className="py-2">
         {rootChildren.map((child) => (
           <FileTreeNode key={child.path} node={child} level={0} />
         ))}

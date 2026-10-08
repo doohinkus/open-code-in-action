@@ -14,15 +14,31 @@ export interface TransformResult {
   cssImports?: Set<string>;
 }
 
-// Simple hash function for cache keys (not cryptographic, just for dedup)
+// Single grammar for all import parsing and stripping below: these copies
+// previously drifted (e.g. namespace support differed between the parse and
+// strip passes), so an import could be registered in the import map yet
+// survive bundle rewriting. Group 1 is the default binding, group 2 is the
+// module specifier. Factories return fresh stateful regexes (/g lastIndex).
+const importFrom = (): RegExp =>
+  new RegExp(
+    /import\s+(?:type\s+)?(?:(\w+)\s*,\s*)?(?:(?:{[^}]*}|\*\s+as\s+\w+)?|(?:\w+))?\s*(?:,\s*(?:{[^}]*}|\*\s+as\s+\w+))?\s*from\s*['"]([^'"]+)['"]\s*;?/.source,
+    "g"
+  );
+
+const importSideEffect = (): RegExp =>
+  new RegExp(/import\s+['"]([^'"]+)['"]\s*;?/.source, "g");
+
+// Hash function for cache keys (not cryptographic, just for dedup). FNV-1a
+// with a length component: hashing a stale filename+code must never return
+// another code version's transform, so collisions must be astronomically rare.
 function hashString(str: string): string {
-  let hash = 0;
+  let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
   }
-  return hash.toString(36);
+  h ^= Math.imul(str.length, 0x01000193);
+  return `${str.length.toString(36)}:${h.toString(36)}`;
 }
 
 // Cache for transformed code: key = hash(filename + code), value = TransformResult
@@ -35,7 +51,8 @@ function getTransformCacheKey(filename: string, code: string): string {
 
 function pruneTransformCache(): void {
   if (transformCache.size > TRANSFORM_CACHE_MAX_SIZE) {
-    // Remove oldest entries (first 20% of the map)
+    // Evict oldest-inserted entries; hot keys are refreshed to the tail on
+    // every hit (LRU), so a hot working set is not evicted by stale entries.
     const keysToDelete = Array.from(transformCache.keys()).slice(0, Math.floor(TRANSFORM_CACHE_MAX_SIZE * 0.2));
     for (const key of keysToDelete) {
       transformCache.delete(key);
@@ -60,18 +77,15 @@ export { ${componentName} };
  *
  * @param code - The source code to transform
  * @param filename - The filename (used to determine TypeScript vs JavaScript)
- * @param existingFiles - Set of existing file paths (for import resolution)
  * @returns Transform result with code, imports, and any errors
  */
-export function transformJSX(
-  code: string,
-  filename: string,
-  existingFiles: Set<string>
-): TransformResult {
-  // Check cache first
+export function transformJSX(code: string, filename: string): TransformResult {
+  // Check cache first. Re-inserting the key moves it to the tail (LRU touch).
   const cacheKey = getTransformCacheKey(filename, code);
   const cached = transformCache.get(cacheKey);
   if (cached) {
+    transformCache.delete(cacheKey);
+    transformCache.set(cacheKey, cached);
     return cached;
   }
 
@@ -80,8 +94,8 @@ export function transformJSX(
     const isTypeScript = filename.endsWith(".ts") || filename.endsWith(".tsx");
 
     let processedCode = code;
-    const importRegex =
-      /import\s+(?:{[^}]+}|[^,\s]+)?\s*(?:,\s*{[^}]+})?\s+from\s+['"]([^'"]+)['"]/g;
+    const importRegex = importFrom();
+
     const imports = new Set<string>();
     const cssImports = new Set<string>();
 
@@ -105,8 +119,8 @@ export function transformJSX(
 
     let match;
     while ((match = importRegex.exec(code)) !== null) {
-      if (!match[1].endsWith('.css')) {
-        imports.add(match[1]);
+      if (!match[2].endsWith('.css')) {
+        imports.add(match[2]);
       }
     }
 
@@ -138,8 +152,22 @@ export function transformJSX(
   return result;
 }
 
-function resolveRelativePath(fromDir: string, relativePath: string): string {
-  const parts = fromDir.split("/").filter(Boolean);
+// Per-file synthetic binding for anonymous/expression-style default exports.
+// All files are concatenated into ONE module scope, so a shared
+// `const __uigenDefault` collides as soon as two files each have an
+// identifier/arrow-style default (e.g. App.jsx + components/Counter.jsx
+// with `export default Counter;`) — "Cannot declare a const variable
+// twice". Suffixing the sanitized path makes every declaration unique;
+// the `__uigen` prefix keeps it clear of user identifiers.
+function uigenDefaultBinding(path: string): string {
+  return `__uigenDefault_${path.replace(/[^a-zA-Z0-9]/g, "").slice(0, 40)}`;
+}
+
+// Sentinel analyzeExports() uses for anonymous/expression defaults; the
+// bundler maps it to the owning file's unique binding.
+const UIGEN_DEFAULT_SENTINEL = "__uigenDefault";
+
+function resolveRelativePath(fromDir: string, relativePath: string): string {  const parts = fromDir.split("/").filter(Boolean);
   const relParts = relativePath.split("/");
 
   for (const part of relParts) {
@@ -198,7 +226,7 @@ function analyzeExports(code: string): FileExport {
   );
   if (asyncDefaultMatch) {
     info.hasDefault = true;
-    info.defaultExpr = asyncDefaultMatch[1] ?? "__uigenDefault";
+    info.defaultExpr = asyncDefaultMatch[1] ?? UIGEN_DEFAULT_SENTINEL;
   }
 
   // Check for export default function/class Name
@@ -212,7 +240,7 @@ function analyzeExports(code: string): FileExport {
   const anonymousFuncMatch = code.match(/export\s+default\s+(?:async\s+)?(function|class)\s*\(/);
   if (anonymousFuncMatch) {
     info.hasDefault = true;
-    info.defaultExpr = "__uigenDefault";
+    info.defaultExpr = UIGEN_DEFAULT_SENTINEL;
   }
 
   // Check for export default const Name =
@@ -224,12 +252,12 @@ function analyzeExports(code: string): FileExport {
 
   // Check for export default <expr> (any other default export: identifier
   // references, arrows, objects, etc.). The bundler rewrites these into a
-  // synthetic `const __uigenDefault = ...`, so the expression name always
-  // resolves to __uigenDefault.
+  // synthetic per-file `const __uigenDefault_<file> = ...`, so the
+  // expression name always resolves to the sentinel.
   const defaultRefMatch = code.match(/export\s+default\s+(?!function|class|const|let|var)([\s\S]*?);?\s*$/);
   if (defaultRefMatch) {
     info.hasDefault = true;
-    info.defaultExpr = "__uigenDefault";
+    info.defaultExpr = UIGEN_DEFAULT_SENTINEL;
   }
 
   // Named exports: export function X, export const X, export class X
@@ -259,7 +287,6 @@ export function createBundleFromFiles(files: Map<string, string>): {
   const transformed = new Map<string, string>();
   const errors: Array<{ path: string; error: string }> = [];
   let collectedStyles = "";
-  const filePaths = new Set(files.keys());
 
   // First pass: transform all JS/TS files
   for (const [path, content] of files) {
@@ -269,7 +296,7 @@ export function createBundleFromFiles(files: Map<string, string>): {
       path.endsWith(".ts") ||
       path.endsWith(".tsx")
     ) {
-      const { code, error, cssImports } = transformJSX(content, path, filePaths);
+      const { code, error, cssImports } = transformJSX(content, path);
 
       if (error) {
         errors.push({ path, error });
@@ -311,10 +338,10 @@ export function createBundleFromFiles(files: Map<string, string>): {
   const sideEffectImports = new Set<string>();
 
   function parseAndCollectImports(code: string): void {
-    const importRegex = /import\s+(?:{[^}]+}|[^,\s]+|\*\s+as\s+\w+)?\s*(?:,\s*(?:{[^}]+}|\*\s+as\s+\w+))?\s+from\s+['"]([^'"]+)['"]\s*;?\s*/g;
+    const importRegex = importFrom();
     let match;
     while ((match = importRegex.exec(code)) !== null) {
-      const source = match[1];
+      const source = match[2];
       if (isLocalImport(source) || source.endsWith('.css')) continue;
 
       const clause = match[0].trim();
@@ -352,7 +379,7 @@ export function createBundleFromFiles(files: Map<string, string>): {
       }
     }
 
-    const sideEffectRegex = /import\s+['"]([^'"]+)['"]\s*;?\s*/g;
+    const sideEffectRegex = importSideEffect();
     while ((match = sideEffectRegex.exec(code)) !== null) {
       const source = match[1];
       if (!isLocalImport(source) && !source.endsWith('.css')) {
@@ -399,34 +426,34 @@ export function createBundleFromFiles(files: Map<string, string>): {
     let rewritten = code.replace(cssImportRemoveRegex, "");
 
     // Remove ALL import statements (local and CDN) — CDN imports are
-    // deduplicated and emitted once above
-    rewritten = rewritten.replace(
-      /import\s+(?:{[^}]*}|\w+(?:\s*,\s*{[^}]*})?|\*\s+as\s+\w+)?\s*(?:,\s*(?:{[^}]*}|\*\s+as\s+\w+))?\s*from\s+['"][^'"]+['"]\s*;?\s*/g,
-      ""
-    );
-    rewritten = rewritten.replace(/import\s+['"][^'"]+['"]\s*;?\s*/g, "");
+    // deduplicated and emitted once above. Uses the shared grammar so
+    // stripping always matches what was parsed.
+    rewritten = rewritten.replace(importFrom(), "");
+    rewritten = rewritten.replace(importSideEffect(), "");
 
-    // Strip all `export` keywords from declarations
+    // Strip all `export` keywords from declarations. Synthetic default
+    // bindings are per-file (unique) — see uigenDefaultBinding.
+    const defaultBinding = uigenDefaultBinding(path);
     // export default function X -> function X
     rewritten = rewritten.replace(/export\s+default\s+(function|class)\s+(\w+)/g, "$1 $2");
     // export default async function X -> async function X (named only)
     rewritten = rewritten.replace(/export\s+default\s+async\s+(function|class)\s+(\w+)/g, "async $1 $2");
-    // export default function/class (anonymous) -> const __uigenDefault = function/class
+    // export default function/class (anonymous) -> const __uigenDefault_<file> = function/class
     rewritten = rewritten.replace(
       /export\s+default\s+async\s+(function|class)\s*\(/g,
-      "const __uigenDefault = async $1("
+      `const ${defaultBinding} = async $1(`
     );
     rewritten = rewritten.replace(
       /export\s+default\s+(function|class)\s*\(/g,
-      "const __uigenDefault = $1("
+      `const ${defaultBinding} = $1(`
     );
     // export default const/let/var X = -> const/let/var X =
     rewritten = rewritten.replace(/export\s+default\s+(const|let|var)\s+(\w+)\s*=/g, "$1 $2 =");
     // export default <expr> (any other default: identifier refs, arrows,
-    // objects, async arrows, etc.) -> const __uigenDefault = <expr>;
+    // objects, async arrows, etc.) -> const __uigenDefault_<file> = <expr>;
     rewritten = rewritten.replace(
       /export\s+default\s+(?!function|class|const|let|var)\s*([\s\S]*?);?\s*$/gm,
-      "const __uigenDefault = $1;"
+      `const ${defaultBinding} = $1;`
     );
     // export function X -> function X
     rewritten = rewritten.replace(/export\s+(function|class)\s+(\w+)/g, "$1 $2");
@@ -451,14 +478,20 @@ export function createBundleFromFiles(files: Map<string, string>): {
   }
 
   // Find the entry point's default export name
-  const entryCode = transformed.get("/App.jsx") || transformed.get("/App.tsx") || "";
+  const entryPath = transformed.has("/App.jsx") ? "/App.jsx" : "/App.tsx";
+  const entryCode = transformed.get(entryPath) || "";
   const entryExports = analyzeExports(entryCode);
 
   // At the end of the bundle, re-export the entry point component
-  // for the host module script to import
-  if (entryExports.defaultExpr) {
+  // for the host module script to import. A sentinel default (anonymous or
+  // expression-style) resolves to the ENTRY file's own unique binding.
+  const entryDefaultExpr =
+    entryExports.defaultExpr === UIGEN_DEFAULT_SENTINEL
+      ? uigenDefaultBinding(entryPath)
+      : entryExports.defaultExpr;
+  if (entryDefaultExpr) {
     parts.push(`
-const __AppComponent = ${entryExports.defaultExpr};
+const __AppComponent = ${entryDefaultExpr};
 export default __AppComponent;
 export { __AppComponent as App };
 `);
@@ -499,12 +532,52 @@ function esmShUrl(importPath: string): string {
  * @param files - Map of file paths to their content
  * @returns Object with importMap JSON, collected styles, syntax errors, and bundled code
  */
-export function createImportMap(files: Map<string, string>): {
+interface ImportMapResult {
   importMap: string;
   styles: string;
   errors: Array<{ path: string; error: string }>;
   bundleCode: string;
-} {
+}
+
+// Whole-pipeline cache: bundle rewriting runs ~15 regex passes over the full
+// transformed source of every file, so an unchanged tree should skip straight
+// to the cached result. Keyed on a content-aware hash of the file map.
+const importMapCache = new Map<string, ImportMapResult>();
+const IMPORT_MAP_CACHE_MAX_SIZE = 50;
+
+function makeFileMapKey(files: Map<string, string>): string {
+  const paths = [...files.keys()].sort();
+  let hashOfParts = 0x811c9dc5;
+  for (const path of paths) {
+    const content = files.get(path)!;
+    const mixed = path + "\0" + content;
+    for (let i = 0; i < mixed.length; i++) {
+      hashOfParts ^= mixed.charCodeAt(i);
+      hashOfParts = Math.imul(hashOfParts, 0x01000193) >>> 0;
+    }
+    hashOfParts ^= Math.imul(mixed.length + 1, 0x01000193);
+  }
+  return `${files.size}:${hashOfParts.toString(36)}`;
+}
+
+export function createImportMap(files: Map<string, string>): ImportMapResult {
+  const cacheKey = makeFileMapKey(files);
+  const cached = importMapCache.get(cacheKey);
+  if (cached) {
+    importMapCache.delete(cacheKey);
+    importMapCache.set(cacheKey, cached);
+    return cached;
+  }
+  const result = buildImportMap(files);
+  importMapCache.set(cacheKey, result);
+  if (importMapCache.size > IMPORT_MAP_CACHE_MAX_SIZE) {
+    const oldest = importMapCache.keys().next().value;
+    if (oldest !== undefined) importMapCache.delete(oldest);
+  }
+  return result;
+}
+
+function buildImportMap(files: Map<string, string>): ImportMapResult {
   // React is pinned to an exact, already-built version. The loose "@19"
   // alias redirects to the newest release, which routes through esm.sh's
   // on-demand build pipeline — that endpoint reliably times out (observed:
@@ -520,7 +593,6 @@ export function createImportMap(files: Map<string, string>): {
     "react/jsx-dev-runtime": `https://esm.sh/react@${REACT_VERSION}/jsx-dev-runtime`,
   };
 
-  const existingFiles = new Set(files.keys());
   const allThirdPartyImports = new Set<string>();
   let collectedStyles = "";
 
@@ -528,11 +600,10 @@ export function createImportMap(files: Map<string, string>): {
   for (const [path, content] of files) {
     if (!path.endsWith(".js") && !path.endsWith(".jsx") && !path.endsWith(".ts") && !path.endsWith(".tsx")) continue;
 
-    const importRegex =
-      /import\s+(?:{[^}]+}|[^,\s]+)?\s*(?:,\s*{[^}]+})?\s+from\s+['"]([^'"]+)['"]/g;
+    const importRegex = importFrom();
     let match;
     while ((match = importRegex.exec(content)) !== null) {
-      const imp = match[1];
+      const imp = match[2];
       if (isCdnImport(imp) && !imp.endsWith(".css")) {
         const baseName = imp.split("/")[0].startsWith("@")
           ? imp.split("/").slice(0, 2).join("/")
@@ -551,7 +622,7 @@ export function createImportMap(files: Map<string, string>): {
 
     // Side-effect imports (no `from` clause) also need import-map entries,
     // e.g. `import 'confetti'`.
-    const sideEffectRegex = /import\s+['"]([^'"]+)['"]/g;
+    const sideEffectRegex = importSideEffect();
     while ((match = sideEffectRegex.exec(content)) !== null) {
       const imp = match[1];
       if (isCdnImport(imp) && !imp.endsWith(".css")) {
@@ -591,6 +662,13 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+// Keeps generated CSS from breaking out of the <style> element: `</style><script>…`
+// inside a user/generator-authored stylesheet would otherwise execute script
+// inside the preview iframe.
+function escapeStyleTagContent(css: string): string {
+  return css.replace(/<\/style/gi, "<\\/style");
 }
 
 // Markers that indicate a component intends to fill the whole viewport with
@@ -909,7 +987,7 @@ ${rootCentering}    }
       color: #991b1b;
     }
   </style>
-  ${styles ? `<style>\n${styles}</style>` : ''}
+  ${styles ? `<style>\n${escapeStyleTagContent(styles)}</style>` : ''}
   <script type="importmap"${nonce ? ` nonce="${nonce}"` : ''}>
     ${importMap.replace(/</g, "\\u003c")}
   </script>
@@ -957,11 +1035,12 @@ ${rootCentering}    }
   ` : ''}
   ${errors.length === 0 && bundleCode ? `
   <script${nonce ? ` nonce="${nonce}"` : ''}>
-    const __bundleSrc = ${escapeScriptString(bundleCode)};
-    const __blob = new Blob([__bundleSrc], {type: 'application/javascript'});
+    window.__bundleSrc = ${escapeScriptString(bundleCode)};
+    const __blob = new Blob([window.__bundleSrc], {type: 'application/javascript'});
     window.__bundleUrl = URL.createObjectURL(__blob);
   </script>
   <script${nonce ? ` nonce="${nonce}"` : ''} type="module">
+    const __rootEl = document.getElementById('root');
     const __postError = (message, stack) => {
       try {
         parent.postMessage({ type: 'uigen:error', message: String(message), stack: stack ? String(stack) : '' }, '*');
@@ -1036,13 +1115,22 @@ ${rootCentering}    }
       return { React, ReactDOM };
     }
 
-    async function loadApp() {
+    async function __loadApp(bundleSrc) {
       let React, ReactDOM, mod;
       try {
         for (let attempt = 1; attempt <= __MAX_ATTEMPTS; attempt++) {
           try {
             ({ React, ReactDOM } = await __coreLibs());
-            mod = await import(window.__bundleUrl);
+            // A fresh blob URL per attempt/update: browsers cache failed
+            // module loads per URL, so retrying the same URL would replay
+            // a transient failure forever.
+            const blob = new Blob([bundleSrc], {type: 'application/javascript'});
+            const url = URL.createObjectURL(blob);
+            if (window.__bundleUrl && window.__bundleUrl !== url) {
+              try { URL.revokeObjectURL(window.__bundleUrl); } catch (e) {}
+            }
+            window.__bundleUrl = url;
+            mod = await import(url);
             break;
           } catch (attemptError) {
             if (attempt === __MAX_ATTEMPTS) throw attemptError;
@@ -1050,11 +1138,13 @@ ${rootCentering}    }
           }
         }
       } catch (error) {
-        if (window.__bundleUrl) URL.revokeObjectURL(window.__bundleUrl);
+        if (window.__bundleUrl) {
+          try { URL.revokeObjectURL(window.__bundleUrl); } catch (e) {}
+        }
         console.error('Failed to load app:', error);
         __postError(error && error.message ? error.message : String(error), error && error.stack);
-        document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error && error.toString ? error.toString() : String(error)) + '</pre></div>';
-        return;
+        __rootEl.innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error && error.toString ? error.toString() : String(error)) + '</pre></div>';
+        return false;
       }
 
       try {
@@ -1063,16 +1153,54 @@ ${rootCentering}    }
         if (!App) {
           throw new Error('No default export or App export found in entry point');
         }
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(React.createElement(__makeErrorBoundary(React), null, React.createElement(App)));
+        // Reuse the same root across hot-swap updates: recreating it on the
+        // same container throws, and the import map's single pinned React
+        // means the module instance is shared anyway.
+        if (!window.__uigenRoot) {
+          window.__uigenRoot = ReactDOM.createRoot(__rootEl);
+        }
+        window.__uigenRoot.render(React.createElement(__makeErrorBoundary(React), null, React.createElement(App)));
+        return true;
       } catch (error) {
         console.error('Failed to render app:', error);
         __postError(error && error.message ? error.message : String(error), error && error.stack);
-        document.getElementById('root').innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error && error.toString ? error.toString() : String(error)) + '</pre></div>';
+        __rootEl.innerHTML = '<div class="error-boundary"><h2>Failed to load app</h2><pre>' + __escapeHtml(error && error.toString ? error.toString() : String(error)) + '</pre></div>';
+        return false;
       }
     }
+    window.__uigenLoadApp = __loadApp;
 
-    loadApp();
+    // Hot-swap channel: the host can deliver a new bundle without tearing
+    // down the document (which would re-download the Tailwind CDN runtime
+    // and remount everything). Import-map CAN only add keys, so changed or
+    // removed entries force a full document rebuild on the host side.
+    window.addEventListener('message', (e) => {
+      const data = e.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type !== 'uigen:update') return;
+      void (async () => {
+        try {
+          const { bundleSrc, newImportEntries } = data;
+          if (newImportEntries && Object.keys(newImportEntries).length > 0) {
+            const shim = document.createElement('script');
+            shim.type = 'importmap';
+            shim.textContent = JSON.stringify({ imports: newImportEntries });
+            document.head.appendChild(shim);
+          }
+          const ok = await __loadApp(bundleSrc);
+          try { parent.postMessage({ type: 'uigen:update-done', ok }, '*'); } catch (err) {}
+        } catch (err) {
+          __postError(err && err.message ? err.message : String(err), err && err.stack);
+          try { parent.postMessage({ type: 'uigen:update-done', ok: false }, '*'); } catch (e) {}
+        }
+      })();
+    });
+
+    // Confirm the update channel is live before registering anything that
+    // awaits the network, so no early update message is lost.
+    try { parent.postMessage({ type: 'uigen:ready' }, '*'); } catch (e) {}
+
+    __loadApp(window.__bundleSrc);
   </script>` : ''}
   ${createInspectionScript(nonce || '')}
 </body>
@@ -1089,7 +1217,6 @@ export function validateFiles(
   files: Map<string, string>
 ): Array<{ path: string; error: string }> {
   const errors: Array<{ path: string; error: string }> = [];
-  const filePaths = new Set(files.keys());
   for (const [path, content] of files) {
     if (
       path.endsWith(".js") ||
@@ -1097,7 +1224,7 @@ export function validateFiles(
       path.endsWith(".ts") ||
       path.endsWith(".tsx")
     ) {
-      const { error } = transformJSX(content, path, filePaths);
+      const { error } = transformJSX(content, path);
       if (error) {
         errors.push({ path, error });
       }

@@ -79,6 +79,7 @@ test("renders with placeholder text", () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -93,6 +94,7 @@ test("displays the input value", () => {
   const mockProps = {
     input: "Test input value",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -108,6 +110,7 @@ test("calls handleInputChange when typing", async () => {
   const mockProps = {
     input: "",
     handleInputChange,
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -125,6 +128,7 @@ test("calls handleSubmit when form is submitted", async () => {
   const mockProps = {
     input: "Test input",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit,
     isLoading: false,
   };
@@ -142,6 +146,7 @@ test("submits form when Enter is pressed without shift", async () => {
   const mockProps = {
     input: "Test input",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit,
     isLoading: false,
   };
@@ -159,6 +164,7 @@ test("does not submit form when Enter is pressed with shift", async () => {
   const mockProps = {
     input: "Test input",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit,
     isLoading: false,
   };
@@ -175,6 +181,7 @@ test("disables textarea when isLoading is true", () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: true,
   };
@@ -190,6 +197,7 @@ test("disables send button when isLoading is true", () => {
   const mockProps = {
     input: "Test input",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: true,
   };
@@ -205,6 +213,7 @@ test("disables send button when input is empty", () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -220,6 +229,7 @@ test("disables send button when input contains only whitespace", () => {
   const mockProps = {
     input: "   ",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -235,6 +245,7 @@ test("enables send button when input has content and not loading", () => {
   const mockProps = {
     input: "Valid content",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -252,6 +263,7 @@ test("applies correct CSS classes based on loading state", () => {
       input="Test"
       handleInputChange={vi.fn()}
       handleSubmit={vi.fn()}
+      setInput={vi.fn()}
       isLoading={false}
     />
   );
@@ -266,6 +278,7 @@ test("applies correct CSS classes based on loading state", () => {
         input="Test"
         handleInputChange={vi.fn()}
         handleSubmit={vi.fn()}
+        setInput={vi.fn()}
         isLoading={true}
       />
     </InspectionProvider>
@@ -283,6 +296,7 @@ test("send button uses muted style when disabled by loading", () => {
       input="Test"
       handleInputChange={vi.fn()}
       handleSubmit={vi.fn()}
+      setInput={vi.fn()}
       isLoading={false}
     />
   );
@@ -295,6 +309,7 @@ test("send button uses muted style when disabled by loading", () => {
         input="Test"
         handleInputChange={vi.fn()}
         handleSubmit={vi.fn()}
+        setInput={vi.fn()}
         isLoading={true}
       />
     </InspectionProvider>
@@ -307,6 +322,7 @@ test("textarea has correct styling classes", () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -328,6 +344,7 @@ test("send button click triggers form submission", async () => {
   const mockProps = {
     input: "Test input",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit,
     isLoading: false,
   };
@@ -345,6 +362,7 @@ test("shows mic button when SpeechRecognition is supported", () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -361,6 +379,7 @@ test("hides mic button when SpeechRecognition is unsupported", () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -375,6 +394,7 @@ test("clicking mic button starts listening", () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -392,6 +412,7 @@ test("disables mic button when isLoading", () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: true,
   };
@@ -407,6 +428,7 @@ test("textarea gets red border when listening", () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -426,6 +448,7 @@ test("textarea has pr-24 padding for both buttons", () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -441,6 +464,7 @@ test("hides mic button when microphone permission is denied", async () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -457,6 +481,7 @@ test("shows mic button when microphone permission is granted", async () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -473,6 +498,7 @@ test("shows mic button when microphone permission is prompt", async () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };
@@ -495,6 +521,7 @@ test("shows mic button when navigator.permissions is unavailable", () => {
   const mockProps = {
     input: "",
     handleInputChange: vi.fn(),
+    setInput: vi.fn(),
     handleSubmit: vi.fn(),
     isLoading: false,
   };

@@ -48,8 +48,12 @@ const vfsCache = new Map<
 const ipRequestCounts = new Map<string, { count: number; resetAt: number }>();
 
 function getClientIp(req: Request): string {
-  // Prefer the proxy-set x-real-ip over the client-influencable X-Forwarded-For.
-  return req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  // Trust only the proxy-set x-real-ip (e.g. Vercel injects it after
+  // stripping client-supplied headers). x-forwarded-for is client-spoofable:
+  // trusting it let callers rotate "IPs" to bypass the rate limit entirely.
+  // Without a trusted proxy header (local/dev), callers share a single
+  // bucket — a meaningful limit beats a spoofable one.
+  return req.headers.get("x-real-ip")?.trim() || "proxy-unverified";
 }
 
 function checkRateLimit(ip: string): boolean {
@@ -103,9 +107,14 @@ function resolveFileSystem(
     const fs = new VirtualFileSystem();
     fs.deserializeFromNodes(files);
     if (cacheKey) {
+      // Store a snapshot at request start, not the instance handed to the
+      // tools: tools mutate the returned filesystem during the stream, and a
+      // failed turn must not leak tool edits into subsequent requests.
+      const snapshot = new VirtualFileSystem();
+      snapshot.deserializeFromNodes(fs.serialize());
       vfsCache.set(cacheKey, {
         revision: vfsRevision ?? 0,
-        fileSystem: fs,
+        fileSystem: snapshot,
         expiresAt: Date.now() + VFS_CACHE_TTL_MS,
       });
       pruneVfsCache();
@@ -155,6 +164,19 @@ function describeError(error: unknown): string {
   return String(error ?? "An error occurred.");
 }
 
+// Public variant for what reaches anonymous clients: configuration state
+// (missing API keys, provider identity details) is operational info the
+// client doesn't need. Transient provider errors (429s, timeouts, model
+// availability) stay verbatim for user debugging; the full detail is always
+// in the server logs.
+function describeErrorPublic(error: unknown): string {
+  const raw = describeError(error);
+  if (/API_?KEY|is not set|not configured/i.test(raw)) {
+    return "AI provider is temporarily unavailable. Please try again later.";
+  }
+  return raw;
+}
+
 function checkOrigin(req: Request): boolean {
   const originHeader = req.headers.get("origin") || "";
   if (originHeader) {
@@ -181,7 +203,27 @@ function validateInput(
   }
   let totalLen = 0;
   for (const msg of messages) {
+    if (typeof msg !== "object" || msg === null || Array.isArray(msg)) {
+      return "each message must be an object";
+    }
     if (msg.role === "system") return "cannot include system messages";
+    if (msg.role !== "user" && msg.role !== "assistant") {
+      return `invalid message role: ${String(msg.role)}`;
+    }
+    if (
+      typeof msg.content !== "string" &&
+      msg.content !== undefined &&
+      !Array.isArray(msg.content)
+    ) {
+      return "message content must be a string or a parts array";
+    }
+    if (Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        if (typeof part !== "object" || part === null || typeof part.type !== "string") {
+          return "each message part must be an object with a type";
+        }
+      }
+    }
     const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content || "");
     if (content.length > MAX_MESSAGE_LENGTH) {
       return `message exceeds maximum length of ${MAX_MESSAGE_LENGTH}`;
@@ -200,7 +242,16 @@ function validateInput(
       return `files count exceeds limit of ${MAX_FILES_COUNT}`;
     }
     for (const [path, node] of Object.entries(files)) {
-      if (node.content && node.content.length > MAX_FILE_SIZE) {
+      if (typeof node !== "object" || node === null) {
+        return `file node must be an object: ${path}`;
+      }
+      if (node.type !== "file" && node.type !== "directory") {
+        return `file node has invalid type: ${path}`;
+      }
+      if (
+        node.content !== undefined &&
+        (typeof node.content !== "string" || node.content.length > MAX_FILE_SIZE)
+      ) {
         return `file ${path} exceeds maximum size of ${MAX_FILE_SIZE}`;
       }
     }
@@ -260,15 +311,53 @@ async function persistProjectTurn(
   }
 }
 
+// When a save conflicts (concurrent turn committed first), the rebased
+// messages still claim this turn's tool edits. Replay only the files this
+// turn created or modified (vs. the request-start snapshot) onto the
+// committed filesystem so message claims and saved data stay consistent.
+// Concurrent writes to the same file are overwritten (last-write-wins for
+// the rebasing turn).
+function replayTurnEdits(
+  committedDataJson: string,
+  startData: Record<string, FileNode>,
+  finalData: Record<string, FileNode>
+): string {
+  let committed: Record<string, FileNode> = {};
+  try {
+    const parsed = JSON.parse(committedDataJson);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      committed = parsed;
+    }
+  } catch {
+    committed = {};
+  }
+
+  const result: Record<string, FileNode> = { ...committed };
+  for (const [path, node] of Object.entries(finalData)) {
+    if (node?.type !== "file") continue;
+    const startNode = startData[path];
+    if (startNode === undefined) {
+      // Created by this turn but missing from the committed row
+      result[path] = node;
+    } else if (node.content !== startNode.content) {
+      // Modified by this turn; concurrent edits to that file are overridden
+      result[path] = node;
+    }
+    // Unchanged by this turn: keep the committed version as-is
+  }
+  return JSON.stringify(result);
+}
+
 export async function POST(req: Request) {
   const ip = getClientIp(req);
   const requestId = getRequestId(req);
   const startedAt = Date.now();
+  const isRealProvider = hasRealProvider();
 
   logger.info("chat.request.start", {
     requestId,
     ip: hashIp(ip),
-    provider: hasRealProvider() ? "real" : "mock",
+    provider: isRealProvider ? "real" : "mock",
   });
 
   if (!checkRateLimit(ip)) {
@@ -289,6 +378,24 @@ export async function POST(req: Request) {
 
   const session = await getSession();
 
+  const body: {
+    messages?: any[];
+    files?: Record<string, FileNode>;
+    projectId?: string;
+    sessionKey?: string;
+    vfsRevision?: number;
+    test?: boolean;
+    model?: string;
+  } | null = await req
+    .json()
+    .then((value) => value)
+    .catch(() => null);
+
+  if (body === null || typeof body !== "object") {
+    logger.warn("chat.request.invalid_body", { requestId });
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const {
     messages,
     files,
@@ -297,17 +404,9 @@ export async function POST(req: Request) {
     vfsRevision,
     test,
     model,
-  }: {
-    messages: any[];
-    files?: Record<string, FileNode>;
-    projectId?: string;
-    sessionKey?: string;
-    vfsRevision?: number;
-    test?: boolean;
-    model?: string;
-  } = await req.json();
+  } = body;
 
-  const validationError = validateInput(messages, files);
+  const validationError = validateInput(messages ?? [], files);
   if (validationError) {
     logger.warn("chat.request.invalid", {
       requestId,
@@ -367,6 +466,10 @@ export async function POST(req: Request) {
 
   // Keep the full, unmodified history for persistence; build a reduced copy
   // for the model so old code and reasoning tokens aren't re-sent.
+  // (validateInput already rejects non-arrays; this guard narrows the type.)
+  if (!Array.isArray(messages)) {
+    return Response.json({ error: "messages must be an array" }, { status: 400 });
+  }
   const originalMessages: any[] = messages;
   const modelMessages: any[] = prepareModelMessages(messages);
 
@@ -393,6 +496,9 @@ export async function POST(req: Request) {
     );
   }
   const fileSystem = vfsResolution.fileSystem;
+  // Request-start snapshot: used to isolate this turn's file edits if the
+  // save conflicts and the turn must be rebased onto committed state.
+  const requestStartFiles = fileSystem.serialize();
 
   // Client may request a specific model (e.g. a free Gemini model selected
   // in the UI). Unknown models fall back to the server default rather than
@@ -412,7 +518,7 @@ export async function POST(req: Request) {
   // Real providers get 10 steps so multi-file apps (games, dashboards) can be
   // assembled in one turn without being cut off mid-build. The mock gets fewer
   // steps to prevent its canned 4-step sequence from repeating.
-  const maxSteps = isTestRequest ? 1 : hasRealProvider() ? MAX_STEPS_REAL : MAX_STEPS_MOCK;
+  const maxSteps = isTestRequest ? 1 : isRealProvider ? MAX_STEPS_REAL : MAX_STEPS_MOCK;
   // Cap per-call output so a single step can't run away; test requests stay
   // tiny. The cap is chosen for the primary's provider: 8k is plenty on
   // 2.5/mock, Gemini 3.x needs more headroom because its (unavoidable)
@@ -449,7 +555,7 @@ export async function POST(req: Request) {
       name: "chat.generation",
       op: "ai.generate",
       attributes: {
-        provider: hasRealProvider() ? "real" : "mock",
+        provider: isRealProvider ? "real" : "mock",
         projectId: projectId ?? "anonymous",
         ...(activeModelId && { model: activeModelId }),
       },
@@ -471,9 +577,16 @@ export async function POST(req: Request) {
         requestId,
         error: describeError(err),
       });
-      Sentry.captureException(err, { tags: { requestId } });
+      // Plain provider objects (not Error instances) serialize poorly in
+      // Sentry — normalize before reporting.
+      Sentry.captureException(
+        err instanceof Error ? err : new Error(describeError(err)),
+        { tags: { requestId } }
+      );
       span.setAttribute("finishReason", "error");
-      finishSpan();
+      // onError and onFinish can both fire for one stream; the span must be
+      // finished exactly once.
+      if (span.isRecording()) finishSpan();
     },
     tools: {
       str_replace_editor: buildStrReplaceTool(fileSystem),
@@ -500,7 +613,7 @@ export async function POST(req: Request) {
         ...(activeModelId && { model: activeModelId }),
       });
       Sentry.setMeasurement("latency_ms", durationMs, "millisecond", span);
-      finishSpan();
+      if (span.isRecording()) finishSpan();
 
       logger.info("chat.request.finish", {
         requestId,
@@ -564,7 +677,7 @@ export async function POST(req: Request) {
                 sessionUserId,
                 current.version,
                 JSON.stringify(rebased),
-                current.data,
+                replayTurnEdits(current.data ?? "{}", requestStartFiles, fileSystem.serialize()),
                 requestId
               );
 
@@ -593,7 +706,7 @@ export async function POST(req: Request) {
 
   const aiResponse = result.toDataStreamResponse({
     sendReasoning: true,
-    getErrorMessage: describeError,
+    getErrorMessage: describeErrorPublic,
   });
 
   // Add CORS headers for credentialed requests

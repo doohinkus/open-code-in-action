@@ -272,22 +272,75 @@ test("serializes file system to plain object", () => {
   expect(serialized["/src/index.ts"].content).toBe("export {}");
 });
 
-test("deserializes from file map", () => {
+test("deserializes from node map, synthesizing parent directories", () => {
   const fs = new VirtualFileSystem();
 
   const data = {
-    "/test.txt": "content1",
-    "/src/components/Button.tsx": "button content",
-    "/src/index.ts": "index content",
+    "/": { type: "directory" as const, name: "/", path: "/" },
+    "/test.txt": {
+      type: "file" as const,
+      name: "test.txt",
+      path: "/test.txt",
+      content: "content1",
+    },
+    "/src/components/Button.tsx": {
+      type: "file" as const,
+      name: "Button.tsx",
+      path: "/src/components/Button.tsx",
+      content: "button content",
+    },
+    "/src/index.ts": {
+      type: "file" as const,
+      name: "index.ts",
+      path: "/src/index.ts",
+      content: "index content",
+    },
   };
 
-  fs.deserialize(data);
+  fs.deserializeFromNodes(data);
 
   expect(fs.readFile("/test.txt")).toBe("content1");
   expect(fs.readFile("/src/components/Button.tsx")).toBe("button content");
   expect(fs.readFile("/src/index.ts")).toBe("index content");
   expect(fs.exists("/src")).toBe(true);
   expect(fs.exists("/src/components")).toBe(true);
+});
+
+test("deserializeFromNodes normalizes paths before walking", () => {
+  const fs = new VirtualFileSystem();
+
+  fs.deserializeFromNodes({
+    "/src//a/../b/c.jsx": {
+      type: "file" as const,
+      name: "c.jsx",
+      path: "/src//a/../b/c.jsx",
+      content: "hello",
+    },
+  });
+
+  expect(fs.exists("/a")).toBe(false);
+  expect(fs.readFile("/src/b/c.jsx")).toBe("hello");
+});
+
+test("deserializeFromNodes rejects a file node that also has children", () => {
+  const fs = new VirtualFileSystem();
+
+  expect(() =>
+    fs.deserializeFromNodes({
+      "/components": {
+        type: "file" as const,
+        name: "components",
+        path: "/components",
+        content: "conflict",
+      },
+      "/components/Button.tsx": {
+        type: "file" as const,
+        name: "Button.tsx",
+        path: "/components/Button.tsx",
+        content: "content",
+      },
+    })
+  ).toThrow(/is a file node/);
 });
 
 test("deserializes from node map", () => {
@@ -395,24 +448,35 @@ test("createFileWithParents overwrites an existing file when asked", () => {
   expect(fs.readFile("/test.txt")).toBe("new");
 });
 
-test("replaceInFile replaces all occurrences", () => {
+test("replaceInFile replaces a single occurrence", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "foo bar baz");
+
+  const result = fs.replaceInFile("/test.txt", "foo", "hello");
+
+  expect(result).toBe("Replaced 1 occurrence of the string in /test.txt — /test.txt updated");
+  expect(fs.readFile("/test.txt")).toBe("hello bar baz");
+});
+
+test("replaceInFile errors on multiple matches to avoid corrupting code", () => {
   const fs = new VirtualFileSystem();
   fs.createFile("/test.txt", "foo bar foo baz foo");
 
   const result = fs.replaceInFile("/test.txt", "foo", "hello");
 
-  expect(result).toBe("Replaced 3 occurrence(s) of the string in /test.txt");
-  expect(fs.readFile("/test.txt")).toBe("hello bar hello baz hello");
+  expect(result).toContain(`Error: Found 3 occurrences`);
+  expect(result).toContain("must match exactly one location");
+  expect(fs.readFile("/test.txt")).toBe("foo bar foo baz foo");
 });
 
 test("replaceInFile handles empty replacement", () => {
   const fs = new VirtualFileSystem();
-  fs.createFile("/test.txt", "foo bar foo");
+  fs.createFile("/test.txt", "foo bar baz");
 
   const result = fs.replaceInFile("/test.txt", "foo", "");
 
-  expect(result).toBe("Replaced 2 occurrence(s) of the string in /test.txt");
-  expect(fs.readFile("/test.txt")).toBe(" bar ");
+  expect(result).toBe("Replaced 1 occurrence of the string in /test.txt — /test.txt updated");
+  expect(fs.readFile("/test.txt")).toBe(" bar baz");
 });
 
 test("replaceInFile returns error for non-existent file", () => {
