@@ -48,8 +48,12 @@ const vfsCache = new Map<
 const ipRequestCounts = new Map<string, { count: number; resetAt: number }>();
 
 function getClientIp(req: Request): string {
-  // Prefer the proxy-set x-real-ip over the client-influencable X-Forwarded-For.
-  return req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  // Trust only the proxy-set x-real-ip (e.g. Vercel injects it after
+  // stripping client-supplied headers). x-forwarded-for is client-spoofable:
+  // trusting it let callers rotate "IPs" to bypass the rate limit entirely.
+  // Without a trusted proxy header (local/dev), callers share a single
+  // bucket — a meaningful limit beats a spoofable one.
+  return req.headers.get("x-real-ip")?.trim() || "proxy-unverified";
 }
 
 function checkRateLimit(ip: string): boolean {
@@ -158,6 +162,19 @@ function describeError(error: unknown): string {
     }
   }
   return String(error ?? "An error occurred.");
+}
+
+// Public variant for what reaches anonymous clients: configuration state
+// (missing API keys, provider identity details) is operational info the
+// client doesn't need. Transient provider errors (429s, timeouts, model
+// availability) stay verbatim for user debugging; the full detail is always
+// in the server logs.
+function describeErrorPublic(error: unknown): string {
+  const raw = describeError(error);
+  if (/API_?KEY|is not set|not configured/i.test(raw)) {
+    return "AI provider is temporarily unavailable. Please try again later.";
+  }
+  return raw;
 }
 
 function checkOrigin(req: Request): boolean {
@@ -689,7 +706,7 @@ export async function POST(req: Request) {
 
   const aiResponse = result.toDataStreamResponse({
     sendReasoning: true,
-    getErrorMessage: describeError,
+    getErrorMessage: describeErrorPublic,
   });
 
   // Add CORS headers for credentialed requests

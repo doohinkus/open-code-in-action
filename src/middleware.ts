@@ -1,24 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const SESSION_COOKIE = "__Secure-neon-auth.session_token";
-
 let neonAuthHandler: any = null;
 
 async function getNeonAuthHandler() {
   if (neonAuthHandler) return neonAuthHandler;
 
-  const { createNeonAuth } = await import("@neondatabase/auth/next/server");
-  const rawBaseUrl = process.env.NEON_AUTH_BASE_URL?.trim() ?? "";
-  const cookieSecret = process.env.NEON_AUTH_COOKIE_SECRET?.trim() ?? "";
-  const baseUrl = rawBaseUrl.replace(/^NEON_AUTH_BASE_URL=/, "");
-
-  const auth = createNeonAuth({
-    baseUrl,
-    cookies: { secret: cookieSecret },
-  });
-
-  neonAuthHandler = auth.middleware({
+  // Share the app's single Neon Auth instance (env validation included)
+  // instead of a second, unvalidated createNeonAuth duplicate.
+  const { getAuth } = await import("@/lib/auth/server");
+  neonAuthHandler = getAuth().middleware({
     loginUrl: "/__neon_auth_noop",
   });
   return neonAuthHandler;
@@ -43,20 +34,30 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Neon Auth returned allow — may have refreshed session cookies
-  const sessionCookie = request.cookies.get(SESSION_COOKIE);
-  const isAuthenticated = !!sessionCookie;
-
   const protectedPaths = ["/api/projects", "/api/filesystem"];
   const isProtectedPath = protectedPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );
 
-  if (isProtectedPath && !isAuthenticated) {
-    return NextResponse.json(
-      { error: "Authentication required" },
-      { status: 401 }
-    );
+  if (isProtectedPath) {
+    // Verify the session (signature-checked), not merely cookie presence: a
+    // forged cookie value must not pass. Fail closed — getSession failing in
+    // this runtime context blocks the protected paths rather than bypassing.
+    try {
+      const { getSession } = await import("@/lib/auth");
+      const session = await getSession();
+      if (!session?.userId) {
+        return NextResponse.json(
+          { error: "Authentication required" },
+          { status: 401 }
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
   }
 
   return neonAuthResponse;

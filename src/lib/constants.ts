@@ -131,3 +131,9 @@ export const MAX_SHARE_FILES_COUNT = 500;
  * Maximum size of a single file in a share.
  */
 export const MAX_SHARE_FILE_SIZE = 100_000;
+
+/**
+ * Total bytes across a whole share: per-file caps alone let ~50 MB of
+ * content land in a single anonymous Share row.
+ */
+export const MAX_SHARE_TOTAL_SIZE = 4_000_000;

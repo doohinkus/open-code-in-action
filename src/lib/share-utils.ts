@@ -3,10 +3,16 @@ import {
   MAX_SHARE_FILES_COUNT,
   MAX_SHARE_FILE_SIZE,
   MAX_SHARE_NAME_LENGTH,
+  MAX_SHARE_TOTAL_SIZE,
 } from "@/lib/constants";
 
 // Re-export for backward compatibility with existing imports
-export { MAX_SHARE_FILES_COUNT, MAX_SHARE_FILE_SIZE, MAX_SHARE_NAME_LENGTH };
+export {
+  MAX_SHARE_FILES_COUNT,
+  MAX_SHARE_FILE_SIZE,
+  MAX_SHARE_NAME_LENGTH,
+  MAX_SHARE_TOTAL_SIZE,
+};
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -39,11 +45,16 @@ export function validateShareInput(input: ShareInput): string | null {
     return `files count exceeds limit of ${MAX_SHARE_FILES_COUNT}`;
   }
 
+  let totalSize = 0;
   for (const [path, content] of Object.entries(input.files)) {
     if (!path.startsWith("/")) return "file paths must be absolute";
     if (content.length > MAX_SHARE_FILE_SIZE) {
       return `file ${path} exceeds size limit of ${MAX_SHARE_FILE_SIZE}`;
     }
+    totalSize += content.length;
+  }
+  if (totalSize > MAX_SHARE_TOTAL_SIZE) {
+    return `total share size exceeds limit of ${MAX_SHARE_TOTAL_SIZE} bytes`;
   }
 
   if (input.name !== undefined && typeof input.name !== "string") {
