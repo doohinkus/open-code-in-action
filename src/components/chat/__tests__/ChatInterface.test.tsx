@@ -359,14 +359,37 @@ describe("mapErrorMessage", () => {
   });
 
   test("falls back to the real server message when no pattern matches", () => {
-    expect(mapErrorMessage("Model temporarily overloaded")).toBe(
-      "Model temporarily overloaded"
+    expect(mapErrorMessage("Model running with unexpected config")).toBe(
+      "Model running with unexpected config"
     );
   });
 
   test("extracts the real server message from a JSON error body", () => {
     expect(mapErrorMessage('{"error":"Upstream provider 502"}')).toBe(
       "Upstream provider 502"
+    );
+  });
+
+  test("maps provider-overload errors to the switch-models hint", () => {
+    expect(
+      mapErrorMessage(
+        '{"error":"This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."}'
+      )
+    ).toBe(
+      "This model is overloaded right now. Try again in a moment, or switch to another free model above."
+    );
+    expect(mapErrorMessage("Model is overloaded")).toBe(
+      "This model is overloaded right now. Try again in a moment, or switch to another free model above."
+    );
+  });
+
+  test("maps free-rate-limit 429 quota errors to the free-tier message", () => {
+    expect(
+      mapErrorMessage(
+        "Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20"
+      )
+    ).toBe(
+      "This model hit its free-tier limit. Try switching to another free model above, or try again later."
     );
   });
 

@@ -12,7 +12,7 @@ export function mapErrorMessage(raw: string): string {
   }
 
   const text = serverMessage || raw;
-  if (/FreeUsageLimit|free usage|free tier/i.test(text)) {
+  if (/FreeUsageLimit|free usage|free[-_ ]tier/i.test(text)) {
     return "This model hit its free-tier limit. Try switching to another free model above, or try again later.";
   }
   if (/too many|rate limit/i.test(text)) {
@@ -26,6 +26,9 @@ export function mapErrorMessage(raw: string): string {
   }
   if (/upstream idle|idle timeout|\[504\]/i.test(text)) {
     return "The AI provider timed out while streaming. Try again or switch models.";
+  }
+  if (/high demand|unavailable|overloaded/i.test(text)) {
+    return "This model is overloaded right now. Try again in a moment, or switch to another free model above.";
   }
   if (/abort|timed out|timeout/i.test(text)) {
     return "Generation timed out. Please try again.";
