@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { ModelSelector } from "./ModelSelector";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useChat } from "@/lib/contexts/chat-context";
-import { useToast } from "@/components/ui/toast";
-import { RotateCcw, FlaskConical, CheckCircle2, XCircle, Loader2 } from "lucide-react";
-import { getStoredModel } from "@/lib/model-selector";
+import { RotateCcw } from "lucide-react";
 import { mapErrorMessage } from "@/lib/chat-errors";
 
 export { mapErrorMessage };
@@ -33,65 +31,6 @@ export function ChatInterface() {
     generationInterrupted,
     append,
   } = useChat();
-  const { toast } = useToast();
-  const [testStatus, setTestStatus] = useState<"idle" | "running" | "pass" | "fail">("idle");
-
-  const handleTestConnection = useCallback(async () => {
-    setTestStatus("running");
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: "Reply with only the word OK" }],
-          files: {},
-          test: true,
-          model: getStoredModel(),
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        const msg = body?.error || `HTTP ${res.status}`;
-        toast(`Connection failed: ${msg}`, "error");
-        setTestStatus("fail");
-        return;
-      }
-      const reader = res.body?.getReader();
-      if (!reader) {
-        toast("Connection failed: no response body", "error");
-        setTestStatus("fail");
-        return;
-      }
-      const decoder = new TextDecoder();
-      let text = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        text += decoder.decode(value, { stream: true });
-      }
-      // Signal on the protocol-core text part (`0:"…"`) rather than the
-      // error-part index: the data-stream protocol's part numbering can
-      // change with SDK upgrades, while a healthy provider always emits at
-      // least one text delta for "Reply with only the word OK".
-      const hasOutput = /(?:^|\n)0:"/.test(text);
-      if (!hasOutput) {
-        // Best-effort error extraction for the toast message.
-        const errorMatch = text.match(/(?:^|\n)3:"([^"]*)"/);
-        toast(
-          `Provider error: ${errorMatch?.[1] || "the AI provider returned no output"}`,
-          "error"
-        );
-        setTestStatus("fail");
-      } else {
-        toast("Provider is healthy", "success");
-        setTestStatus("pass");
-      }
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      toast(`Connection failed: ${message}`, "error");
-      setTestStatus("fail");
-    }
-  }, [toast]);
 
   const handleStarterPrompt = useCallback(
     (prompt: string) => {
@@ -187,32 +126,6 @@ export function ChatInterface() {
           isLoading={status === "submitted" || status === "streaming"}
           onStop={stop}
         />
-        {messages.length === 0 && (
-          <div className="mt-3 flex justify-center">
-            <button
-              onClick={handleTestConnection}
-              disabled={testStatus === "running"}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground bg-muted/80 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-border"
-            >
-              {testStatus === "running" ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : testStatus === "pass" ? (
-                <CheckCircle2 className="h-3 w-3 text-success" />
-              ) : testStatus === "fail" ? (
-                <XCircle className="h-3 w-3 text-destructive" />
-              ) : (
-                <FlaskConical className="h-3 w-3" />
-              )}
-              {testStatus === "running"
-                ? "Testing..."
-                : testStatus === "pass"
-                  ? "Provider healthy"
-                  : testStatus === "fail"
-                    ? "Provider error"
-                    : "Test connection"}
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
