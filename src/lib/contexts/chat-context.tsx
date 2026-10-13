@@ -194,7 +194,10 @@ export function ChatProvider({
 
   useEffect(() => {
     if (generationTimedOut) {
-      toast("Generation timed out. Please try again.", "error");
+      toast(
+        "Generation seems stuck. The model may be overloaded — try again or switch to another free model.",
+        "error"
+      );
     }
   }, [generationTimedOut, toast]);
 
