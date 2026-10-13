@@ -34,7 +34,7 @@ import { supportsThinkingBudget } from "./models";
 const THINKING_LEVEL = "low";
 const THINKING_LEVEL_LITE = "minimal";
 
-// Lite models (e.g. gemini-3.5-flash-lite) reject/ignore "low".
+// Lite models (e.g. gemini-3.1-flash-lite, gemini-3.5-flash-lite) reject/ignore "low".
 function thinkingLevelFor(modelId: string): string {
   return /-lite(-preview)?$/.test(modelId) ? THINKING_LEVEL_LITE : THINKING_LEVEL;
 }

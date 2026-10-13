@@ -87,16 +87,16 @@ describe("getLanguageModel (Gemini)", () => {
   test("serves the requested Gemini model", () => {
     process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
 
-    const model = getLanguageModel("gemini-3.5-flash-lite");
-    expect(model.modelId).toBe("gemini-3.5-flash-lite");
+    const model = getLanguageModel("gemini-3.6-flash");
+    expect(model.modelId).toBe("gemini-3.6-flash");
     expect(model.provider).toBe("google.generative-ai");
   });
 
   test("trims whitespace around the requested model id", () => {
     process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
 
-    const model = getLanguageModel("  gemini-3.5-flash-lite  ");
-    expect(model.modelId).toBe("gemini-3.5-flash-lite");
+    const model = getLanguageModel("  gemini-3.6-flash  ");
+    expect(model.modelId).toBe("gemini-3.6-flash");
   });
 
   test("falls back to the default model for an empty override", () => {
@@ -108,10 +108,10 @@ describe("getLanguageModel (Gemini)", () => {
 
   test("uses GEMINI_MODEL as the default Gemini model", () => {
     process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
-    process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+    process.env.GEMINI_MODEL = "gemini-3.6-flash";
 
     const model = getLanguageModel();
-    expect(model.modelId).toBe("gemini-3.5-flash-lite");
+    expect(model.modelId).toBe("gemini-3.6-flash");
   });
 
   test("falls back when GEMINI_MODEL is not a free Gemini model", () => {
@@ -124,10 +124,10 @@ describe("getLanguageModel (Gemini)", () => {
 
   test("falls back to the env default when the requested id is not free", () => {
     process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
-    process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+    process.env.GEMINI_MODEL = "gemini-3.6-flash";
 
     const model = getLanguageModel("gpt-5.4-mini");
-    expect(model.modelId).toBe("gemini-3.5-flash-lite");
+    expect(model.modelId).toBe("gemini-3.6-flash");
   });
 
   test("serves the Gemini default when a non-Gemini id is requested", () => {
@@ -851,12 +851,12 @@ describe("buildLanguageModel", () => {
     expect(model.modelId).toBe(DEFAULT_MODEL);
   });
 
-  test("returns a wrapped Google model for a requested 3.5 model", () => {
+  test("returns a wrapped Google model for a requested 3.x model", () => {
     process.env.GOOGLE_GENERATIVE_AI_API_KEY = "ai-test";
 
-    const model = buildLanguageModel("gemini-3.5-flash");
+    const model = buildLanguageModel("gemini-3.6-flash");
     expect(model.provider).toBe("google.generative-ai");
-    expect(model.modelId).toBe("gemini-3.5-flash");
+    expect(model.modelId).toBe("gemini-3.6-flash");
   });
 
   test("returns the mock provider when no provider is configured", () => {
