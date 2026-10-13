@@ -23,10 +23,21 @@ import { supportsThinkingBudget } from "./models";
 //    performance, only a MISSING one is a hard 400. This is a bridge until
 //    an SDK that natively supports Gemini 3 (ai v5) lands.
 
-// "low" is the lowest thinking level that still produces thought summaries:
-// at "minimal" the model barely thinks, so includeThoughts yields nothing
-// and the chain of thought stays invisible.
+// "low" is the lowest thinking level the Flash models support while still
+// producing thought summaries: at "minimal" the model barely thinks, so
+// includeThoughts yields nothing and the chain of thought stays invisible.
+// The Lite variants only support "minimal" (their documented default) —
+// sending "low" makes the endpoint stall with no response at all (observed:
+// streamGenerateContent opens but never emits headers or bytes), so Lite
+// models get "minimal". Trade-off: summary-less thinking, but the request
+// completes.
 const THINKING_LEVEL = "low";
+const THINKING_LEVEL_LITE = "minimal";
+
+// Lite models (e.g. gemini-3.5-flash-lite) reject/ignore "low".
+function thinkingLevelFor(modelId: string): string {
+  return /-lite(-preview)?$/.test(modelId) ? THINKING_LEVEL_LITE : THINKING_LEVEL;
+}
 
 // Keyed by function name; Gemini only hard-fails on missing signatures, so
 // the latest observed signature per tool is good enough for a bridge.
@@ -149,7 +160,7 @@ export function createGemini3CompatFetch(): typeof fetch {
         body.generationConfig = {
           ...body.generationConfig,
           thinkingConfig: {
-            thinkingLevel: THINKING_LEVEL,
+            thinkingLevel: thinkingLevelFor(modelId),
             // Stream thought summaries so the UI can show the model's chain
             // of thought while it works (MessageList renders reasoning
             // parts). Without this, thinking happens invisibly.

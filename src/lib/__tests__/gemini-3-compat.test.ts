@@ -68,6 +68,38 @@ describe("createGemini3CompatFetch", () => {
     });
   });
 
+  test("uses minimal thinkingLevel for Lite models (low stalls the endpoint)", async () => {
+    const mocked = stubFetch(async () => sseResponse([{}]));
+    const f = createGemini3CompatFetch();
+
+    await f(
+      `${BASE}/gemini-3.5-flash-lite:streamGenerateContent?alt=sse`,
+      postInit({ generationConfig: {} })
+    );
+
+    const init = mocked.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(init.body as string).generationConfig.thinkingConfig).toEqual({
+      thinkingLevel: "minimal",
+      includeThoughts: true,
+    });
+  });
+
+  test("uses minimal thinkingLevel for Lite preview variants too", async () => {
+    const mocked = stubFetch(async () => sseResponse([{}]));
+    const f = createGemini3CompatFetch();
+
+    await f(
+      `${BASE}/gemini-3.1-flash-lite-preview:streamGenerateContent?alt=sse`,
+      postInit({ generationConfig: {} })
+    );
+
+    const init = mocked.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(init.body as string).generationConfig.thinkingConfig).toEqual({
+      thinkingLevel: "minimal",
+      includeThoughts: true,
+    });
+  });
+
   test("leaves Gemini 2.5 requests untouched", async () => {
     const mocked = stubFetch(async () => new Response("{}"));
     const f = createGemini3CompatFetch();
