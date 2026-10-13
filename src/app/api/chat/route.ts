@@ -35,7 +35,6 @@ import {
   MAX_STEPS_MOCK,
   MAX_TOKENS,
   MAX_TOKENS_GEMINI_3,
-  MAX_TOKENS_TEST,
 } from "@/lib/constants";
 // Server-side virtual filesystem cache so clients don't resend every file
 // with each request. Best-effort (in-memory): a cache miss triggers a client
@@ -384,7 +383,6 @@ export async function POST(req: Request) {
     projectId?: string;
     sessionKey?: string;
     vfsRevision?: number;
-    test?: boolean;
     model?: string;
   } | null = await req
     .json()
@@ -402,7 +400,6 @@ export async function POST(req: Request) {
     projectId,
     sessionKey,
     vfsRevision,
-    test,
     model,
   } = body;
 
@@ -513,21 +510,17 @@ export async function POST(req: Request) {
   const languageModel = buildLanguageModel(requestedModel);
   const activeModelId = languageModel.modelId;
 
-  // Test-connection requests are minimal: one model call, tiny output.
-  const isTestRequest = test === true;
   // Real providers get 10 steps so multi-file apps (games, dashboards) can be
   // assembled in one turn without being cut off mid-build. The mock gets fewer
   // steps to prevent its canned 4-step sequence from repeating.
-  const maxSteps = isTestRequest ? 1 : isRealProvider ? MAX_STEPS_REAL : MAX_STEPS_MOCK;
-  // Cap per-call output so a single step can't run away; test requests stay
-  // tiny. The cap is chosen for the primary's provider: 8k is plenty on
-  // 2.5/mock, Gemini 3.x needs more headroom because its (unavoidable)
-  // thinking tokens count against the cap, and Groq's free tier caps
-  // completion far lower. Cross-provider fallback members substitute their
-  // own cap per call (createRateLimitFallbackModel).
-  const maxTokens = isTestRequest
-    ? MAX_TOKENS_TEST
-    : activeModelId && modelProvider(activeModelId) === "groq"
+  const maxSteps = isRealProvider ? MAX_STEPS_REAL : MAX_STEPS_MOCK;
+  // Cap per-call output so a single step can't run away. The cap is chosen for
+  // the primary's provider: 8k is plenty on 2.5/mock, Gemini 3.x needs more
+  // headroom because its (unavoidable) thinking tokens count against the cap,
+  // and Groq's free tier caps completion far lower. Cross-provider fallback
+  // members substitute their own cap per call (createRateLimitFallbackModel).
+  const maxTokens =
+    activeModelId && modelProvider(activeModelId) === "groq"
       ? groqMaxTokens()
       : activeModelId && supportsThinkingBudget(activeModelId)
         ? MAX_TOKENS

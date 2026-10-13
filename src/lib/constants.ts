@@ -79,11 +79,6 @@ export const MAX_TOKENS_GEMINI_3 = 24_000;
  */
 export const MAX_TOKENS_GROQ_DEFAULT = 16_384;
 
-/**
- * Maximum tokens for test-connection requests (minimal response).
- */
-export const MAX_TOKENS_TEST = 64;
-
 // ─── Preview ─────────────────────────────────────────────────────────────────
 
 /**
