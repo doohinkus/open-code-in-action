@@ -76,7 +76,6 @@ describe("models", () => {
     expect(GEMINI_FREE_MODELS.map((m) => m.id)).toEqual([
       "gemini-3.8-flash",
       "gemini-3.6-flash",
-      "gemini-3.1-flash-lite",
     ]);
     expect(GROQ_FREE_MODELS.map((m) => m.id)).toEqual([
       "openai/gpt-oss-120b",
@@ -92,10 +91,11 @@ describe("models", () => {
     }
     expect(isAllowedModel("gemini-3.5-flash")).toBe(false);
     expect(isAllowedModel("gemini-3.5-flash-lite")).toBe(false);
+    expect(isAllowedModel("gemini-3.1-flash-lite")).toBe(false);
   });
 
   test("resolves free models against the unified allowlist", () => {
-    expect(resolveFreeModel("gemini-3.1-flash-lite", "x")).toBe("gemini-3.1-flash-lite");
+    expect(resolveFreeModel("gemini-3.1-flash-lite", "x")).toBe("x");
     expect(resolveFreeModel("big-pickle", "x")).toBe("x");
     expect(resolveFreeModel("gpt-5.4-mini", "x")).toBe("x");
     expect(resolveFreeModel(undefined, "x")).toBe("x");
@@ -119,7 +119,6 @@ describe("supportsThinkingBudget", () => {
   test("false for Gemini 3.x models", () => {
     expect(supportsThinkingBudget("gemini-3.8-flash")).toBe(false);
     expect(supportsThinkingBudget("gemini-3.6-flash")).toBe(false);
-    expect(supportsThinkingBudget("gemini-3.1-flash-lite")).toBe(false);
   });
 
   test("false for unknown ids", () => {
@@ -129,18 +128,8 @@ describe("supportsThinkingBudget", () => {
 
 describe("fallbackModelIds", () => {
   test("keeps 3.x fallbacks in the 3.x family, priority order", () => {
-    expect(fallbackModelIds("gemini-3.8-flash")).toEqual([
-      "gemini-3.6-flash",
-      "gemini-3.1-flash-lite",
-    ]);
-    expect(fallbackModelIds("gemini-3.6-flash")).toEqual([
-      "gemini-3.8-flash",
-      "gemini-3.1-flash-lite",
-    ]);
-    expect(fallbackModelIds("gemini-3.1-flash-lite")).toEqual([
-      "gemini-3.8-flash",
-      "gemini-3.6-flash",
-    ]);
+    expect(fallbackModelIds("gemini-3.8-flash")).toEqual(["gemini-3.6-flash"]);
+    expect(fallbackModelIds("gemini-3.6-flash")).toEqual(["gemini-3.8-flash"]);
   });
 
   test("never mixes thinking families", () => {
@@ -155,7 +144,6 @@ describe("fallbackModelIds", () => {
     expect(fallbackModelIds("openai/gpt-oss-120b")).toEqual([
       "gemini-3.8-flash",
       "gemini-3.6-flash",
-      "gemini-3.1-flash-lite",
     ]);
   });
 });
