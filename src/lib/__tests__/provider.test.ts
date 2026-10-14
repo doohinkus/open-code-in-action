@@ -323,6 +323,30 @@ describe("isRetryableUpstreamError", () => {
     ).toBe(true);
   });
 
+  test("treats an invalid/corrupted thought signature rejection as retryable", () => {
+    // Signatures are model-bound: replaying a different Gemini model's
+    // signature (e.g. after a mid-conversation model switch or a mid-turn
+    // rotation) is hard-rejected by newer 3.x endpoints with these 400
+    // texts. The next chain member replays with the documented sentinel and
+    // succeeds, so these must rotate instead of failing the turn.
+    expect(
+      isRetryableUpstreamError(
+        new Error(
+          "Unable to submit request because Thought signature is not valid."
+        )
+      )
+    ).toBe(true);
+    expect(isRetryableUpstreamError(new Error("Corrupted thought signature"))).toBe(
+      true
+    );
+    expect(
+      isRetryableUpstreamError({
+        statusCode: 400,
+        message: "400 Thought signature is not valid.",
+      })
+    ).toBe(true);
+  });
+
   test("matches nested 5xx provider error objects", () => {
     expect(isRetryableUpstreamError({ error: { type: "server_error" } })).toBe(true);
     expect(isRetryableUpstreamError({ statusCode: 503 })).toBe(true);

@@ -1,7 +1,14 @@
-import { describe, test, expect, vi, afterEach } from "vitest";
-import { createGemini3CompatFetch } from "@/lib/gemini-3-compat";
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  createGemini3CompatFetch,
+  resetGemini3SignatureState,
+} from "@/lib/gemini-3-compat";
 
 const originalFetch = globalThis.fetch;
+
+beforeEach(() => {
+  resetGemini3SignatureState();
+});
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -197,9 +204,9 @@ describe("createGemini3CompatFetch", () => {
 
   test("always gives bare cross-provider functionCall parts a signature", async () => {
     // History built by a different provider (e.g. Groq) contains functionCall
-    // parts Gemini never generated. A missing signature is a hard 400; a
-    // mismatched one is tolerated. So every bare call must leave the bridge
-    // with either a real harvested signature or the documented dummy
+    // parts Gemini never generated. A missing signature is a hard 400. So
+    // every bare call must leave the bridge with either a signature
+    // harvested from THIS model or the documented dummy
     // ("skip_thought_signature_validator") — never bare.
     const f = createGemini3CompatFetch();
     const mocked = stubFetch(async () => new Response("{}"));
@@ -218,6 +225,97 @@ describe("createGemini3CompatFetch", () => {
     const part = body.contents[0].parts[0];
     expect(typeof part.thoughtSignature).toBe("string");
     expect(part.thoughtSignature.length).toBeGreaterThan(0);
+  });
+
+  test("does not cross-inject signatures harvested from another model", async () => {
+    // Signatures are endpoint/model-bound: newer 3.x endpoints hard-reject
+    // foreign ones with a 400 ("Thought signature is not valid"). A
+    // signature harvested from gemini-3.8 must therefore never reach a
+    // gemini-3.6 request — the documented sentinel is used instead.
+    const f = createGemini3CompatFetch();
+
+    const mocked38 = stubFetch(async () =>
+      sseResponse([
+        {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { functionCall: { name: "str_replace_editor", args: {} }, thoughtSignature: "sig-from-3.8" },
+                ],
+              },
+            },
+          ],
+        },
+      ])
+    );
+    const first = await f(`${BASE}/gemini-3.8-flash:streamGenerateContent?alt=sse`, postInit({ contents: [] }));
+    await drain(first);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocked38).toHaveBeenCalledTimes(1);
+
+    // Same tool call replayed against gemini-3.6: only 3.6-harvested
+    // signatures rank above the sentinel — 3.8's is not eligible.
+    const mocked36 = stubFetch(async () => new Response("{}"));
+    await f(
+      `${BASE}/gemini-3.6-flash:streamGenerateContent?alt=sse`,
+      postInit({
+        contents: [
+          { role: "model", parts: [{ functionCall: { name: "str_replace_editor", args: {} } }] },
+        ],
+      })
+    );
+
+    const init = mocked36.mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(init.body as string);
+    expect(body.contents[0].parts[0].thoughtSignature).toBe(
+      "skip_thought_signature_validator"
+    );
+
+    // And vise-versa: replaying the same call against 3.8 still gets 3.8's
+    // own harvested signature.
+    const mocked38b = stubFetch(async () => new Response("{}"));
+    await f(
+      `${BASE}/gemini-3.8-flash:streamGenerateContent?alt=sse`,
+      postInit({
+        contents: [
+          { role: "model", parts: [{ functionCall: { name: "str_replace_editor", args: {} } }] },
+        ],
+      })
+    );
+    const init38 = mocked38b.mock.calls[0][1] as RequestInit;
+    const body38 = JSON.parse(init38.body as string);
+    expect(body38.contents[0].parts[0].thoughtSignature).toBe("sig-from-3.8");
+  });
+
+  test("keeps per-model fallback signatures independent", async () => {
+    // A thinking-block signature harvested from one model must not become
+    // another model's fallback for a bare call either.
+    const f = createGemini3CompatFetch();
+
+    const mocked1 = stubFetch(async () =>
+      sseResponse([
+        { candidates: [{ content: { parts: [{ text: "", thoughtSignature: "block-sig-3.8" }] } }] },
+      ])
+    );
+    const first = await f(`${BASE}/gemini-3.8-flash:streamGenerateContent?alt=sse`, postInit({ contents: [] }));
+    await drain(first);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocked1).toHaveBeenCalledTimes(1);
+
+    const mocked2 = stubFetch(async () => new Response("{}"));
+    await f(
+      `${BASE}/gemini-3.6-flash:streamGenerateContent?alt=sse`,
+      postInit({
+        contents: [{ role: "model", parts: [{ functionCall: { name: "file_manager", args: {} } }] }],
+      })
+    );
+
+    const init = mocked2.mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(init.body as string);
+    expect(body.contents[0].parts[0].thoughtSignature).toBe(
+      "skip_thought_signature_validator"
+    );
   });
 
   test("never breaks the caller's stream when harvesting fails", async () => {

@@ -469,6 +469,52 @@ test("replaceInFile errors on multiple matches to avoid corrupting code", () => 
   expect(fs.readFile("/test.txt")).toBe("foo bar foo baz foo");
 });
 
+test("replaceInFile multiple-match error lists line numbers and snippets", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile(
+    "/test.txt",
+    [
+      "const title = 'counter';",
+      "const buttonClass = 'bg-pink-500'; // primary",
+      "const textClass = 'bg-pink-500'; // heading",
+      "const focus = 'ring-pink-500';",
+    ].join("\n")
+  );
+
+  // An over-generic old_str the model might guess: matches twice.
+  const result = fs.replaceInFile("/test.txt", "const buttonClass", "x");
+
+  // Only one occurrence, no listing needed.
+  expect(result).toBe(
+    "Replaced 1 occurrence of the string in /test.txt — /test.txt updated"
+  );
+  fs.createFile("/other.txt", "a\nbg-pink-500\nb\nbg-pink-500\nc");
+
+  const ambiguous = fs.replaceInFile("/other.txt", "bg-pink-500", "bg-blue-500");
+
+  expect(ambiguous).toContain("Error: Found 2 occurrences");
+  expect(ambiguous).toContain("does your edit target one of them?");
+  expect(ambiguous).toContain("line 2:");
+  expect(ambiguous).toContain("line 4:");
+  expect(ambiguous).toContain("bg-pink-500"); // snippet content present
+  // File untouched while ambiguous.
+  expect(fs.readFile("/other.txt")).toBe("a\nbg-pink-500\nb\nbg-pink-500\nc");
+});
+
+test("replaceInFile multiple-match error truncates after 5 occurrences", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "dup\ndup\ndup\ndup\ndup\ndup\ndup");
+
+  const result = fs.replaceInFile("/test.txt", "dup", "new");
+
+  expect(result).toContain("Error: Found 7 occurrences");
+  expect(result).toContain("(+2 more occurrences)");
+  const listedLines = result
+    .split("\n")
+    .filter((l) => /^\s+\d+\.\sline\s/.test(l));
+  expect(listedLines).toHaveLength(5);
+});
+
 test("replaceInFile handles empty replacement", () => {
   const fs = new VirtualFileSystem();
   fs.createFile("/test.txt", "foo bar baz");

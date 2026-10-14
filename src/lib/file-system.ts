@@ -554,10 +554,41 @@ export class VirtualFileSystem {
     // Like str_replace_editor, require a unique match: replacing every
     // occurrence of an over-generic string can silently corrupt code.
     if (occurrences > 1) {
+      // List each occurrence's line number plus a trimmed snippet of its
+      // line so the model can disambiguate in one retry instead of burning
+      // a step on a 'view'. A generic string (e.g. a shared Tailwind class)
+      // commonly matches in several JSX spots; the snippets show which one
+      // to target by extending old_str with surrounding context.
+      const snippetLimit = 80;
+      const maxListed = 5;
+      const listed: string[] = [];
+      let searchFrom = 0;
+      for (let i = 0; i < occurrences; i++) {
+        const at = content.indexOf(oldStr, searchFrom);
+        if (at === -1) break;
+        searchFrom = at + oldStr.length;
+        if (i >= maxListed) continue;
+        const before = content.slice(0, at);
+        const line = (before.match(/\n/g)?.length ?? 0) + 1;
+        const lineStart = before.lastIndexOf("\n") + 1;
+        const lineEnd = content.indexOf("\n", at);
+        const snippet =
+          content
+            .slice(lineStart, lineEnd === -1 ? content.length : lineEnd)
+            .trim()
+            .slice(0, snippetLimit);
+        listed.push(`  ${i + 1}. line ${line}: ${snippet}`);
+      }
+      let more = "";
+      if (occurrences > maxListed) {
+        more = `\n  (+${occurrences - maxListed} more occurrences)`;
+      }
       return (
         `Error: Found ${occurrences} occurrences of the string in ${path}. ` +
         `Old_str must match exactly one location. Include surrounding ` +
-        `context to make it unique, or use a larger old_str.`
+        `context to make it unique, or use a larger old_str.` +
+        `\nFound in these locations (does your edit target one of them?):` +
+        `\n${listed.join("\n")}${more}`
       );
     }
 
