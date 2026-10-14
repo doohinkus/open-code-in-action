@@ -837,12 +837,17 @@ export function isDeadModelError(error: unknown): boolean {
 
 // Beyond rate limits, free endpoints also flake with transient 5xx
 // failures (e.g. "Endpoint is unavailable", 503), and retire models outright
-// (404/401 "Model ... is not supported/not found"). Treat all of those as
-// retryable so the chain rotates past a down/unavailable/retired model
-// instead of erroring the turn while other free models still work.
+// (404/401 "Model ... is not supported/not found"). Signature-validation
+// 400s also rotate: newer Gemini 3.x endpoints hard-reject signatures from
+// a different model ("Thought signature is not valid"/"Corrupted thought
+// signature"), which mainly happens when a turn switches models mid-flow —
+// the next chain member replays the history with its own/documented sentinel
+// signature and succeeds. Treat all of those as retryable so the chain
+// rotates past a down/unavailable/retired model instead of erroring the turn
+// while other free models still work.
 /**
  * Checks if an error is a retryable upstream error (rate limit, 5xx, timeout,
- * dead model).
+ * dead model, signature-validation 400).
  *
  * @param error - The error to check
  * @returns True if the error is retryable
@@ -850,12 +855,31 @@ export function isDeadModelError(error: unknown): boolean {
 export function isRetryableUpstreamError(error: unknown): boolean {
   if (isRateLimitError(error)) return true;
   if (isDeadModelError(error)) return true;
+  if (isInvalidSignatureError(error)) return true;
   if (error && typeof error === "object") {
     const record = error as { statusCode?: unknown };
     if (typeof record.statusCode === "number" && record.statusCode >= 500) return true;
   }
   const message = errorMessage(error);
   return /unavailable|overloaded|server error|server_error|503|502|504|idle timeout|timed out|missing a thought_signature/i.test(message);
+}
+
+// Thought signatures from one Gemini endpoint/model are opaque, model-bound
+// tokens. Replaying a different model's signature yields plain-object/textual
+// 400s like "Unable to submit request because Thought signature is not
+// valid." or "Corrupted thought signature". Rotating to another model (which
+// replays with its own or the documented 'skip_thought_signature_validator'
+// sentinel) recovers the turn, so these are retryable. A true "missing"
+// thought_signature 400 is already matched by the explicit pattern below.
+/**
+ * Checks if an error is a thought-signature validation rejection (400).
+ *
+ * @param error - The error to check
+ * @returns True if the error indicates an invalid/corrupted thought signature
+ */
+export function isInvalidSignatureError(error: unknown): boolean {
+  const message = errorMessage(error);
+  return /thought[_ ]signature (is )?not valid|corrupted thought[_ ]signature|signature is not valid/i.test(message);
 }
 
 /**

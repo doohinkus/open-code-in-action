@@ -21,10 +21,12 @@ describe("repairStrReplaceArgs", () => {
   });
 
   test("coerces string insert_line", () => {
-    expect(repairStrReplaceArgs({ insert_line: "12" })).toEqual({
-      insert_line: 12,
-    });
-    expect(repairStrReplaceArgs({ insert_line: "abc" })).toBeNull();
+    expect(
+      repairStrReplaceArgs({ command: "insert", insert_line: "12" })
+    ).toEqual({ command: "insert", insert_line: 12 });
+    expect(
+      repairStrReplaceArgs({ command: "insert", insert_line: "abc" })
+    ).toBeNull();
   });
 
   test("coerces string entries in view_range", () => {
@@ -33,6 +35,50 @@ describe("repairStrReplaceArgs", () => {
       path: "/x",
       view_range: [2, 4],
     });
+  });
+
+  test("infers a missing command from file_text (create)", () => {
+    expect(
+      repairStrReplaceArgs({ path: "/App.jsx", file_text: "x", overwrite: true })
+    ).toEqual({ path: "/App.jsx", file_text: "x", overwrite: true, command: "create" });
+  });
+
+  test("infers a missing command from overwrite (create)", () => {
+    expect(repairStrReplaceArgs({ path: "/App.jsx", overwrite: false })).toEqual({
+      path: "/App.jsx",
+      overwrite: false,
+      command: "create",
+    });
+  });
+
+  test("infers a missing command from old_str (str_replace)", () => {
+    expect(repairStrReplaceArgs({ path: "/x", old_str: "a", new_str: "b" })).toEqual({
+      path: "/x",
+      old_str: "a",
+      new_str: "b",
+      command: "str_replace",
+    });
+  });
+
+  test("infers a missing command from insert_line (insert)", () => {
+    expect(repairStrReplaceArgs({ path: "/x", insert_line: 2, new_str: "y" })).toEqual({
+      path: "/x",
+      insert_line: 2,
+      new_str: "y",
+      command: "insert",
+    });
+  });
+
+  test("infers a missing command from view_range (view)", () => {
+    expect(repairStrReplaceArgs({ path: "/x", view_range: [1, 5] })).toEqual({
+      path: "/x",
+      view_range: [1, 5],
+      command: "view",
+    });
+  });
+
+  test("returns null when nothing hints at the missing command", () => {
+    expect(repairStrReplaceArgs({ path: "/x" })).toBeNull();
   });
 
   test("returns args untouched-shaped object when nothing needs coercion", () => {

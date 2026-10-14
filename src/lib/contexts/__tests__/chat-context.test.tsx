@@ -1,4 +1,5 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
+import React from "react";
 import { render, screen, waitFor, act, cleanup } from "@testing-library/react";
 import { ChatProvider, useChat } from "../chat-context";
 import { ToastProvider } from "@/components/ui/toast";
@@ -19,6 +20,7 @@ vi.mock("@ai-sdk/react", () => ({
 vi.mock("@/lib/anon-work-tracker", () => ({
   setHasAnonWork: vi.fn(),
   getOrCreateAnonSessionKey: vi.fn(() => "anon-test-key"),
+  clearAnonWork: vi.fn(),
 }));
 
 vi.mock("@/lib/model-selector", () => ({
@@ -28,6 +30,7 @@ vi.mock("@/lib/model-selector", () => ({
 // Helper component to access chat context
 function TestComponent() {
   const chat = useChat();
+  const [clearResult, setClearResult] = React.useState<string | null>(null);
   return (
     <div>
       <div data-testid="messages">{chat.messages.length}</div>
@@ -42,6 +45,16 @@ function TestComponent() {
       <button type="button" data-testid="stop" onClick={() => chat.stop()}>
         Stop
       </button>
+      <button
+        type="button"
+        data-testid="clear"
+        onClick={() => setClearResult(chat.clearContext() ? "true" : "false")}
+      >
+        Clear
+      </button>
+      {clearResult !== null && (
+        <div data-testid="clear-result">{clearResult}</div>
+      )}
       <div data-testid="status">{chat.status}</div>
       <div data-testid="interrupted">
         {chat.generationInterrupted ? "true" : "false"}
@@ -54,6 +67,7 @@ describe("ChatContext", () => {
   const mockFileSystem = {
     serialize: vi.fn(() => ({ "/test.js": { type: "file", content: "test" } })),
   };
+  const mockReset = vi.fn();
 
   const mockHandleToolCall = vi.fn();
   const mockValidateCurrentFiles = vi.fn<() => Array<{ path: string; error: string }>>(
@@ -71,6 +85,7 @@ describe("ChatContext", () => {
     stop: vi.fn(),
     append: vi.fn(),
     reload: vi.fn(),
+    setMessages: vi.fn(),
   };
 
   beforeEach(() => {
@@ -82,6 +97,7 @@ describe("ChatContext", () => {
       validateCurrentFiles: mockValidateCurrentFiles,
       setIsFixingErrors: mockSetIsFixingErrors,
       vfsRevision: 0,
+      reset: mockReset,
     });
 
     (useAIChat as any).mockReturnValue(mockUseAIChat);
@@ -249,6 +265,105 @@ describe("ChatContext", () => {
 
     expect(textarea).toBeDefined();
     expect(form).toBeDefined();
+  });
+
+  describe("clearContext", () => {
+    test("resets chat, clears the filesystem, and reports success", async () => {
+      await act(async () => {
+        render(
+          <ToastProvider>
+            <ChatProvider>
+              <TestComponent />
+            </ChatProvider>
+          </ToastProvider>
+        );
+      });
+
+      await act(async () => {
+        screen.getByTestId("clear").click();
+      });
+
+      expect(mockUseAIChat.setMessages).toHaveBeenCalledWith([]);
+      expect(mockReset).toHaveBeenCalledTimes(1);
+      // A root-only filesystem can't be persisted as a snapshot (setHasAnonWork
+      // skips empty payloads) — the stored snapshot must be removed entirely
+      // so a browser refresh cannot rehydrate the cleared conversation.
+      expect(anonTracker.clearAnonWork).toHaveBeenCalledTimes(1);
+      expect(anonTracker.setHasAnonWork).not.toHaveBeenCalled();
+      expect(screen.getByTestId("clear-result").textContent).toBe("true");
+    });
+
+    test("persists remaining files with an empty chat when files survive", async () => {
+      (mockFileSystem.serialize as any).mockReturnValue({
+        "/": { type: "directory" },
+        "/App.jsx": { type: "file", content: "export default 1;" },
+      });
+
+      await act(async () => {
+        render(
+          <ToastProvider>
+            <ChatProvider>
+              <TestComponent />
+            </ChatProvider>
+          </ToastProvider>
+        );
+      });
+
+      await act(async () => {
+        screen.getByTestId("clear").click();
+      });
+
+      expect(mockReset).toHaveBeenCalledTimes(1);
+      expect(anonTracker.setHasAnonWork).toHaveBeenCalledWith([], {
+        "/": { type: "directory" },
+        "/App.jsx": { type: "file", content: "export default 1;" },
+      });
+      expect(anonTracker.clearAnonWork).not.toHaveBeenCalled();
+    });
+
+    test("does nothing while a generation is in flight", async () => {
+      (useAIChat as any).mockReturnValue({
+        ...mockUseAIChat,
+        status: "streaming",
+      });
+
+      await act(async () => {
+        render(
+          <ToastProvider>
+            <ChatProvider>
+              <TestComponent />
+            </ChatProvider>
+          </ToastProvider>
+        );
+      });
+
+      await act(async () => {
+        screen.getByTestId("clear").click();
+      });
+
+      expect(mockUseAIChat.setMessages).not.toHaveBeenCalled();
+      expect(mockReset).not.toHaveBeenCalled();
+      expect(screen.getByTestId("clear-result").textContent).toBe("false");
+    });
+
+    test("project users skip the anonymous snapshot write", async () => {
+      await act(async () => {
+        render(
+          <ToastProvider>
+            <ChatProvider projectId="test-project">
+              <TestComponent />
+            </ChatProvider>
+          </ToastProvider>
+        );
+      });
+
+      await act(async () => {
+        screen.getByTestId("clear").click();
+      });
+
+      expect(mockReset).toHaveBeenCalledTimes(1);
+      expect(anonTracker.setHasAnonWork).not.toHaveBeenCalled();
+    });
   });
 
   test("includes the stored model in the request body", () => {

@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { ModelSelector } from "./ModelSelector";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useChat } from "@/lib/contexts/chat-context";
-import { RotateCcw } from "lucide-react";
+import { useFileSystem } from "@/lib/contexts/file-system-context";
+import { RotateCcw, Eraser, Trash2 } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
+import {
+  TOAST_DEFAULT_DURATION_MS,
+} from "@/lib/constants";
 import { mapErrorMessage } from "@/lib/chat-errors";
 
 export { mapErrorMessage };
@@ -30,7 +35,32 @@ export function ChatInterface() {
     stop,
     generationInterrupted,
     append,
+    clearContext: clearContextFromStore,
   } = useChat();
+  const { toast } = useToast();
+
+  const clearContext = useCallback(() => {
+    setConfirmingClear(false);
+    if (!clearContextFromStore()) return;
+    toast("Cleared — fresh start ready.", "success");
+  }, [clearContextFromStore, toast]);
+
+  // Clearing removes the chat AND every generated file, which is not
+  // recoverable — require a deliberate second click before anything is
+  // destroyed. Escaping the confirm state (including after the auto-reset
+  // below) returns to the dormant button.
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const { getAllFiles } = useFileSystem();
+  const canClear =
+    messages.length > 0 || getAllFiles().size > 0;
+  const isBusy = status === "submitted" || status === "streaming";
+  const showClear = canClear && !isBusy;
+
+  useEffect(() => {
+    if (!confirmingClear) return;
+    const timer = setTimeout(() => setConfirmingClear(false), TOAST_DEFAULT_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [confirmingClear]);
 
   const handleStarterPrompt = useCallback(
     (prompt: string) => {
@@ -115,8 +145,31 @@ export function ChatInterface() {
             </button>
           </div>
         )}
-        <div className="mb-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <ModelSelector />
+          {showClear && (
+            confirmingClear ? (
+              <button
+                onClick={clearContext}
+                title="Click again to clear chat, files, and the preview"
+                aria-label="Confirm clearing conversation, files, and preview"
+                className="inline-flex shrink-0 items-center gap-1.5 px-2 py-1 text-xs font-medium text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors"
+              >
+                <Trash2 className="h-3 w-3" />
+                Confirm clear?
+              </button>
+            ) : (
+              <button
+                onClick={() => setConfirmingClear(true)}
+                title="Clear conversation context, files, and the preview"
+                aria-label="Clear conversation context"
+                className="inline-flex shrink-0 items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors"
+              >
+                <Eraser className="h-3 w-3" />
+                Clear
+              </button>
+            )
+          )}
         </div>
         <MessageInput
           input={input}

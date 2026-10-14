@@ -84,6 +84,10 @@ export function PreviewFrame() {
   const iframeReadyRef = useRef(false);
   const lastSignatureRef = useRef<string | null>(null);
   const baselineImportsRef = useRef<Record<string, string> | null>(null);
+  // Bumped whenever the iframe element (re)mounts; the build effect depends
+  // on it so a detached-iframe era (error placeholder, generating chrome)
+  // can never strand the pane without content — see attachIframe.
+  const [frameEpoch, setFrameEpoch] = useState(0);
 
   const isGenerating = status === "streaming" || status === "submitted";
 
@@ -107,6 +111,13 @@ export function PreviewFrame() {
       iframeReadyRef.current = false;
       lastSignatureRef.current = null;
       baselineImportsRef.current = null;
+      // A remount also means the build effect may have last run while the
+      // iframe was detached (e.g. a turn finished while the cleared-pane
+      // placeholder was showing): refs were null, so that run skipped the
+      // entire update and nothing will re-trigger it on its own. Bump an
+      // epoch the build effect depends on so the fresh element gets its
+      // content immediately.
+      setFrameEpoch((epoch) => epoch + 1);
     },
     []
   );
@@ -334,7 +345,7 @@ export function PreviewFrame() {
 
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshTrigger, getAllFiles, entryPoint, isFirstLoad, isGenerating, isFixingErrors, resolvedTheme]);
+  }, [refreshTrigger, getAllFiles, entryPoint, isFirstLoad, isGenerating, isFixingErrors, resolvedTheme, frameEpoch]);
 
   const toggleInspectMode = () => {
     setInspectMode(!isInspectMode);

@@ -13,7 +13,7 @@ import {
 import { useChat as useAIChat } from "@ai-sdk/react";
 import { Message } from "ai";
 import { useFileSystem } from "./file-system-context";
-import { setHasAnonWork, getOrCreateAnonSessionKey } from "@/lib/anon-work-tracker";
+import { setHasAnonWork, getOrCreateAnonSessionKey, clearAnonWork } from "@/lib/anon-work-tracker";
 import { getStoredModel } from "@/lib/model-selector";
 import { useToast } from "@/components/ui/toast";
 import { mapErrorMessage } from "@/lib/chat-errors";
@@ -49,6 +49,11 @@ interface ChatContextType {
   requestFix: (errorText: string) => void;
   generationTimedOut: boolean;
   generationInterrupted: boolean;
+  // Drops the chat history (stale design decisions, earlier models'
+  // reasoning) but keeps every file. The next request starts fresh while
+  // the model still sees the current filesystem — well suited for
+  // "replace the counter with X" redesign turns.
+  clearContext: () => boolean;
 }
 
 // The provider can die mid-stream with an idle timeout (e.g. "Streaming
@@ -77,6 +82,7 @@ export function ChatProvider({
     validateCurrentFiles,
     setIsFixingErrors,
     vfsRevision,
+    reset: resetFileSystem,
   } = useFileSystem();
 
   const vfsRevisionRef = useRef(vfsRevision);
@@ -148,6 +154,7 @@ export function ChatProvider({
     reload,
     append,
     stop,
+    setMessages,
   } = useAIChat({
     api: "/api/chat",
     initialMessages,
@@ -232,6 +239,49 @@ export function ChatProvider({
     userStoppedRef.current = true;
     stop();
   }, [stop]);
+
+  const clearContext = useCallback(() => {
+    if (status === "submitted" || status === "streaming") return false;
+    fixAttemptCount.current = 0;
+    autoRetriedRef.current = false;
+    userStoppedRef.current = false;
+    setGenerationTimedOut(false);
+    setGenerationInterrupted(false);
+    setIsFixingErrors(false);
+    setMessages([]);
+    // Drop the code as well: the filesystem resets to the bare root, so the
+    // code tab empties and the preview falls back to its welcome
+    // placeholder. triggerRefresh inside reset() advances vfsRevision, which
+    // makes the next request ship the emptied files payload — the server
+    // VFS cache entry is replaced instead of resurrecting the old state.
+    resetFileSystem();
+    // Anonymous snapshots carry messages AND files: persist the cleared
+    // history together with the emptied filesystem so a browser refresh
+    // cannot rehydrate the conversation just cleared. A fully emptied
+    // snapshot (only the root directory) must REMOVE the stored snapshot
+    // entirely — setHasAnonWork treats an empty payload as "nothing to
+    // save" and would leave the pre-clear snapshot on disk.
+    if (!projectId) {
+      const clearedFiles = fileSystem.serialize();
+      if (Object.keys(clearedFiles).length <= 1) {
+        clearAnonWork();
+      } else {
+        try {
+          setHasAnonWork([], clearedFiles);
+        } catch {
+          // Snapshotting is best-effort (see the ready-turn effect below).
+        }
+      }
+    }
+    return true;
+  }, [
+    projectId,
+    fileSystem,
+    status,
+    setMessages,
+    resetFileSystem,
+    setIsFixingErrors,
+  ]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -335,6 +385,7 @@ export function ChatProvider({
       requestFix,
       generationTimedOut,
       generationInterrupted,
+      clearContext,
     }),
     [
       projectId,
@@ -351,6 +402,7 @@ export function ChatProvider({
       requestFix,
       generationTimedOut,
       generationInterrupted,
+      clearContext,
     ]
   );
 

@@ -469,6 +469,52 @@ test("replaceInFile errors on multiple matches to avoid corrupting code", () => 
   expect(fs.readFile("/test.txt")).toBe("foo bar foo baz foo");
 });
 
+test("replaceInFile multiple-match error lists line numbers and snippets", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile(
+    "/test.txt",
+    [
+      "const title = 'counter';",
+      "const buttonClass = 'bg-pink-500'; // primary",
+      "const textClass = 'bg-pink-500'; // heading",
+      "const focus = 'ring-pink-500';",
+    ].join("\n")
+  );
+
+  // An over-generic old_str the model might guess: matches twice.
+  const result = fs.replaceInFile("/test.txt", "const buttonClass", "x");
+
+  // Only one occurrence, no listing needed.
+  expect(result).toBe(
+    "Replaced 1 occurrence of the string in /test.txt — /test.txt updated"
+  );
+  fs.createFile("/other.txt", "a\nbg-pink-500\nb\nbg-pink-500\nc");
+
+  const ambiguous = fs.replaceInFile("/other.txt", "bg-pink-500", "bg-blue-500");
+
+  expect(ambiguous).toContain("Error: Found 2 occurrences");
+  expect(ambiguous).toContain("does your edit target one of them?");
+  expect(ambiguous).toContain("line 2:");
+  expect(ambiguous).toContain("line 4:");
+  expect(ambiguous).toContain("bg-pink-500"); // snippet content present
+  // File untouched while ambiguous.
+  expect(fs.readFile("/other.txt")).toBe("a\nbg-pink-500\nb\nbg-pink-500\nc");
+});
+
+test("replaceInFile multiple-match error truncates after 5 occurrences", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "dup\ndup\ndup\ndup\ndup\ndup\ndup");
+
+  const result = fs.replaceInFile("/test.txt", "dup", "new");
+
+  expect(result).toContain("Error: Found 7 occurrences");
+  expect(result).toContain("(+2 more occurrences)");
+  const listedLines = result
+    .split("\n")
+    .filter((l) => /^\s+\d+\.\sline\s/.test(l));
+  expect(listedLines).toHaveLength(5);
+});
+
 test("replaceInFile handles empty replacement", () => {
   const fs = new VirtualFileSystem();
   fs.createFile("/test.txt", "foo bar baz");
@@ -477,6 +523,83 @@ test("replaceInFile handles empty replacement", () => {
 
   expect(result).toBe("Replaced 1 occurrence of the string in /test.txt — /test.txt updated");
   expect(fs.readFile("/test.txt")).toBe(" bar baz");
+});
+
+test("replaceInFile recovers a tab-separated numbered 'view' paste", () => {
+  // Models sometimes copy the whole numbered rendering of 'view' into
+  // old_str. The prefixes (as viewFile emits them: `<n>\t<line>`) must be
+  // stripped and the raw content matched instead.
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "alpha\nbeta\ngamma");
+
+  const view = fs.viewFile("/test.txt");
+  const result = fs.replaceInFile("/test.txt", view, "delta");
+
+  expect(result).toContain("Replaced 1 occurrence of the string in /test.txt");
+  expect(result).toContain("stripping them");
+  expect(fs.readFile("/test.txt")).toBe("delta");
+});
+
+test("replaceInFile recovers a space-collapsed numbered 'view' paste", () => {
+  // The trace in production showed the paste with numbers separated by
+  // spaces rather than tabs.
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "one\ntwo\nthree");
+
+  const result = fs.replaceInFile("/test.txt", "1 one\n2 two\n3 three", "reset");
+
+  expect(result).toContain("Replaced 1 occurrence of the string in /test.txt");
+  expect(result).toContain("stripping them");
+  expect(fs.readFile("/test.txt")).toBe("reset");
+});
+
+test("replaceInFile recovers a numbered paste with a view_range offset", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "l1\nl2\nl3\nl4\nl5");
+
+  // viewFile("/test.txt", [3, -1]) renders: 3\tl3\n4\tl4\n5\tl5
+  const result = fs.replaceInFile("/test.txt", "3 l3\n4 l4\n5 l5", "mid");
+
+  expect(result).toContain("Replaced 1 occurrence of the string in /test.txt");
+  expect(fs.readFile("/test.txt")).toBe("l1\nl2\nmid");
+});
+
+test("replaceInFile ambiguous numbered paste reports the raw-content matches", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "head\nseg\nseg\nseg\ntail\nseg\nseg\nseg");
+
+  const result = fs.replaceInFile("/test.txt", "1 seg\n2 seg\n3 seg", "x");
+
+  expect(result).toContain("Error: Found 2 occurrences");
+  expect(result).toContain("does your edit target one of them?");
+  expect(fs.readFile("/test.txt")).toBe("head\nseg\nseg\nseg\ntail\nseg\nseg\nseg");
+});
+
+test("replaceInFile oversized old_str steers to create+overwrite", () => {
+  // Whole-file rewrites sent as str_replace are fragile and waste steps;
+  // the tool must point at the create/overwrite instrument instead.
+  const fs = new VirtualFileSystem();
+  const content = Array.from({ length: 60 }, (_, i) => `line number ${i} with padding text`).join("\n");
+  fs.createFile("/test.txt", content);
+
+  // ≥ max(800, 50% of file) — a near-full old_str with one missing line.
+  const nearFull = content.split("\n").slice(0, 55).join("\n");
+  const result = fs.replaceInFile("/test.txt", nearFull, "new file body");
+
+  expect(result).toContain("covers most of /test.txt");
+  expect(result).toContain('create\' command with "overwrite": true');
+  expect(fs.readFile("/test.txt")).toBe(content);
+});
+
+test("replaceInFile does not flag short strings as file rewrites", () => {
+  const fs = new VirtualFileSystem();
+  const content = "x".repeat(900);
+  fs.createFile("/test.txt", content);
+
+  const result = fs.replaceInFile("/test.txt", "900 padding suffix marker!", "y");
+
+  expect(result).toContain("Error: String not found in file");
+  expect(fs.readFile("/test.txt")).toBe(content);
 });
 
 test("replaceInFile returns error for non-existent file", () => {
@@ -499,7 +622,60 @@ test("replaceInFile returns error when string not found", () => {
   fs.createFile("/test.txt", "hello world");
 
   const result = fs.replaceInFile("/test.txt", "foo", "bar");
-  expect(result).toBe('Error: String not found in file: "foo"');
+
+  expect(result).toContain('Error: String not found in file: "foo"');
+  expect(result).toContain("copy old_str verbatim");
+  expect(result).not.toContain("Closest lines");
+});
+
+test("replaceInFile not-found error suggests closest lines when tokens overlap", () => {
+  // A miss built from memory (wrong class order) versus the line that is
+  // actually in the file: high token overlap, zero literal match.
+  const fs = new VirtualFileSystem();
+  fs.createFile(
+    "/test.txt",
+    [
+      "export default function App() {",
+      "  return (",
+      '    <button className="rounded bg-orange-500 px-4 py-2 text-white transition-colors hover:bg-orange-600">',
+      "      Count",
+      "    </button>",
+      "  );",
+      "}",
+    ].join("\n")
+  );
+
+  const result = fs.replaceInFile(
+    "/test.txt",
+    'class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 focus-visible:ring-2"',
+    "replaced"
+  );
+
+  expect(result).toContain("Error: String not found in file");
+  expect(result).toContain("Closest lines currently in /test.txt");
+  expect(result).toContain("line 3:");
+  expect(result).toContain("bg-orange-500");
+  // File unchanged while ambiguous.
+  expect(fs.readFile("/test.txt")).toContain("rounded bg-orange-500");
+});
+
+test("replaceInFile not-found error without token overlap lists no lines", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "alpha beta gamma");
+
+  const result = fs.replaceInFile("/test.txt", "completely different here", "x");
+
+  expect(result).toContain("Error: String not found in file");
+  expect(result).not.toContain("Closest lines");
+});
+
+test("replaceInFile rejects empty old_str with a clear message", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "alpha");
+
+  const result = fs.replaceInFile("/test.txt", "", "x");
+
+  expect(result).toBe("Error: old_str must not be empty.");
 });
 
 test("insertInFile inserts text at specified line", () => {
