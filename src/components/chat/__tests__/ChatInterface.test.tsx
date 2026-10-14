@@ -71,6 +71,7 @@ const mockUseChat = {
   stop: vi.fn(),
   generationTimedOut: false,
   generationInterrupted: false,
+  clearContext: vi.fn(() => true),
 };
 
 beforeEach(() => {
@@ -91,6 +92,53 @@ test("renders chat interface with message list and input", () => {
 
   expect(screen.getByTestId("message-list")).toBeDefined();
   expect(screen.getByTestId("message-input")).toBeDefined();
+});
+
+describe("clear context button", () => {
+  test("hidden when the conversation is empty", () => {
+    render(
+      <ToastProvider>
+        <ChatInterface />
+      </ToastProvider>
+    );
+
+    expect(screen.queryByRole("button", { name: /clear conversation context/i })).toBeNull();
+  });
+
+  test("visible with conversation history and clears on click", async () => {
+    (useChat as any).mockReturnValue({
+      ...mockUseChat,
+      messages: [{ id: "1", role: "user", content: "Hello" }],
+    });
+
+    render(
+      <ToastProvider>
+        <ChatInterface />
+      </ToastProvider>
+    );
+
+    const button = screen.getByRole("button", { name: /clear conversation context/i });
+    await userEvent.click(button);
+
+    expect(mockUseChat.clearContext).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("Context cleared — files kept.")).toBeDefined();
+  });
+
+  test("hidden while a generation is in flight", () => {
+    (useChat as any).mockReturnValue({
+      ...mockUseChat,
+      messages: [{ id: "1", role: "user", content: "Hello" }],
+      status: "streaming",
+    });
+
+    render(
+      <ToastProvider>
+        <ChatInterface />
+      </ToastProvider>
+    );
+
+    expect(screen.queryByRole("button", { name: /clear conversation context/i })).toBeNull();
+  });
 });
 
 test("passes correct props to MessageList", () => {

@@ -539,75 +539,189 @@ export class VirtualFileSystem {
 
     const content = this.readFile(path) || "";
 
-    // Check if old_str exists in the file
-    if (!oldStr || !content.includes(oldStr)) {
-      // Models (especially after a provider/model switch, when the file was
-      // built by an earlier turn that got compacted out of context) often
-      // reconstruct old_str from chat memory and miss. Point them at the
-      // most similar actual lines so one retry lands without a 'view'.
-      const suggestions = this.nearestLines(content, oldStr || "");
-      const friendly = !oldStr
-        ? `Error: old_str must not be empty.`
-        : `Error: String not found in file: "${oldStr}"` +
-          ` (copy old_str verbatim from the current file content — it may differ from what the conversation shows).`;
-      if (suggestions.length > 0) {
-        return `${friendly}\nClosest lines currently in ${path}:\n${suggestions.join("\n")}`;
-      }
-      return friendly;
+    if (!oldStr) {
+      return `Error: old_str must not be empty.`;
     }
 
-    // Count occurrences
+    // Redesigns are routinely sent as a whole-file str_replace. Steer those
+    // straight to the correct instrument: create with overwrite. Past this
+    // point a giant old_str is fragile (ambiguous/partial matches) and
+    // wastes steps on retries.
+    if (this.coversMostOfTheFile(content, oldStr)) {
+      return (
+        `Error: old_str is very large and covers most of ${path}. This is a ` +
+        `file rewrite — use the 'create' command with "overwrite": true and ` +
+        `the full new file content instead of a giant str_replace.`
+      );
+    }
+
+    // Models sometimes paste the line-numbered rendering of 'view' verbatim
+    // into old_str (`1\tline`, or collapsed to `1 line`). Strip the numbers
+    // and retry before giving up — the edit intent is usually sound.
+    if (content.includes(oldStr)) {
+      const consumed = this.replaceUnique(
+        path,
+        content,
+        oldStr,
+        newStr,
+        "Replaced 1 occurrence of the string in {path} — {path} updated"
+      );
+      if (consumed === null) {
+        // Ambiguous — fall through to the occurrences report below so the
+        // model sees exactly where the matches live.
+        return this.reportMultipleOccurrences(path, content, oldStr);
+      }
+      return consumed;
+    }
+
+    const stripped = this.stripViewLineNumbers(content, oldStr);
+    if (stripped !== null) {
+      const strippedOccurrences = (
+        content.match(
+          new RegExp(stripped.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")
+        ) || []
+      ).length;
+      if (strippedOccurrences === 1) {
+        this.updateFile(path, content.replace(stripped, newStr || ""));
+        return (
+          `Replaced 1 occurrence of the string in ${path} — ${path} updated ` +
+          `(old_str contained 'view' line numbers; matched after stripping them)`
+        );
+      }
+      // The stripped paste is ambiguous — show the same report for the raw
+      // content so the model can narrow the context.
+      return this.reportMultipleOccurrences(path, content, stripped);
+    }
+
+    // Not found (raw or stripped). Models (especially after a provider/model
+    // switch, when the file was built by an earlier turn that got compacted
+    // out of context) often reconstruct old_str from chat memory and miss.
+    // Point them at the most similar actual lines so one retry lands without
+    // a 'view'.
+    const suggestions = this.nearestLines(content, oldStr);
+    const friendly =
+      `Error: String not found in file: "${oldStr}"` +
+      ` (copy old_str verbatim from the current file content — it may differ from what the conversation shows).`;
+    if (suggestions.length > 0) {
+      return `${friendly}\nClosest lines currently in ${path}:\n${suggestions.join("\n")}`;
+    }
+    return friendly;
+  }
+
+  // Whether old_str blankets most of the file: a simple size heuristic that
+  // flags "replace the whole file" str_replace calls. Small leftovers (like
+  // a stray newline) must not block surgical multi-line replaces, so the
+  // headline rule is relative (50% of the raw length), with an absolute
+  // floor so tiny files (where even a full-content paste is a stringy but
+  // deliberate edit) are never forced to rewrite via create.
+  private coversMostOfTheFile(content: string, oldStr: string): boolean {
+    return oldStr.length >= Math.max(800, Math.floor(content.length * 0.5));
+  }
+
+  // If old_str resembles the output of viewFile (lines prefixed by an
+  // ascending contiguous `n<sep>` where sep is a tab or a space, starting at
+  // line 1 or at an offset if a view_range was used), strip the prefixes and
+  // return the raw content; otherwise null. Requires that the stripped text
+  // actually exists in the current file, so a garbage paste can never
+  // corrupt anything.
+  private stripViewLineNumbers(content: string, oldStr: string): string | null {
+    const lines = oldStr.split("\n");
+    if (lines.length < 2) return null;
+
+    const pasted: string[] = [];
+    let expected: number | null = null;
+    for (const line of lines) {
+      const match = /^(\s*)(\d+)\t(.*)$/.exec(line) ?? /^(\s*)(\d+) (.*)$/.exec(line);
+      if (!match) return null;
+      const n = Number(match[2]);
+      if (!Number.isInteger(n) || n < 1) return null;
+      // Contiguity is what makes a numbered paste unambiguous: a stray
+      // leading number elsewhere (e.g. a list item "1 first") would break it.
+      if (match[1] !== "" && match[1].length > 4) return null;
+      if (expected === null) {
+        expected = n;
+      } else if (n !== expected + 1) {
+        return null;
+      }
+      expected = n;
+      pasted.push(match[3]);
+    }
+
+    const stripped = pasted.join("\n");
+    if (stripped === oldStr || !content.includes(stripped)) return null;
+    return stripped;
+  }
+
+  // Shared finish path for a unique, located match. Returns the success
+  // message (template gets {path}), or null when the match is not unique —
+  // the caller then reports occurrences for disambiguation.
+  private replaceUnique(
+    path: string,
+    content: string,
+    oldStr: string,
+    newStr: string,
+    successTemplate: string
+  ): string | null {
     const occurrences = (
       content.match(
         new RegExp(oldStr.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")
       ) || []
     ).length;
-
-    // Like str_replace_editor, require a unique match: replacing every
-    // occurrence of an over-generic string can silently corrupt code.
-    if (occurrences > 1) {
-      // List each occurrence's line number plus a trimmed snippet of its
-      // line so the model can disambiguate in one retry instead of burning
-      // a step on a 'view'. A generic string (e.g. a shared Tailwind class)
-      // commonly matches in several JSX spots; the snippets show which one
-      // to target by extending old_str with surrounding context.
-      const snippetLimit = 80;
-      const maxListed = 5;
-      const listed: string[] = [];
-      let searchFrom = 0;
-      for (let i = 0; i < occurrences; i++) {
-        const at = content.indexOf(oldStr, searchFrom);
-        if (at === -1) break;
-        searchFrom = at + oldStr.length;
-        if (i >= maxListed) continue;
-        const before = content.slice(0, at);
-        const line = (before.match(/\n/g)?.length ?? 0) + 1;
-        const lineStart = before.lastIndexOf("\n") + 1;
-        const lineEnd = content.indexOf("\n", at);
-        const snippet =
-          content
-            .slice(lineStart, lineEnd === -1 ? content.length : lineEnd)
-            .trim()
-            .slice(0, snippetLimit);
-        listed.push(`  ${i + 1}. line ${line}: ${snippet}`);
-      }
-      let more = "";
-      if (occurrences > maxListed) {
-        more = `\n  (+${occurrences - maxListed} more occurrences)`;
-      }
-      return (
-        `Error: Found ${occurrences} occurrences of the string in ${path}. ` +
-        `Old_str must match exactly one location. Include surrounding ` +
-        `context to make it unique, or use a larger old_str.` +
-        `\nFound in these locations (does your edit target one of them?):` +
-        `\n${listed.join("\n")}${more}`
-      );
+    if (occurrences === 1) {
+      this.updateFile(path, content.replace(oldStr, newStr || ""));
+      return successTemplate.replace(/\{path\}/g, path);
     }
+    return null;
+  }
 
-    const updatedContent = content.replace(oldStr, newStr || "");
-    this.updateFile(path, updatedContent);
-
-    return `Replaced 1 occurrence of the string in ${path} — ${path} updated`;
+  // Listing of where an ambiguous old_str matches, for the model to target
+  // one location with more context.
+  private reportMultipleOccurrences(
+    path: string,
+    content: string,
+    oldStr: string
+  ): string {
+    // List each occurrence's line number plus a trimmed snippet of its line
+    // so the model can disambiguate in one retry instead of burning a step
+    // on a 'view'. A generic string (e.g. a shared Tailwind class) commonly
+    // matches in several JSX spots; the snippets show which one to target
+    // by extending old_str with surrounding context.
+    const snippetLimit = 80;
+    const maxListed = 5;
+    const listed: string[] = [];
+    let searchFrom = 0;
+    const occurrences = (
+      content.match(
+        new RegExp(oldStr.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")
+      ) || []
+    ).length;
+    for (let i = 0; i < occurrences; i++) {
+      const at = content.indexOf(oldStr, searchFrom);
+      if (at === -1) break;
+      searchFrom = at + oldStr.length;
+      if (i >= maxListed) continue;
+      const before = content.slice(0, at);
+      const line = (before.match(/\n/g)?.length ?? 0) + 1;
+      const lineStart = before.lastIndexOf("\n") + 1;
+      const lineEnd = content.indexOf("\n", at);
+      const snippet =
+        content
+          .slice(lineStart, lineEnd === -1 ? content.length : lineEnd)
+          .trim()
+          .slice(0, snippetLimit);
+      listed.push(`  ${i + 1}. line ${line}: ${snippet}`);
+    }
+    let more = "";
+    if (occurrences > maxListed) {
+      more = `\n  (+${occurrences - maxListed} more occurrences)`;
+    }
+    return (
+      `Error: Found ${occurrences} occurrences of the string in ${path}. ` +
+      `Old_str must match exactly one location. Include surrounding ` +
+      `context to make it unique, or use a larger old_str.` +
+      `\nFound in these locations (does your edit target one of them?):` +
+      `\n${listed.join("\n")}${more}`
+    );
   }
 
   insertInFile(path: string, insertLine: number, text: string): string {

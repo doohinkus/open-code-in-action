@@ -525,6 +525,83 @@ test("replaceInFile handles empty replacement", () => {
   expect(fs.readFile("/test.txt")).toBe(" bar baz");
 });
 
+test("replaceInFile recovers a tab-separated numbered 'view' paste", () => {
+  // Models sometimes copy the whole numbered rendering of 'view' into
+  // old_str. The prefixes (as viewFile emits them: `<n>\t<line>`) must be
+  // stripped and the raw content matched instead.
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "alpha\nbeta\ngamma");
+
+  const view = fs.viewFile("/test.txt");
+  const result = fs.replaceInFile("/test.txt", view, "delta");
+
+  expect(result).toContain("Replaced 1 occurrence of the string in /test.txt");
+  expect(result).toContain("stripping them");
+  expect(fs.readFile("/test.txt")).toBe("delta");
+});
+
+test("replaceInFile recovers a space-collapsed numbered 'view' paste", () => {
+  // The trace in production showed the paste with numbers separated by
+  // spaces rather than tabs.
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "one\ntwo\nthree");
+
+  const result = fs.replaceInFile("/test.txt", "1 one\n2 two\n3 three", "reset");
+
+  expect(result).toContain("Replaced 1 occurrence of the string in /test.txt");
+  expect(result).toContain("stripping them");
+  expect(fs.readFile("/test.txt")).toBe("reset");
+});
+
+test("replaceInFile recovers a numbered paste with a view_range offset", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "l1\nl2\nl3\nl4\nl5");
+
+  // viewFile("/test.txt", [3, -1]) renders: 3\tl3\n4\tl4\n5\tl5
+  const result = fs.replaceInFile("/test.txt", "3 l3\n4 l4\n5 l5", "mid");
+
+  expect(result).toContain("Replaced 1 occurrence of the string in /test.txt");
+  expect(fs.readFile("/test.txt")).toBe("l1\nl2\nmid");
+});
+
+test("replaceInFile ambiguous numbered paste reports the raw-content matches", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "head\nseg\nseg\nseg\ntail\nseg\nseg\nseg");
+
+  const result = fs.replaceInFile("/test.txt", "1 seg\n2 seg\n3 seg", "x");
+
+  expect(result).toContain("Error: Found 2 occurrences");
+  expect(result).toContain("does your edit target one of them?");
+  expect(fs.readFile("/test.txt")).toBe("head\nseg\nseg\nseg\ntail\nseg\nseg\nseg");
+});
+
+test("replaceInFile oversized old_str steers to create+overwrite", () => {
+  // Whole-file rewrites sent as str_replace are fragile and waste steps;
+  // the tool must point at the create/overwrite instrument instead.
+  const fs = new VirtualFileSystem();
+  const content = Array.from({ length: 60 }, (_, i) => `line number ${i} with padding text`).join("\n");
+  fs.createFile("/test.txt", content);
+
+  // ≥ max(800, 50% of file) — a near-full old_str with one missing line.
+  const nearFull = content.split("\n").slice(0, 55).join("\n");
+  const result = fs.replaceInFile("/test.txt", nearFull, "new file body");
+
+  expect(result).toContain("covers most of /test.txt");
+  expect(result).toContain('create\' command with "overwrite": true');
+  expect(fs.readFile("/test.txt")).toBe(content);
+});
+
+test("replaceInFile does not flag short strings as file rewrites", () => {
+  const fs = new VirtualFileSystem();
+  const content = "x".repeat(900);
+  fs.createFile("/test.txt", content);
+
+  const result = fs.replaceInFile("/test.txt", "900 padding suffix marker!", "y");
+
+  expect(result).toContain("Error: String not found in file");
+  expect(fs.readFile("/test.txt")).toBe(content);
+});
+
 test("replaceInFile returns error for non-existent file", () => {
   const fs = new VirtualFileSystem();
 

@@ -6,7 +6,8 @@ import { MessageInput } from "./MessageInput";
 import { ModelSelector } from "./ModelSelector";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useChat } from "@/lib/contexts/chat-context";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Eraser } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 import { mapErrorMessage } from "@/lib/chat-errors";
 
 export { mapErrorMessage };
@@ -30,7 +31,14 @@ export function ChatInterface() {
     stop,
     generationInterrupted,
     append,
+    clearContext,
   } = useChat();
+  const { toast } = useToast();
+
+  const handleClearContext = useCallback(() => {
+    if (!clearContext()) return;
+    toast("Context cleared — files kept.", "success");
+  }, [clearContext, toast]);
 
   const handleStarterPrompt = useCallback(
     (prompt: string) => {
@@ -115,8 +123,19 @@ export function ChatInterface() {
             </button>
           </div>
         )}
-        <div className="mb-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <ModelSelector />
+          {messages.length > 0 && !(status === "submitted" || status === "streaming") && (
+            <button
+              onClick={handleClearContext}
+              title="Clear conversation context (files are kept)"
+              aria-label="Clear conversation context"
+              className="inline-flex shrink-0 items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors"
+            >
+              <Eraser className="h-3 w-3" />
+              Clear
+            </button>
+          )}
         </div>
         <MessageInput
           input={input}

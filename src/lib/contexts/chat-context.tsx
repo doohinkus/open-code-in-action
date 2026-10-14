@@ -49,6 +49,11 @@ interface ChatContextType {
   requestFix: (errorText: string) => void;
   generationTimedOut: boolean;
   generationInterrupted: boolean;
+  // Drops the chat history (stale design decisions, earlier models'
+  // reasoning) but keeps every file. The next request starts fresh while
+  // the model still sees the current filesystem — well suited for
+  // "replace the counter with X" redesign turns.
+  clearContext: () => boolean;
 }
 
 // The provider can die mid-stream with an idle timeout (e.g. "Streaming
@@ -148,6 +153,7 @@ export function ChatProvider({
     reload,
     append,
     stop,
+    setMessages,
   } = useAIChat({
     api: "/api/chat",
     initialMessages,
@@ -232,6 +238,34 @@ export function ChatProvider({
     userStoppedRef.current = true;
     stop();
   }, [stop]);
+
+  const clearContext = useCallback(() => {
+    if (status === "submitted" || status === "streaming") return false;
+    fixAttemptCount.current = 0;
+    autoRetriedRef.current = false;
+    userStoppedRef.current = false;
+    setGenerationTimedOut(false);
+    setGenerationInterrupted(false);
+    setIsFixingErrors(false);
+    setMessages([]);
+    // Keep the files, drop the remembered chat: for anonymous users the
+    // snapshot carries messages too, so an empty-history snapshot prevents a
+    // browser refresh from rehydrating the conversation just cleared.
+    if (!projectId) {
+      try {
+        setHasAnonWork([], fileSystem.serialize());
+      } catch {
+        // Snapshotting is best-effort (see the ready-turn effect below).
+      }
+    }
+    return true;
+  }, [
+    projectId,
+    fileSystem,
+    status,
+    setMessages,
+    setIsFixingErrors,
+  ]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -335,6 +369,7 @@ export function ChatProvider({
       requestFix,
       generationTimedOut,
       generationInterrupted,
+      clearContext,
     }),
     [
       projectId,
@@ -351,6 +386,7 @@ export function ChatProvider({
       requestFix,
       generationTimedOut,
       generationInterrupted,
+      clearContext,
     ]
   );
 

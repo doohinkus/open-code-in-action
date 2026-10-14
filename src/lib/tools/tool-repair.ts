@@ -21,6 +21,24 @@ export function repairStrReplaceArgs(
 ): Record<string, unknown> | null {
   const repaired: Record<string, unknown> = { ...args };
 
+  // Missing `command`: some models omit the required discriminator while
+  // filling the parameters they meant to run. It is deterministic to infer
+  // from the shape of the remaining parameters; without any hint there is
+  // nothing to repair.
+  if (typeof repaired.command !== "string") {
+    if ("file_text" in repaired || "overwrite" in repaired) {
+      repaired.command = "create";
+    } else if("old_str" in repaired) {
+      repaired.command = "str_replace";
+    } else if ("insert_line" in repaired) {
+      repaired.command = "insert";
+    } else if ("view_range" in repaired) {
+      repaired.command = "view";
+    } else {
+      return null;
+    }
+  }
+
   // overwrite: "true" → true.
   if (typeof repaired.overwrite === "string") {
     if (TRUE_STRINGS.has(repaired.overwrite)) repaired.overwrite = true;
