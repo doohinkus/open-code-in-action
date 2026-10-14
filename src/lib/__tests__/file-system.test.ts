@@ -545,7 +545,60 @@ test("replaceInFile returns error when string not found", () => {
   fs.createFile("/test.txt", "hello world");
 
   const result = fs.replaceInFile("/test.txt", "foo", "bar");
-  expect(result).toBe('Error: String not found in file: "foo"');
+
+  expect(result).toContain('Error: String not found in file: "foo"');
+  expect(result).toContain("copy old_str verbatim");
+  expect(result).not.toContain("Closest lines");
+});
+
+test("replaceInFile not-found error suggests closest lines when tokens overlap", () => {
+  // A miss built from memory (wrong class order) versus the line that is
+  // actually in the file: high token overlap, zero literal match.
+  const fs = new VirtualFileSystem();
+  fs.createFile(
+    "/test.txt",
+    [
+      "export default function App() {",
+      "  return (",
+      '    <button className="rounded bg-orange-500 px-4 py-2 text-white transition-colors hover:bg-orange-600">',
+      "      Count",
+      "    </button>",
+      "  );",
+      "}",
+    ].join("\n")
+  );
+
+  const result = fs.replaceInFile(
+    "/test.txt",
+    'class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 focus-visible:ring-2"',
+    "replaced"
+  );
+
+  expect(result).toContain("Error: String not found in file");
+  expect(result).toContain("Closest lines currently in /test.txt");
+  expect(result).toContain("line 3:");
+  expect(result).toContain("bg-orange-500");
+  // File unchanged while ambiguous.
+  expect(fs.readFile("/test.txt")).toContain("rounded bg-orange-500");
+});
+
+test("replaceInFile not-found error without token overlap lists no lines", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "alpha beta gamma");
+
+  const result = fs.replaceInFile("/test.txt", "completely different here", "x");
+
+  expect(result).toContain("Error: String not found in file");
+  expect(result).not.toContain("Closest lines");
+});
+
+test("replaceInFile rejects empty old_str with a clear message", () => {
+  const fs = new VirtualFileSystem();
+  fs.createFile("/test.txt", "alpha");
+
+  const result = fs.replaceInFile("/test.txt", "", "x");
+
+  expect(result).toBe("Error: old_str must not be empty.");
 });
 
 test("insertInFile inserts text at specified line", () => {

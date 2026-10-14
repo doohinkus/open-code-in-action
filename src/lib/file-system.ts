@@ -541,7 +541,19 @@ export class VirtualFileSystem {
 
     // Check if old_str exists in the file
     if (!oldStr || !content.includes(oldStr)) {
-      return `Error: String not found in file: "${oldStr}"`;
+      // Models (especially after a provider/model switch, when the file was
+      // built by an earlier turn that got compacted out of context) often
+      // reconstruct old_str from chat memory and miss. Point them at the
+      // most similar actual lines so one retry lands without a 'view'.
+      const suggestions = this.nearestLines(content, oldStr || "");
+      const friendly = !oldStr
+        ? `Error: old_str must not be empty.`
+        : `Error: String not found in file: "${oldStr}"` +
+          ` (copy old_str verbatim from the current file content — it may differ from what the conversation shows).`;
+      if (suggestions.length > 0) {
+        return `${friendly}\nClosest lines currently in ${path}:\n${suggestions.join("\n")}`;
+      }
+      return friendly;
     }
 
     // Count occurrences
@@ -626,6 +638,34 @@ export class VirtualFileSystem {
     this.updateFile(path, updatedContent);
 
     return `Text inserted at line ${insertLine} in ${path}`;
+  }
+
+  // Up to `limit` lines from `content` that share the most meaningful
+  // tokens with `search` — a best-effort hint for a missed str_replace.
+  // Tokens of length >= 4 don't match line noise; pure-punctuation short
+  // queries (e.g. "}") yield no suggestions.
+  private nearestLines(content: string, search: string, limit = 3): string[] {
+    const tokens = new Set(
+      (search.toLowerCase().match(/[a-z0-9_-]{4,}/g) ?? []).filter(Boolean)
+    );
+    if (tokens.size === 0) return [];
+
+    const lines = content.split("\n");
+    const scored: { index: number; score: number }[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const lower = lines[i].toLowerCase();
+      let hits = 0;
+      for (const token of tokens) {
+        if (lower.includes(token)) hits++;
+      }
+      if (hits > 0) scored.push({ index: i, score: hits / tokens.size });
+    }
+    scored.sort((a, b) => b.score - a.score);
+
+    return scored.slice(0, limit).map(({ index }) => {
+      const line = lines[index];
+      return `  line ${index + 1}: ${line.trim().slice(0, 80)}`;
+    });
   }
 
   reset(): void {
