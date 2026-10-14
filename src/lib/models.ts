@@ -9,13 +9,12 @@ export interface ModelInfo {
 // Google AI Studio's Gemini free tier — the primary provider.
 // Ordered by fallback priority: newest stable generation first. Older
 // generations were dropped: Gemini 2.5 (free-tier quotas effectively
-// unusable) and the Gemini 3.5 pair, which Google deprecated (their
-// shutdown schedule: gemini-3.1-flash-lite stays until May 2027; check
+// unusable), the Gemini 3.5 pair and gemini-3.1-flash-lite, which Google
+// deprecated (lite availability ran to May 2027; check
 // https://ai.google.dev/gemini-api/docs/deprecations before adding).
 export const GEMINI_FREE_MODELS: ModelInfo[] = [
   { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", provider: "google" },
   { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", provider: "google" },
-  { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash Lite", provider: "google" },
 ];
 
 // Groq's free developer tier — OpenAI-compatible API, no credit card needed.
