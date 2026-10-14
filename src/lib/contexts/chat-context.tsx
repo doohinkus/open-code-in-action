@@ -13,7 +13,7 @@ import {
 import { useChat as useAIChat } from "@ai-sdk/react";
 import { Message } from "ai";
 import { useFileSystem } from "./file-system-context";
-import { setHasAnonWork, getOrCreateAnonSessionKey } from "@/lib/anon-work-tracker";
+import { setHasAnonWork, getOrCreateAnonSessionKey, clearAnonWork } from "@/lib/anon-work-tracker";
 import { getStoredModel } from "@/lib/model-selector";
 import { useToast } from "@/components/ui/toast";
 import { mapErrorMessage } from "@/lib/chat-errors";
@@ -82,6 +82,7 @@ export function ChatProvider({
     validateCurrentFiles,
     setIsFixingErrors,
     vfsRevision,
+    reset: resetFileSystem,
   } = useFileSystem();
 
   const vfsRevisionRef = useRef(vfsRevision);
@@ -248,14 +249,28 @@ export function ChatProvider({
     setGenerationInterrupted(false);
     setIsFixingErrors(false);
     setMessages([]);
-    // Keep the files, drop the remembered chat: for anonymous users the
-    // snapshot carries messages too, so an empty-history snapshot prevents a
-    // browser refresh from rehydrating the conversation just cleared.
+    // Drop the code as well: the filesystem resets to the bare root, so the
+    // code tab empties and the preview falls back to its welcome
+    // placeholder. triggerRefresh inside reset() advances vfsRevision, which
+    // makes the next request ship the emptied files payload — the server
+    // VFS cache entry is replaced instead of resurrecting the old state.
+    resetFileSystem();
+    // Anonymous snapshots carry messages AND files: persist the cleared
+    // history together with the emptied filesystem so a browser refresh
+    // cannot rehydrate the conversation just cleared. A fully emptied
+    // snapshot (only the root directory) must REMOVE the stored snapshot
+    // entirely — setHasAnonWork treats an empty payload as "nothing to
+    // save" and would leave the pre-clear snapshot on disk.
     if (!projectId) {
-      try {
-        setHasAnonWork([], fileSystem.serialize());
-      } catch {
-        // Snapshotting is best-effort (see the ready-turn effect below).
+      const clearedFiles = fileSystem.serialize();
+      if (Object.keys(clearedFiles).length <= 1) {
+        clearAnonWork();
+      } else {
+        try {
+          setHasAnonWork([], clearedFiles);
+        } catch {
+          // Snapshotting is best-effort (see the ready-turn effect below).
+        }
       }
     }
     return true;
@@ -264,6 +279,7 @@ export function ChatProvider({
     fileSystem,
     status,
     setMessages,
+    resetFileSystem,
     setIsFixingErrors,
   ]);
 
