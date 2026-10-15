@@ -1,12 +1,12 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
-import { render, screen, waitFor, act, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, act, cleanup, fireEvent } from "@testing-library/react";
 import { ChatProvider, useChat } from "../chat-context";
 import { ToastProvider } from "@/components/ui/toast";
 import { useFileSystem } from "../file-system-context";
 import { useChat as useAIChat } from "@ai-sdk/react";
 import * as anonTracker from "@/lib/anon-work-tracker";
-import { STALL_TIMEOUT_MS } from "@/lib/constants";
+import { SLOW_GENERATION_NOTICE_MS, STALL_TIMEOUT_MS, TOAST_DEFAULT_DURATION_MS } from "@/lib/constants";
 
 // Mock dependencies
 vi.mock("../file-system-context", () => ({
@@ -505,6 +505,158 @@ describe("ChatContext", () => {
     });
 
     expect(mockStop).toHaveBeenCalled();
+  });
+
+  test("25s patience notice: toasts once while the turn is still running", () => {
+    vi.useFakeTimers();
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "streaming",
+    });
+
+    const { rerender } = render(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(SLOW_GENERATION_NOTICE_MS + 1_000);
+    });
+
+    expect(screen.getAllByText(/working hard/)).toHaveLength(1);
+
+    // Cycling streaming -> ready -> streaming WITHOUT a new submit must not
+    // toast again: the one-shot ref only resets in handleSubmit.
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "ready",
+    });
+    rerender(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "streaming",
+    });
+    rerender(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+    act(() => {
+      vi.advanceTimersByTime(SLOW_GENERATION_NOTICE_MS + 1_000);
+    });
+    // The first toast expired long ago — the critical assertion is that NO
+    // SECOND toast appeared despite leaving and re-entering the turn.
+    expect(screen.queryByText(/working hard/)).toBeNull();
+  });
+
+  test("25s patience notice: no toast when the turn finishes before 25s", () => {
+    vi.useFakeTimers();
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "streaming",
+    });
+
+    const { rerender } = render(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "ready",
+    });
+
+    rerender(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(SLOW_GENERATION_NOTICE_MS + 10_000);
+    });
+
+    expect(screen.queryByText(/working hard/)).toBeNull();
+  });
+
+  test("25s patience notice: fires again on a new turn after the one-shot reset", () => {
+    vi.useFakeTimers();
+
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "streaming",
+    });
+
+    const { rerender } = render(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(SLOW_GENERATION_NOTICE_MS + 1_000);
+    });
+    expect(screen.getAllByText(/working hard/)).toHaveLength(1);
+
+    // End the turn and let the first toast expire...
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "ready",
+    });
+    rerender(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+    act(() => {
+      vi.advanceTimersByTime(TOAST_DEFAULT_DURATION_MS + 1_000);
+    });
+
+    // ...start a new turn via handleSubmit (resets the one-shot ref)...
+    fireEvent.submit(screen.getByTestId("form"));
+
+    // ...which can toast again.
+    (useAIChat as any).mockReturnValue({
+      ...mockUseAIChat,
+      status: "streaming",
+    });
+    rerender(
+      <ToastProvider>
+      <ChatProvider>
+        <TestComponent />
+      </ChatProvider>
+      </ToastProvider>
+    );
+    act(() => {
+      vi.advanceTimersByTime(SLOW_GENERATION_NOTICE_MS + 1_000);
+    });
+    expect(screen.getAllByText(/working hard/)).toHaveLength(1);
   });
 
   test("auto-fixes syntax errors after a successful generation", () => {

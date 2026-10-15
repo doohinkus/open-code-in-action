@@ -17,7 +17,7 @@ import { setHasAnonWork, getOrCreateAnonSessionKey, clearAnonWork } from "@/lib/
 import { getStoredModel } from "@/lib/model-selector";
 import { useToast } from "@/components/ui/toast";
 import { mapErrorMessage } from "@/lib/chat-errors";
-import { STALL_TIMEOUT_MS } from "@/lib/constants";
+import { SLOW_GENERATION_NOTICE_MS, STALL_TIMEOUT_MS } from "@/lib/constants";
 
 /**
  * Props for the ChatProvider component.
@@ -186,6 +186,11 @@ export function ChatProvider({
   // True when the user (or the stall watchdog) stopped generation explicitly —
   // never auto-retry after an explicit stop.
   const userStoppedRef = useRef(false);
+  // One-shot per turn: the 25s "still working" toast fires at most once
+  // during a generation turn; reset on every new submit.
+  const slowTurnNoticeShownRef = useRef(false);
+  const SLOW_TURN_TOAST =
+    'This AI agent is working hard, or maybe taking a nap. Try the "Stop" button, or keep waiting.';
   const { toast } = useToast();
   const prevErrorStatusRef = useRef(status);
 
@@ -288,6 +293,7 @@ export function ChatProvider({
       fixAttemptCount.current = 0;
       autoRetriedRef.current = false;
       userStoppedRef.current = false;
+      slowTurnNoticeShownRef.current = false;
       setGenerationTimedOut(false);
       setGenerationInterrupted(false);
       setIsFixingErrors(false);
@@ -310,6 +316,23 @@ export function ChatProvider({
 
     return () => clearTimeout(timer);
   }, [status, messages, handleStop]);
+
+  // Patience notice: after SLOW_GENERATION_NOTICE_MS of a still-running
+  // generation turn, toast once so the user knows the app hasn't hung.
+  // Informational only — the TERMINAL watchdog above handles real stalls.
+  useEffect(() => {
+    if (status !== "submitted" && status !== "streaming") return;
+
+    const timer = setTimeout(() => {
+      if (!slowTurnNoticeShownRef.current) {
+        slowTurnNoticeShownRef.current = true;
+        toast(SLOW_TURN_TOAST, "info");
+      }
+    }, SLOW_GENERATION_NOTICE_MS);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   const requestFix = useCallback(
     (errorText: string) => {
