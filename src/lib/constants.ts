@@ -46,6 +46,15 @@ export const RATE_LIMIT_MAX_REQUESTS = 30;
 export const STALL_TIMEOUT_MS = 240_000;
 
 /**
+ * Patience notice: once a generation turn runs this long, toast an
+ * informational "still working" message. NOT a stall verdict — no abort,
+ * and it fires once per turn even while chunks are still flowing, because
+ * Gemini 3.x legitimately runs 20-60s quiet per step. The terminal
+ * watchdog is STALL_TIMEOUT_MS.
+ */
+export const SLOW_GENERATION_NOTICE_MS = 25_000;
+
+/**
  * Maximum steps for real AI providers (allows multi-file builds).
  */
 export const MAX_STEPS_REAL = 10;
