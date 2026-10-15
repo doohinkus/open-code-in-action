@@ -32,7 +32,7 @@ vi.mock("../MessageList", () => ({
 }));
 
 vi.mock("../MessageInput", () => ({
-  MessageInput: ({ input, handleInputChange, handleSubmit, isLoading, onStop }: any) => (
+  MessageInput: ({ input, handleInputChange, handleSubmit, isLoading }: any) => (
     <div data-testid="message-input">
       <input
         value={input}
@@ -43,11 +43,6 @@ vi.mock("../MessageInput", () => ({
       <button onClick={handleSubmit} disabled={isLoading} data-testid="submit">
         Submit
       </button>
-      {isLoading && onStop && (
-        <button onClick={onStop} data-testid="stop">
-          Stop
-        </button>
-      )}
     </div>
   ),
 }));
@@ -103,14 +98,14 @@ test("renders chat interface with message list and input", () => {
 });
 
 describe("clear context button", () => {
-  test("hidden when the conversation and filesystem are both empty", () => {
+  test("disabled when the conversation and filesystem are both empty", () => {
     render(
       <ToastProvider>
         <ChatInterface />
       </ToastProvider>
     );
 
-    expect(screen.queryByRole("button", { name: /clear conversation context/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /clear conversation context/i })).toHaveProperty("disabled", true);
     expect(screen.queryByRole("button", { name: /confirm clear/i })).toBeNull();
   });
 
@@ -173,7 +168,7 @@ describe("clear context button", () => {
     expect(await screen.findByText("Cleared — fresh start ready.")).toBeDefined();
   });
 
-  test("hidden while a generation is in flight", () => {
+  test("disabled while a generation is in flight", () => {
     (useChat as any).mockReturnValue({
       ...mockUseChat,
       messages: [{ id: "1", role: "user", content: "Hello" }],
@@ -186,8 +181,9 @@ describe("clear context button", () => {
       </ToastProvider>
     );
 
-    expect(screen.queryByRole("button", { name: /clear conversation context/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /clear conversation context/i })).toHaveProperty("disabled", true);
     expect(screen.queryByRole("button", { name: /confirm clear/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /stop generating/i })).toHaveProperty("disabled", false);
   });
 });
 
@@ -412,8 +408,23 @@ test("renders with correct layout classes", () => {
   expect(inputWrapper?.className).toContain("flex-shrink-0");
 });
 
-test("shows a stop button while streaming and stops on click", async () => {
+test("header stop button is disabled while idle and stops on click while streaming", async () => {
   const mockStop = vi.fn();
+
+  (useChat as any).mockReturnValue({
+    ...mockUseChat,
+    status: "idle",
+    stop: mockStop,
+  });
+
+  const { rerender } = render(
+    <ToastProvider>
+      <ChatInterface />
+    </ToastProvider>
+  );
+
+  const stopButton = screen.getByTitle("Stop generating");
+  expect(stopButton).toHaveProperty("disabled", true);
 
   (useChat as any).mockReturnValue({
     ...mockUseChat,
@@ -421,15 +432,13 @@ test("shows a stop button while streaming and stops on click", async () => {
     stop: mockStop,
   });
 
-  render(
+  rerender(
     <ToastProvider>
       <ChatInterface />
     </ToastProvider>
   );
 
-  const stopButton = screen.getByTestId("stop");
-  expect(stopButton).toBeDefined();
-
+  expect(stopButton).toHaveProperty("disabled", false);
   await userEvent.click(stopButton);
   expect(mockStop).toHaveBeenCalled();
 });
