@@ -7,7 +7,7 @@ import { ModelSelector } from "./ModelSelector";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useChat } from "@/lib/contexts/chat-context";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
-import { RotateCcw, Eraser, Trash2 } from "lucide-react";
+import { RotateCcw, Eraser, Trash2, Square } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import {
   TOAST_DEFAULT_DURATION_MS,
@@ -54,13 +54,18 @@ export function ChatInterface() {
   const canClear =
     messages.length > 0 || getAllFiles().size > 0;
   const isBusy = status === "submitted" || status === "streaming";
-  const showClear = canClear && !isBusy;
 
   useEffect(() => {
     if (!confirmingClear) return;
     const timer = setTimeout(() => setConfirmingClear(false), TOAST_DEFAULT_DURATION_MS);
     return () => clearTimeout(timer);
   }, [confirmingClear]);
+
+  // A pending confirm can't survive a busied header — retire the confirm
+  // state rather than racing it against the confirm timer.
+  useEffect(() => {
+    if (isBusy) setConfirmingClear(false);
+  }, [isBusy]);
 
   const handleStarterPrompt = useCallback(
     (prompt: string) => {
@@ -147,29 +152,41 @@ export function ChatInterface() {
         )}
         <div className="mb-2 flex items-center justify-between gap-2">
           <ModelSelector />
-          {showClear && (
-            confirmingClear ? (
-              <button
-                onClick={clearContext}
-                title="Click again to clear chat, files, and the preview"
-                aria-label="Confirm clearing conversation, files, and preview"
-                className="inline-flex shrink-0 items-center gap-1.5 px-2 py-1 text-xs font-medium text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors"
-              >
-                <Trash2 className="h-3 w-3" />
-                Confirm clear?
-              </button>
-            ) : (
-              <button
-                onClick={() => setConfirmingClear(true)}
-                title="Clear conversation context, files, and the preview"
-                aria-label="Clear conversation context"
-                className="inline-flex shrink-0 items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors"
-              >
-                <Eraser className="h-3 w-3" />
-                Clear
-              </button>
-            )
-          )}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={stop}
+              disabled={!isBusy}
+              title="Stop generating"
+              aria-label="Stop generating"
+              className="inline-flex shrink-0 items-center gap-1.5 px-2 py-1 text-xs font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-muted-foreground disabled:hover:bg-transparent"
+            >
+              <Square className="h-3 w-3" />
+              Stop
+            </button>
+            {(confirmingClear ? (
+                <button
+                  onClick={clearContext}
+                  disabled={isBusy}
+                  title="Click again to clear chat, files, and the preview"
+                  aria-label="Confirm clearing conversation, files, and preview"
+                  className="inline-flex shrink-0 items-center gap-1.5 px-2 py-1 text-xs font-medium text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Confirm clear?
+                </button>
+              ) : (
+                <button
+                  onClick={() => setConfirmingClear(true)}
+                  disabled={!canClear || isBusy}
+                  title="Clear conversation context, files, and the preview"
+                  aria-label="Clear conversation context"
+                  className="inline-flex shrink-0 items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-muted-foreground disabled:hover:bg-transparent"
+                >
+                  <Eraser className="h-3 w-3" />
+                  Clear
+                </button>
+              ))}
+          </div>
         </div>
         <MessageInput
           input={input}
@@ -177,7 +194,6 @@ export function ChatInterface() {
           setInput={setInput}
           handleSubmit={handleSubmit}
           isLoading={status === "submitted" || status === "streaming"}
-          onStop={stop}
         />
       </div>
     </div>
