@@ -18,12 +18,18 @@
 - Schema: `prisma/schema.prisma` (PostgreSQL via Neon)
 - Generated client: `src/generated/prisma/` (import from `@/generated/prisma`)
 - After schema changes: `npx prisma migrate dev --name <name>`
-- Requires `DATABASE_URL` pointing to a Neon Postgres instance; `npm run setup` will fail without it
+- Requires `DATABASE_URL` (runtime, pooled) and `DATABASE_URL_UNPOOLED` (migrations, `directUrl`) pointing to a Neon Postgres instance; `npm run setup` will fail without them
 
 ## AI / Chat
 - No API key needed: `MockLanguageModel` in `src/lib/provider.ts` returns canned components
 - Chat API route: `src/app/api/chat/route.ts` — `ai` SDK `streamText` with tools; rate-limited to 30 requests/min/IP; `maxDuration = 120` for Vercel serverless
 - Provider selection, free-model allowlists, fallback rotation, step/token limits, message compaction, VFS caching, and error surfacing: **see the `ai-chat` skill**
+
+## Sharing
+- `POST /api/share` (`src/app/api/share/route.ts`): rate-limited 30 requests/min/IP, origin-checked, `maxDuration = 60`. Upserts a `prisma.share` row keyed by a generated token (reuses `previousToken`/same `projectId`, so the URL is stable)
+- Share ownership enforced server-side via `Project.userId` lookups in `src/lib/share.ts` — there is **no** `Share.userId` column; owner-only attach/update/rename
+- Public viewer page `src/app/s/[token]/page.tsx` (`force-dynamic`) + `opengraph-image.tsx`; route-level `loading.tsx` covers the server fetch
+- `SharedPreview` loader contract: the overlay dismisses on the iframe's `uigen:ready` / `uigen:error` postMessage (srcdoc assignment alone dismisses too early), with a 10s safety timeout for the syntax-error-panel case (which posts nothing)
 
 ## Key Architecture
 - **Virtual file system** (`src/lib/file-system.ts`): in-memory, never writes to real FS. Serialized to/from project data. Commands mirror Claude Code's str_replace_editor pattern.
@@ -44,7 +50,7 @@
 
 ## Observability
 - **Structured logging**: `src/lib/observability/logger.ts` — leveled JSON-line logger + `requestId`/`hashIp` helpers. Used in `/api/chat`, server actions, error boundaries, and the preview. Do not add raw `console.error` in new code; use `logger`.
-- **Health endpoint**: `GET /api/health` → `200 {status:"ok"}` or `503 {status:"degraded"}` (does `SELECT 1` against Postgres). Use for uptime checks.
+- **Health endpoint**: `GET /api/health` → `200 {status:"ok", db:"ok"}` or `503 {status:"degraded", db:"error"}` (does `SELECT 1` against Postgres). Use for uptime checks.
 - **Sentry** (`@sentry/nextjs`): config in `sentry.server.config.ts`, `sentry.edge.config.ts`, `src/instrumentation.ts`, and `src/instrumentation-client.ts` (client — not `sentry.client.config.ts`, which is deprecated under Turbopack). `next.config.ts` wraps with `withSentryConfig`. Requires `SENTRY_DSN` at runtime; `SENTRY_ORG`/`SENTRY_PROJECT`/`SENTRY_AUTH_TOKEN` for source-map upload at build. Builds succeed without any of them (upload skipped).
 - **CSP**: `connect-src` in `next.config.ts` allows `https://*.ingest.sentry.io` for Sentry ingest. If you add other Sentry features (Session Replay, etc.), update it.
 
