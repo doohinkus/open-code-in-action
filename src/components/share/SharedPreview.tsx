@@ -48,6 +48,41 @@ export function SharedPreview({ files }: SharedPreviewProps) {
       return;
     }
 
+    // The overlay is hidden only once the iframe reports it has actually
+    // rendered (or errored) — srcdoc assignment alone would dismiss it too
+    // early and reveal a blank frame while the CDN modules are still loading.
+    let done = false;
+    const finishLoading = () => {
+      if (done) return;
+      done = true;
+      setLoading(false);
+      window.removeEventListener("message", onMessage);
+      clearTimeout(safetyTimeout);
+    };
+
+    const onMessage = (event: MessageEvent) => {
+      // Only accept messages from this component's own iframe.
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      const data = event.data;
+      if (data?.type === "uigen:ready" || data?.type === "uigen:error") {
+        if (data?.type === "uigen:error") {
+          const detail =
+            typeof data.message === "string" && data.message
+              ? data.message
+              : "";
+          setError(detail || "Preview error");
+        }
+        finishLoading();
+      }
+    };
+    window.addEventListener("message", onMessage);
+
+    // Safety net: CDN hiccups or a syntax-error panel (which never posts
+    // "uigen:ready") must not leave the overlay up forever.
+    const safetyTimeout = setTimeout(() => {
+      finishLoading();
+    }, 10_000);
+
     try {
       const { importMap, styles, errors, bundleCode } = createImportMap(fileMap);
       const nonce = crypto.randomUUID();
@@ -73,9 +108,13 @@ export function SharedPreview({ files }: SharedPreviewProps) {
       setError(
         err instanceof Error ? err.message : "Unknown preview error"
       );
-    } finally {
-      setLoading(false);
+      finishLoading();
     }
+
+    return () => {
+      window.removeEventListener("message", onMessage);
+      clearTimeout(safetyTimeout);
+    };
   }, [files]);
 
   return (
