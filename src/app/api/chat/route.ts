@@ -7,6 +7,7 @@ import { buildFileManagerTool } from "@/lib/tools/file-manager";
 import { repairToolCall } from "@/lib/tools/tool-repair";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { withSpan } from "@/lib/otel";
 import {
   buildLanguageModel,
   isGoogleConfigured,
@@ -287,14 +288,16 @@ async function persistProjectTurn(
   requestId: string
 ): Promise<"ok" | "conflict" | "error"> {
   try {
-    const result = await prisma.project.updateMany({
-      where: { id: projectId, userId, version: expectedVersion },
-      data: {
-        messages: messagesJson,
-        data: dataJson,
-        version: { increment: 1 },
-      },
-    });
+    const result = await withSpan("db.project.save_turn", () =>
+      prisma.project.updateMany({
+        where: { id: projectId, userId, version: expectedVersion },
+        data: {
+          messages: messagesJson,
+          data: dataJson,
+          version: { increment: 1 },
+        },
+      })
+    );
     return result.count === 0 ? "conflict" : "ok";
   } catch (error) {
     logger.error("chat.project.save_failed", {
@@ -447,10 +450,12 @@ export async function POST(req: Request) {
   // user's cached filesystem via a guessed projectId.
   let projectVersion = 0;
   if (projectId && sessionUserId) {
-    const owned = await prisma.project.findFirst({
-      where: { id: projectId, userId: sessionUserId },
-      select: { id: true, version: true },
-    });
+    const owned = await withSpan("db.project.owner_check", () =>
+      prisma.project.findFirst({
+        where: { id: projectId, userId: sessionUserId },
+        select: { id: true, version: true },
+      })
+    );
     if (!owned) {
       logger.warn("chat.request.project_forbidden", { requestId, projectId });
       return Response.json(
@@ -564,6 +569,15 @@ export async function POST(req: Request) {
     // Fail fast on provider errors (e.g. rate limits) instead of the SDK's
     // default 3 attempts, which multiply requests against the provider's quota.
     maxRetries: 0,
+    // AI SDK native OpenTelemetry spans (per-step LLM calls, tool calls) via
+    // the provider registered by src/lib/otel.ts. No-op without an OTel SDK.
+    // Inputs/outputs stay redacted — user prompts must not land in Tempo.
+    experimental_telemetry: {
+      isEnabled: true,
+      recordInputs: false,
+      recordOutputs: false,
+      functionId: "chat.generation",
+    },
     ...(Object.keys(reasoningOptions).length > 0 && { providerOptions: reasoningOptions }),
     onError: (err: any) => {
       logger.error("chat.stream.error", {
@@ -646,10 +660,12 @@ export async function POST(req: Request) {
             // current row and re-base this turn's response messages on top of
             // it, keeping the already-committed file state (this turn's file
             // edits were made against stale state).
-            const current = await prisma.project.findUnique({
-              where: { id: projectId, userId: sessionUserId },
-              select: { messages: true, data: true, version: true },
-            });
+            const current = await withSpan("db.project.rebase_read", () =>
+              prisma.project.findUnique({
+                where: { id: projectId, userId: sessionUserId },
+                select: { messages: true, data: true, version: true },
+              })
+            );
 
             if (current) {
               let currentMessages: any[] = [];

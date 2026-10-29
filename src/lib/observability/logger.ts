@@ -1,10 +1,45 @@
 type LogLevel = "info" | "warn" | "error";
 
+// Trace correlation is injected, not imported: this module ships in client
+// bundles, so it must not statically depend on @opentelemetry/api. The
+// server bootstrap (src/lib/otel.ts) registers a source that reads the
+// active span; without one, log lines look exactly as before.
+// The source lives on globalThis, not a module local: Next bundles
+// instrumentation.ts and route handlers as separate module instances, so a
+// plain module variable registered in one copy would be invisible to the
+// other. (Same reason @opentelemetry/api itself uses a global registry.)
+type TraceContext = { trace_id: string; span_id: string };
+const TRACE_SOURCE_KEY = "__uigenTraceContextSource";
+
+export function setTraceContextSource(
+  source: (() => TraceContext | undefined) | null
+): void {
+  (globalThis as Record<string, unknown>)[TRACE_SOURCE_KEY] = source ?? undefined;
+}
+
+function getTraceContextSource(): (() => TraceContext | undefined) | null {
+  return (
+    (globalThis as Record<string, unknown>)[TRACE_SOURCE_KEY] as
+      | (() => TraceContext | undefined)
+      | undefined
+  ) ?? null;
+}
+
 function write(level: LogLevel, message: string, fields?: Record<string, unknown>) {
+  const source = getTraceContextSource();
+  let traceFields: TraceContext | undefined;
+  if (source) {
+    try {
+      traceFields = source();
+    } catch {
+      traceFields = undefined;
+    }
+  }
   const line = JSON.stringify({
     ts: new Date().toISOString(),
     level,
     message,
+    ...traceFields,
     ...fields,
   });
   if (level === "error") {
