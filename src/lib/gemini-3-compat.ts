@@ -9,7 +9,7 @@ import { supportsThinkingBudget } from "./models";
 //    (medium) thinking consumes the entire maxTokens budget before the first
 //    tool call (observed: finishReason "length", 0 tool calls, ~38s on the
 //    free tier). This wrapper injects generationConfig.thinkingConfig.
-//    thinkingLevel "low" into outgoing requests.
+//    thinkingLevel "minimal" (env-configurable) into outgoing requests.
 //
 // 2. Thought signatures. Gemini 3.x returns an opaque `thoughtSignature`
 //    alongside function calls and rejects follow-up requests whose history
@@ -30,20 +30,30 @@ import { supportsThinkingBudget } from "./models";
 //    This is a bridge until an SDK that natively supports Gemini 3 (ai v5)
 //    lands.
 
-// "low" is the lowest thinking level the Flash models support while still
-// producing thought summaries: at "minimal" the model barely thinks, so
-// includeThoughts yields nothing and the chain of thought stays invisible.
-// The Lite variants only support "minimal" (their documented default) —
-// sending "low" makes the endpoint stall with no response at all (observed:
-// streamGenerateContent opens but never emits headers or bytes), so Lite
-// models get "minimal". Trade-off: summary-less thinking, but the request
-// completes.
-const THINKING_LEVEL = "low";
+// Default is "minimal": at "low" the model spends 10-30 s planning before
+// the first tool call, and the plan it commits to is where over-delivery
+// comes from (a "counter" becomes a counter dashboard) — scope rules in the
+// generation prompt can't talk it back out of a plan it already made.
+// "minimal" barely thinks, so requests start executing in seconds.
+// Side effect: at "minimal" includeThoughts yields no summaries, so the
+// UI's chain-of-thought stream goes quiet — GEMINI_THINKING_LEVEL=low
+// restores it (slower, thinking visible) without a code change.
+// The Lite variants must stay pinned to "minimal": they reject/ignore "low",
+// and sending it makes the endpoint stall with no response at all (observed:
+// streamGenerateContent opens but never emits headers or bytes).
+const THINKING_LEVEL = "minimal";
 const THINKING_LEVEL_LITE = "minimal";
+
+function envThinkingLevel(): string {
+  const raw = process.env.GEMINI_THINKING_LEVEL?.trim().toLowerCase();
+  return raw === "low" ? "low" : THINKING_LEVEL;
+}
 
 // Lite models (e.g. gemini-3.1-flash-lite, gemini-3.5-flash-lite) reject/ignore "low".
 function thinkingLevelFor(modelId: string): string {
-  return /-lite(-preview)?$/.test(modelId) ? THINKING_LEVEL_LITE : THINKING_LEVEL;
+  return /-lite(-preview)?$/.test(modelId)
+    ? THINKING_LEVEL_LITE
+    : envThinkingLevel();
 }
 
 // Signatures are scoped per model: keyed by model id, then tool name.

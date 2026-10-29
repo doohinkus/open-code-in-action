@@ -40,7 +40,7 @@ async function drain(response: Response): Promise<string> {
 }
 
 describe("createGemini3CompatFetch", () => {
-  test("injects low thinkingLevel with thought summaries into Gemini 3.x stream requests", async () => {
+  test("injects minimal thinkingLevel into Gemini 3.x stream requests", async () => {
     const mocked = stubFetch(async () => sseResponse([{}]));
     const f = createGemini3CompatFetch();
 
@@ -53,10 +53,32 @@ describe("createGemini3CompatFetch", () => {
     const init = mocked.mock.calls[0][1] as RequestInit;
     const body = JSON.parse(init.body as string);
     expect(body.generationConfig.thinkingConfig).toEqual({
-      thinkingLevel: "low",
+      thinkingLevel: "minimal",
       includeThoughts: true,
     });
     expect(body.generationConfig.maxOutputTokens).toBe(100);
+  });
+
+  test("GEMINI_THINKING_LEVEL=low restores visible thought summaries", async () => {
+    process.env.GEMINI_THINKING_LEVEL = "low";
+    try {
+      const mocked = stubFetch(async () => sseResponse([{}]));
+      const f = createGemini3CompatFetch();
+
+      const res = await f(
+        `${BASE}/gemini-3.6-flash:streamGenerateContent?alt=sse`,
+        postInit({ generationConfig: {} })
+      );
+      await drain(res);
+
+      const init = mocked.mock.calls[0][1] as RequestInit;
+      expect(JSON.parse(init.body as string).generationConfig.thinkingConfig).toEqual({
+        thinkingLevel: "low",
+        includeThoughts: true,
+      });
+    } finally {
+      delete process.env.GEMINI_THINKING_LEVEL;
+    }
   });
 
   test("replaces any thinkingBudget on 3.x requests", async () => {
@@ -70,7 +92,7 @@ describe("createGemini3CompatFetch", () => {
 
     const init = mocked.mock.calls[0][1] as RequestInit;
     expect(JSON.parse(init.body as string).generationConfig.thinkingConfig).toEqual({
-      thinkingLevel: "low",
+      thinkingLevel: "minimal",
       includeThoughts: true,
     });
   });
