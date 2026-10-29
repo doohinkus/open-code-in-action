@@ -684,10 +684,11 @@ export function buildGoogleModel(modelId: string): LanguageModelV1 {
   }
   const provider = createGoogleGenerativeAI({
     apiKey,
-    // Gemini 3.x bridge: injects thinkingLevel "minimal" and round-trips
-    // thought signatures — both unsupported by the pinned SDK, and their
-    // absence breaks 3.x generation (thinking burns the whole maxTokens
-    // budget; multi-step tool flows 400 on step 2).
+    // Gemini 3.x bridge: injects thinkingLevel (default "minimal", override
+    // via GEMINI_THINKING_LEVEL=low) and round-trips thought signatures —
+    // both unsupported by the pinned SDK, and their absence breaks 3.x
+    // generation (thinking burns the whole maxTokens budget; multi-step tool
+    // flows 400 on step 2).
     fetch: createGemini3CompatFetch(),
   });
   const model = provider.languageModel(modelId);
