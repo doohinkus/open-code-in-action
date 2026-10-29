@@ -16,8 +16,8 @@ import {
 } from "@/lib/models";
 
 describe("models", () => {
-  test("defaults to gemini-3.8-flash", () => {
-    expect(DEFAULT_MODEL).toBe("gemini-3.8-flash");
+  test("defaults to gemini-3.6-flash", () => {
+    expect(DEFAULT_MODEL).toBe("gemini-3.6-flash");
   });
 
   test("defaults Groq to gpt-oss-120b", () => {
@@ -54,29 +54,28 @@ describe("models", () => {
   test("treats retired models as unknown", () => {
     expect(isAllowedModel("hy3-free")).toBe(false);
     expect(modelName("hy3-free")).toBe("hy3-free");
+    // Dropped Oct 2026 for free-tier timeouts.
+    expect(isAllowedModel("gemini-3.8-flash")).toBe(false);
   });
 
   test("resolves names for known and unknown models", () => {
-    expect(modelName("gemini-3.8-flash")).toBe("Gemini 3.8 Flash");
+    expect(modelName("gemini-3.6-flash")).toBe("Gemini 3.6 Flash");
     expect(modelName("unknown-model")).toBe("unknown-model");
   });
 
   test("maps model ids to their providers", () => {
-    expect(modelProvider("gemini-3.8-flash")).toBe("google");
+    expect(modelProvider("gemini-3.6-flash")).toBe("google");
     expect(modelProvider("openai/gpt-oss-120b")).toBe("groq");
     expect(modelProvider("big-pickle")).toBeUndefined();
     expect(modelProvider("hy3-free")).toBeUndefined();
-    expect(isGeminiModel("gemini-3.8-flash")).toBe(true);
+    expect(isGeminiModel("gemini-3.6-flash")).toBe(true);
     expect(isGeminiModel("openai/gpt-oss-120b")).toBe(false);
     expect(isGeminiModel("big-pickle")).toBe(false);
     expect(isGeminiModel("unknown-model")).toBe(false);
   });
 
   test("lists exactly the free models in order", () => {
-    expect(GEMINI_FREE_MODELS.map((m) => m.id)).toEqual([
-      "gemini-3.8-flash",
-      "gemini-3.6-flash",
-    ]);
+    expect(GEMINI_FREE_MODELS.map((m) => m.id)).toEqual(["gemini-3.6-flash"]);
     expect(GROQ_FREE_MODELS.map((m) => m.id)).toEqual([
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
@@ -102,8 +101,8 @@ describe("models", () => {
   });
 
   test("resolves models scoped to a single provider", () => {
-    expect(resolveProviderModel("gemini-3.8-flash", "google", "fallback")).toBe(
-      "gemini-3.8-flash"
+    expect(resolveProviderModel("gemini-3.6-flash", "google", "fallback")).toBe(
+      "gemini-3.6-flash"
     );
     expect(resolveProviderModel("big-pickle", "google", "fallback")).toBe("fallback");
     expect(resolveProviderModel(undefined, "google", "fallback")).toBe("fallback");
@@ -117,7 +116,6 @@ describe("supportsThinkingBudget", () => {
   });
 
   test("false for Gemini 3.x models", () => {
-    expect(supportsThinkingBudget("gemini-3.8-flash")).toBe(false);
     expect(supportsThinkingBudget("gemini-3.6-flash")).toBe(false);
   });
 
@@ -128,8 +126,10 @@ describe("supportsThinkingBudget", () => {
 
 describe("fallbackModelIds", () => {
   test("keeps 3.x fallbacks in the 3.x family, priority order", () => {
-    expect(fallbackModelIds("gemini-3.8-flash")).toEqual(["gemini-3.6-flash"]);
-    expect(fallbackModelIds("gemini-3.6-flash")).toEqual(["gemini-3.8-flash"]);
+    // Only one Google model remains after gemini-3.8-flash was dropped, so a
+    // Gemini request has no same-provider fallback — cross-provider (Groq)
+    // rotation is appended separately by the chain builder.
+    expect(fallbackModelIds("gemini-3.6-flash")).toEqual([]);
   });
 
   test("never mixes thinking families", () => {
@@ -141,9 +141,6 @@ describe("fallbackModelIds", () => {
   });
 
   test("returns Gemini models only (cross-provider chains are built separately)", () => {
-    expect(fallbackModelIds("openai/gpt-oss-120b")).toEqual([
-      "gemini-3.8-flash",
-      "gemini-3.6-flash",
-    ]);
+    expect(fallbackModelIds("openai/gpt-oss-120b")).toEqual(["gemini-3.6-flash"]);
   });
 });
