@@ -12,8 +12,9 @@ export interface ModelInfo {
 // unusable), the Gemini 3.5 pair and gemini-3.1-flash-lite, which Google
 // deprecated (lite availability ran to May 2027; check
 // https://ai.google.dev/gemini-api/docs/deprecations before adding).
+// gemini-3.8-flash was removed Oct 2026: free-tier requests consistently
+// timed out (streams hung well past the 120 s route budget).
 export const GEMINI_FREE_MODELS: ModelInfo[] = [
-  { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", provider: "google" },
   { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", provider: "google" },
 ];
 
@@ -42,7 +43,7 @@ export const ALL_FREE_MODELS: ModelInfo[] = [
   ...GEMINI_FREE_MODELS,
 ];
 
-export const DEFAULT_MODEL = "gemini-3.8-flash";
+export const DEFAULT_MODEL = "gemini-3.6-flash";
 
 // Default when the server has only a Groq key configured.
 export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
