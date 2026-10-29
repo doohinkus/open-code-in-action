@@ -34,6 +34,7 @@ In your Vercel project: **Settings** → **Environment Variables**. The app fail
 | `GROQ_API_KEY` (optional) | Adds Groq as a provider/fallback | all |
 | `SENTRY_DSN` (optional) | Enables Sentry error reporting | all |
 | `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` (optional) | Source-map upload at build time; builds succeed without them (upload is skipped) | Project settings |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME` (optional) | OpenTelemetry tracing → Grafana Tempo (server-side); inert without `OTEL_EXPORTER_OTLP_ENDPOINT`. See `OTEL_SETUP.md` | all |
 
 ---
 
