@@ -55,6 +55,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  // Required for Sentry's source-map upload to cover browser (minified)
+  // stack traces — without it, client bundles ship no .map files and
+  // JAVASCRIPT-NEXTJS issues stay unreadable in production.
+  productionBrowserSourceMaps: true,
   async headers() {
     return [
       {
