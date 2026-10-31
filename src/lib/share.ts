@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { withSpan } from "@/lib/otel";
 import {
   parseShareFiles,
   validateShareInput,
@@ -32,7 +33,9 @@ export interface ShareData {
 export async function getShareData(token: string): Promise<ShareData | null> {
   if (!TOKEN_PATTERN.test(token)) return null;
 
-  const share = await prisma.share.findUnique({ where: { token } });
+  const share = await withSpan("db.share.find_token", () =>
+    prisma.share.findUnique({ where: { token } })
+  );
   if (!share) return null;
 
   let files: Record<string, string> = {};
@@ -52,10 +55,17 @@ export async function shareOwnerProjectId(
   projectId: string,
   userId: string
 ): Promise<boolean> {
-  const project = await prisma.project.findFirst({
-    where: { id: projectId, userId },
-    select: { id: true },
-  });
+  // Prisma over the Neon serverless driver speaks fetch/websocket, invisible
+  // to @vercel/otel's auto-instrumentation — emit the span manually.
+  const project = await withSpan(
+    "db.project.owner_check",
+    () =>
+      prisma.project.findFirst({
+        where: { id: projectId, userId },
+        select: { id: true },
+      }),
+    { "db.system": "neon-postgres" }
+  );
   return !!project;
 }
 

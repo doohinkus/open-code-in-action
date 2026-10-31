@@ -130,6 +130,13 @@ Authentication is handled by [Neon Auth](https://neon.tech/docs/guides/neon-auth
 
 Every project gets a stable public share link (the **Open** button in the ShareBar): `POST /api/share` upserts the project's files under a generated token keyed by `projectId`, so the URL stays the same across edits. The link opens `/s/<token>` — a public, standalone viewer that renders the component with an OG/Twitter card and offers ZIP and Storybook downloads. Rate-limited to 30 requests/min/IP; anonymous (signed-out) users can share, and only a project's owner can update or re-attach its share.
 
+## Observability
+
+Structured JSON logging (`src/lib/observability/logger.ts`) with `requestId` and trace correlation; `GET /api/health` for uptime checks. Two optional tracing layers, both fully inert without env vars (safe to deploy with nothing set):
+
+- **Sentry** — error tracking + tracing. Setup: [`SENTRY_SETUP.md`](SENTRY_SETUP.md).
+- **OpenTelemetry** — server-side distributed tracing (`@vercel/otel`) exported to Grafana Tempo: automatic request spans, AI SDK model-call spans, and manual `db.*` spans; log lines carry matching `trace_id`/`span_id`. Setup: [`OTEL_SETUP.md`](OTEL_SETUP.md).
+
 ## CI/CD Pipeline
 
 Three GitHub Actions workflows in `.github/workflows/`:
